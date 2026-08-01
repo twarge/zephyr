@@ -1,0 +1,22 @@
+import Foundation
+
+/// The response of POST /register: the event queue handle plus the initial
+/// state snapshot. Only the fields the M0 store consumes are modeled; the
+/// state fields are optional because they depend on `fetch_event_types`.
+public struct InitialSnapshot: Decodable, Sendable {
+    public var queueId: String
+    public var lastEventId: Int
+    public var zulipVersion: String
+    public var zulipFeatureLevel: Int
+    public var eventQueueLongpollTimeoutSeconds: Int?
+
+    public var realmName: String?
+    public var maxMessageLength: Int?
+
+    public var realmUsers: [User]?
+    public var realmNonActiveUsers: [User]?
+    public var crossRealmBots: [User]?
+    public var streams: [ZulipStream]?
+    public var subscriptions: [Subscription]?
+    public var unreadMsgs: UnreadMessagesSnapshot?
+}

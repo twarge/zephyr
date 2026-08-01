@@ -1,0 +1,91 @@
+import Foundation
+
+public enum MessageType: String, Decodable, Sendable {
+    case stream
+    case `private`
+}
+
+/// One entry of a DM message's `display_recipient` array.
+public struct DmRecipient: Decodable, Sendable, Hashable {
+    public var id: Int
+    public var email: String?
+    public var fullName: String?
+}
+
+/// `display_recipient` is polymorphic: the channel name for channel messages,
+/// the recipient users (including the sender) for DMs.
+public enum DisplayRecipient: Sendable, Hashable {
+    case channelName(String)
+    case users([DmRecipient])
+}
+
+extension DisplayRecipient: Decodable {
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let name = try? container.decode(String.self) {
+            self = .channelName(name)
+        } else {
+            self = .users(try container.decode([DmRecipient].self))
+        }
+    }
+}
+
+public struct Reaction: Decodable, Sendable, Hashable {
+    public var emojiName: String
+    public var emojiCode: String
+    public var reactionType: String
+    public var userId: Int
+}
+
+/// A message as returned by GET /messages and `message` events, with
+/// `apply_markdown: true` (so `content` is server-rendered HTML).
+public struct Message: Decodable, Sendable, Identifiable {
+    public var id: Int
+    public var senderId: Int
+    public var senderFullName: String
+    public var timestamp: Int
+    public var type: MessageType
+    public var content: String
+    public var contentType: String?
+    public var streamId: Int?
+    /// The topic; the API's legacy field name is `subject`.
+    public var subject: String
+    public var displayRecipient: DisplayRecipient
+    public var reactions: [Reaction]
+    /// Present in fetched messages; absent inside `message` events (the event
+    /// carries flags at its top level).
+    public var flags: [String]?
+    public var lastEditTimestamp: Int?
+
+    public var topic: String { subject }
+}
+
+// MARK: - Unreads (register payload)
+
+public struct UnreadDmSnapshot: Decodable, Sendable {
+    public var otherUserId: Int
+    public var unreadMessageIds: [Int]
+}
+
+public struct UnreadChannelSnapshot: Decodable, Sendable {
+    public var streamId: Int
+    public var topic: String
+    public var unreadMessageIds: [Int]
+}
+
+public struct UnreadHuddleSnapshot: Decodable, Sendable {
+    /// All participant user ids (including self), comma-joined, e.g. "1,2,3".
+    public var userIdsString: String
+    public var unreadMessageIds: [Int]
+}
+
+/// The register response's `unread_msgs` object. Covers only the most recent
+/// ~50k unreads; `oldUnreadsMissing` signals truncation.
+public struct UnreadMessagesSnapshot: Decodable, Sendable {
+    public var count: Int
+    public var pms: [UnreadDmSnapshot]
+    public var streams: [UnreadChannelSnapshot]
+    public var huddles: [UnreadHuddleSnapshot]
+    public var mentions: [Int]
+    public var oldUnreadsMissing: Bool
+}

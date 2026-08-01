@@ -4,7 +4,10 @@ A truly native macOS Zulip client, designed to feel like Apple Messages: a calm 
 window, a unified conversation list, and a focused transcript — instead of the dense
 multi-column web UI.
 
-**Status: planning.** No code yet. The design documents below are the current deliverable.
+**Status: M0 (foundations).** The `ZulipAPI` and `ZulipModel` packages are in place — typed
+API bindings, the per-account store, and the register→poll→rebuild sync engine — with a
+headless harness (`swift run zulip-harness`) that signs in and streams live events. No app
+UI yet; that's M1.
 
 ## Why
 

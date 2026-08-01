@@ -1,0 +1,195 @@
+import Foundation
+import Testing
+import ZulipAPI
+import ZulipTestSupport
+@testable import ZulipModel
+
+@MainActor
+func makeStore(unreadsJSON: String = Fixtures.emptyUnreadsJSON) throws -> PerAccountStore {
+    let account = Account(
+        realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+    let snapshot = try ZulipJSON.decoder.decode(
+        InitialSnapshot.self,
+        from: Data(Fixtures.registerJSON(queueId: "q1", unreadMsgs: unreadsJSON).utf8))
+    let connection = ApiConnection(
+        realmURL: account.realmURL, email: account.email, apiKey: "key",
+        transport: FakeTransport(defaultResponse: .hang))
+    return PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+}
+
+func decodeEvent(_ json: String) throws -> Event {
+    try ZulipJSON.decoder.decode(Event.self, from: Data(json.utf8))
+}
+
+@MainActor
+struct StoreEventTests {
+    @Test func snapshotSeedsState() throws {
+        let store = try makeStore()
+        #expect(store.queueId == "q1")
+        #expect(store.users.count == 2)
+        #expect(store.channels.count == 1)
+        #expect(store.subscriptions.count == 1)
+        #expect(store.unreads.totalCount == 0)
+    }
+
+    @Test func messageEventAddsMessageAndUnread() throws {
+        let store = try makeStore()
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 100), flags: [])))
+        #expect(store.messages[100] != nil)
+        #expect(store.unreads.totalCount == 1)
+        #expect(
+            store.unreads.unreadIds[.topic(streamId: 10, topic: "greetings")] == [100])
+    }
+
+    @Test func ownMessageIsNotUnread() throws {
+        let store = try makeStore()
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1,
+                    message: Fixtures.channelMessageJSON(id: 100, senderId: 1, senderName: "Self"),
+                    flags: ["read"])))
+        #expect(store.messages[100] != nil)
+        #expect(store.unreads.totalCount == 0)
+    }
+
+    @Test func readFlagClearsUnread() throws {
+        let store = try makeStore()
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 100), flags: [])))
+        try store.handleEvent(
+            decodeEvent(Fixtures.flagsEventJSON(eventId: 2, op: "add", flag: "read", messages: [100])))
+        #expect(store.unreads.totalCount == 0)
+        #expect(store.messages[100]?.flags?.contains("read") == true)
+    }
+
+    @Test func unreadFlagRemovalRefiles() throws {
+        let store = try makeStore()
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 100), flags: [])))
+        try store.handleEvent(
+            decodeEvent(Fixtures.flagsEventJSON(eventId: 2, op: "add", flag: "read", messages: [100])))
+        try store.handleEvent(
+            decodeEvent(Fixtures.flagsEventJSON(eventId: 3, op: "remove", flag: "read", messages: [100])))
+        #expect(store.unreads.totalCount == 1)
+    }
+
+    @Test func deleteMessageRemovesMessageAndUnread() throws {
+        let store = try makeStore()
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 100), flags: [])))
+        try store.handleEvent(
+            decodeEvent(#"{"id": 2, "type": "delete_message", "message_ids": [100], "message_type": "stream"}"#))
+        #expect(store.messages[100] == nil)
+        #expect(store.unreads.totalCount == 0)
+    }
+
+    @Test func editUpdatesContentInPlace() throws {
+        let store = try makeStore()
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 100), flags: [])))
+        try store.handleEvent(
+            decodeEvent(
+                #"{"id": 2, "type": "update_message", "message_id": 100, "rendered_content": "<p>edited</p>", "edit_timestamp": 1750000100}"#))
+        #expect(store.messages[100]?.content == "<p>edited</p>")
+        #expect(store.messages[100]?.lastEditTimestamp == 1750000100)
+    }
+
+    @Test func userLifecycleEvents() throws {
+        let store = try makeStore()
+        try store.handleEvent(
+            decodeEvent(
+                #"{"id": 1, "type": "realm_user", "op": "add", "person": {"user_id": 5, "email": "new@example.com", "full_name": "New", "is_bot": false}}"#))
+        #expect(store.users[5]?.fullName == "New")
+        try store.handleEvent(
+            decodeEvent(
+                #"{"id": 2, "type": "realm_user", "op": "update", "person": {"user_id": 5, "full_name": "Renamed"}}"#))
+        #expect(store.users[5]?.fullName == "Renamed")
+        try store.handleEvent(
+            decodeEvent(#"{"id": 3, "type": "realm_user", "op": "remove", "person": {"user_id": 5, "full_name": "Renamed"}}"#))
+        #expect(store.users[5] == nil)
+    }
+
+    @Test func fetchedMessagesDoNotClobberStoredOnes() throws {
+        let store = try makeStore()
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 100, content: "<p>from event</p>"),
+                    flags: [])))
+        let fetched = try ZulipJSON.decoder.decode(
+            Message.self,
+            from: Data(Fixtures.channelMessageJSON(id: 100, content: "<p>stale fetch</p>").utf8))
+        store.reconcileFetchedMessages([fetched])
+        #expect(store.messages[100]?.content == "<p>from event</p>")
+    }
+
+    @Test func unexpectedEventIsIgnored() throws {
+        let store = try makeStore()
+        try store.handleEvent(decodeEvent(#"{"id": 1, "type": "presence", "user_id": 2}"#))
+        // No crash, no state change.
+        #expect(store.messages.isEmpty)
+    }
+}
+
+struct UnreadsSnapshotTests {
+    @Test @MainActor func dmKeyNormalization() throws {
+        let unreadsJSON = """
+            {"count": 3,
+             "pms": [{"other_user_id": 5, "unread_message_ids": [200]}],
+             "huddles": [{"user_ids_string": "1,5,9", "unread_message_ids": [201]}],
+             "streams": [{"stream_id": 10, "topic": "greetings", "unread_message_ids": [202]}],
+             "mentions": [202], "old_unreads_missing": false}
+            """
+        let store = try makeStore(unreadsJSON: unreadsJSON)
+        #expect(store.unreads.unreadIds[.dm("5")] == [200])
+        // Huddle key excludes self (user 1).
+        #expect(store.unreads.unreadIds[.dm("5,9")] == [201])
+        #expect(store.unreads.unreadIds[.topic(streamId: 10, topic: "greetings")] == [202])
+        #expect(store.unreads.mentionIds == [202])
+        #expect(store.unreads.totalCount == 3)
+
+        // A DM event lands in the same key space.
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1,
+                    message: Fixtures.dmMessageJSON(id: 203, senderId: 5, recipientIds: [1, 5]),
+                    flags: [])))
+        #expect(store.unreads.unreadIds[.dm("5")] == [200, 203])
+    }
+}
+
+struct BackoffMachineTests {
+    @Test func boundsGrowAndCap() {
+        var machine = BackoffMachine(firstBound: .milliseconds(100), maxBound: .seconds(1))
+        var previousBound = Duration.zero
+        for attempt in 0..<20 {
+            let delay = machine.next()
+            #expect(delay >= .zero)
+            #expect(delay <= .seconds(1))
+            if attempt == 0 {
+                #expect(delay <= .milliseconds(100))
+            }
+            previousBound = max(previousBound, delay)
+        }
+    }
+
+    @Test func resetRestartsSmall() {
+        var machine = BackoffMachine(firstBound: .milliseconds(100), maxBound: .seconds(10))
+        for _ in 0..<10 { _ = machine.next() }
+        machine.reset()
+        #expect(machine.next() <= .milliseconds(100))
+    }
+}
