@@ -68,6 +68,15 @@ public struct SendMessageResult: Decodable, Sendable {
     public var id: Int
 }
 
+/// One version in a message's edit history.
+public struct EditHistoryEntry: Decodable, Sendable {
+    public var timestamp: Int
+    public var renderedContent: String?
+    public var topic: String?
+    public var prevTopic: String?
+    public var userId: Int?
+}
+
 extension ApiConnection {
     /// POST /messages, channel flavor. `queueId` + `localId` enable local
     /// echo: the resulting `message` event carries `local_message_id`.
@@ -144,6 +153,42 @@ extension ApiConnection {
             ApiRequest(
                 method: .patch, path: "/api/v1/messages/\(messageId)",
                 params: [Param("content", content)]))
+    }
+
+    /// PATCH /messages/{id} — move to another topic (propagateMode:
+    /// change_one | change_later | change_all).
+    public func moveMessage(
+        messageId: Int, newTopic: String, propagateMode: String
+    ) async throws {
+        _ = try await send(
+            ApiRequest(
+                method: .patch, path: "/api/v1/messages/\(messageId)",
+                params: [
+                    Param("topic", newTopic),
+                    Param("propagate_mode", propagateMode),
+                ]))
+    }
+
+    /// GET /messages/{id}/read_receipts — user ids who read the message
+    /// (excludes opt-outs and mutes, server-side).
+    public func getReadReceipts(messageId: Int) async throws -> [Int] {
+        struct ReadReceiptsResult: Decodable {
+            var userIds: [Int]
+        }
+        let result: ReadReceiptsResult = try await request(
+            ApiRequest(method: .get, path: "/api/v1/messages/\(messageId)/read_receipts"))
+        return result.userIds
+    }
+
+    /// GET /messages/{id}/history — the edit/move history, oldest first.
+    public func getMessageHistory(messageId: Int) async throws -> [EditHistoryEntry] {
+        struct HistoryResult: Decodable {
+            var messageHistory: [EditHistoryEntry]
+        }
+        let result: HistoryResult = try await request(
+            ApiRequest(
+                method: .get, path: "/api/v1/messages/\(messageId)/history"))
+        return result.messageHistory
     }
 
     /// GET /messages/{id} with apply_markdown=false — the raw Zulip markdown

@@ -39,10 +39,15 @@ public struct MessageEvent: Decodable, Sendable {
 /// `update_message`: a content edit and/or a topic/channel move.
 public struct UpdateMessageEvent: Decodable, Sendable {
     public var messageId: Int
+    /// All moved messages (moves affect a set; edits just `messageId`).
     public var messageIds: [Int]?
     public var renderedContent: String?
     public var editTimestamp: Int?
+    /// The stream the messages were in (pre-move).
     public var streamId: Int?
+    /// Move target stream, when the move crosses channels.
+    public var newStreamId: Int?
+    /// Move target topic.
     public var subject: String?
     public var origSubject: String?
     public var propagateMode: String?

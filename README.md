@@ -6,14 +6,14 @@ folders, topics, views) rendered natively. The name honors Zulip's ancestry in M
 Zephyr messaging system — and a zephyr is a soft, fast breeze, which is the feel the app
 aims for. Zephyr is an independent project, not affiliated with the Zulip organization.
 
-**Status: full messaging client (M2 complete).** Live-syncing sidebar (channel folders,
-disclosure topics, DMs with presence dots), channel feeds with recipient bars, focused
-transcripts, full native content rendering (syntax-colored code, tables, math via
-SwiftMath, polls, link previews, media with Quick Look), search with token pills and
-recents — and full composing: send with local echo, @/#/:-autocomplete, emoji reactions
-with a picker, typing indicators both ways, file upload via drag or attach, ⌘N new
-conversations, and editing/deleting your own messages. Next: Mac polish (M3) —
-notifications, multi-account UI, and distribution.
+**Status: feature-complete through M4** (minus scheduled messages and server draft
+sync, deferred deliberately). Everything in M2's messaging core plus: notifications with
+inline reply (DMs + mentions, while running — Zulip has no desktop push), dock badge and
+send sounds (configurable in Settings ⌘,), multi-account with switching, a channel
+browser with subscribe/unsubscribe and muting, warm launch from a cached snapshot
+("stale → live"), topic moves with propagation, read receipts, and an edit-history
+viewer. Remaining before public beta: an app icon, and Developer ID
+signing/notarization (needs the account holder's credentials).
 
 ## Building
 

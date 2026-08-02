@@ -281,6 +281,9 @@ struct MessageRow: View {
     @State private var showReactionPicker = false
     @State private var editing = false
     @State private var editText = ""
+    @State private var showMoveSheet = false
+    @State private var showReadReceipts = false
+    @State private var showEditHistory = false
 
     private var content: MessageContent {
         if useMatchHighlights, let match = message.matchContent {
@@ -309,9 +312,19 @@ struct MessageRow: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                         if message.lastEditTimestamp != nil {
-                            Text("Edited")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                            Button {
+                                showEditHistory = true
+                            } label: {
+                                Text("Edited")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                                    .underline()
+                            }
+                            .buttonStyle(.plain)
+                            .help("Show edit history")
+                            .popover(isPresented: $showEditHistory) {
+                                EditHistoryView(store: store, message: message)
+                            }
                         }
                     }
                     .padding(.top, 10)
@@ -386,6 +399,14 @@ struct MessageRow: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(content.plainText, forType: .string)
             }
+            Button("Seen By…", systemImage: "eye") {
+                showReadReceipts = true
+            }
+            if message.type == .stream {
+                Button("Move to Topic…", systemImage: "arrow.turn.up.right") {
+                    showMoveSheet = true
+                }
+            }
             if message.senderId == store.selfUserId {
                 Divider()
                 Button("Edit Message", systemImage: "pencil") {
@@ -400,6 +421,12 @@ struct MessageRow: View {
                     store.deleteMessage(message.id)
                 }
             }
+        }
+        .sheet(isPresented: $showMoveSheet) {
+            MoveTopicSheet(store: store, message: message)
+        }
+        .sheet(isPresented: $showReadReceipts) {
+            ReadReceiptsSheet(store: store, message: message)
         }
     }
 }

@@ -130,9 +130,20 @@ public final class MessageListModel: Identifiable {
     func handleChangedMessages(ids: some Sequence<Int>) {
         guard let store else { return }
         for id in ids {
-            guard let index = messages.firstIndex(where: { $0.id == id }),
-                  let updated = store.messages[id] else { continue }
-            messages[index] = updated
+            guard let index = messages.firstIndex(where: { $0.id == id }) else { continue }
+            guard let updated = store.messages[id] else {
+                messages.remove(at: index)
+                continue
+            }
+            // Moves can carry a message out of this narrow. Search results
+            // (.custom) can't be re-evaluated client-side — keep them.
+            if case .custom = narrow {
+                messages[index] = updated
+            } else if narrow.containsMessage(updated, selfUserId: store.selfUserId) {
+                messages[index] = updated
+            } else {
+                messages.remove(at: index)
+            }
         }
     }
 

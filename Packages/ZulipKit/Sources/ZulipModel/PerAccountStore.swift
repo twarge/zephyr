@@ -357,6 +357,22 @@ public final class PerAccountStore {
         try? await connection.getRawMessageContent(messageId: messageId)
     }
 
+    public func moveMessage(_ messageId: Int, toTopic topic: String, propagateMode: String) {
+        let connection = connection
+        Task {
+            try? await connection.moveMessage(
+                messageId: messageId, newTopic: topic, propagateMode: propagateMode)
+        }
+    }
+
+    public func fetchReadReceipts(_ messageId: Int) async -> [Int]? {
+        try? await connection.getReadReceipts(messageId: messageId)
+    }
+
+    public func fetchEditHistory(_ messageId: Int) async -> [EditHistoryEntry]? {
+        try? await connection.getMessageHistory(messageId: messageId)
+    }
+
     /// Adds fetched messages to the canonical map, applying zulip-flutter's
     /// reconcile rule: a message we already have wins over a fetched copy
     /// (events applied to it can't be replayed; the fetch may predate them).
@@ -383,17 +399,24 @@ public final class PerAccountStore {
             }
 
         case .updateMessage(let e):
-            // Content edits only for M0; topic/channel moves land with the
-            // message-list model in M1.
-            guard var message = messages[e.messageId] else { break }
-            if let rendered = e.renderedContent {
-                message.content = rendered
+            // Content edits touch messageId; topic/channel moves touch every
+            // id in messageIds (subject/new_stream_id carry the target).
+            let ids = e.messageIds ?? [e.messageId]
+            for id in ids {
+                guard var message = messages[id] else { continue }
+                if id == e.messageId, let rendered = e.renderedContent {
+                    message.content = rendered
+                    message.lastEditTimestamp = e.editTimestamp ?? message.lastEditTimestamp
+                }
+                if let newTopic = e.subject {
+                    message.subject = newTopic
+                }
+                if let newStream = e.newStreamId {
+                    message.streamId = newStream
+                }
+                messages[id] = message
             }
-            if let edited = e.editTimestamp {
-                message.lastEditTimestamp = edited
-            }
-            messages[e.messageId] = message
-            forEachMessageList { $0.handleChangedMessages(ids: [e.messageId]) }
+            forEachMessageList { $0.handleChangedMessages(ids: ids) }
 
         case .deleteMessage(let e):
             for id in e.allIds {
