@@ -125,7 +125,7 @@ public final class ApiConnection: Sendable {
 
     public static var defaultUserAgent: String {
         let v = ProcessInfo.processInfo.operatingSystemVersion
-        return "ZulipForMac/0.1 (macOS \(v.majorVersion).\(v.minorVersion))"
+        return "Zephyr/0.1 (macOS \(v.majorVersion).\(v.minorVersion))"
     }
 
     public init(

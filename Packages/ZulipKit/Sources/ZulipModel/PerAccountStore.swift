@@ -44,7 +44,7 @@ public final class PerAccountStore {
     /// "connecting" banner.
     public var isRecoveringEventStream = false
 
-    private let logger = Logger(subsystem: "com.twarge.zulip", category: "store")
+    private let logger = Logger(subsystem: "com.twarge.zephyr", category: "store")
 
     public init(account: Account, connection: ApiConnection, snapshot: InitialSnapshot) {
         accountId = account.id

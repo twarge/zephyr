@@ -14,13 +14,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		A100000000000000000000C3 /* Zulip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Zulip.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A100000000000000000000C3 /* Zephyr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Zephyr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		A100000000000000000000C4 /* Zulip */ = {
+		A100000000000000000000C4 /* Zephyr */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Zulip;
+			path = Zephyr;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -43,7 +43,7 @@
 		A100000000000000000000C1 = {
 			isa = PBXGroup;
 			children = (
-				A100000000000000000000C4 /* Zulip */,
+				A100000000000000000000C4 /* Zephyr */,
 				A100000000000000000000C2 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -51,7 +51,7 @@
 		A100000000000000000000C2 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A100000000000000000000C3 /* Zulip.app */,
+				A100000000000000000000C3 /* Zephyr.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -59,9 +59,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A100000000000000000000D1 /* Zulip */ = {
+		A100000000000000000000D1 /* Zephyr */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A100000000000000000000D2 /* Build configuration list for PBXNativeTarget "Zulip" */;
+			buildConfigurationList = A100000000000000000000D2 /* Build configuration list for PBXNativeTarget "Zephyr" */;
 			buildPhases = (
 				A100000000000000000000E1 /* Sources */,
 				A100000000000000000000E2 /* Frameworks */,
@@ -72,17 +72,17 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				A100000000000000000000C4 /* Zulip */,
+				A100000000000000000000C4 /* Zephyr */,
 			);
-			name = Zulip;
+			name = Zephyr;
 			packageProductDependencies = (
 				A100000000000000000000F2 /* ZulipAPI */,
 				A100000000000000000000F3 /* ZulipModel */,
 				A100000000000000000000F6 /* ZulipContent */,
 				A100000000000000000000F8 /* ZulipMath */,
 			);
-			productName = Zulip;
-			productReference = A100000000000000000000C3 /* Zulip.app */;
+			productName = Zephyr;
+			productReference = A100000000000000000000C3 /* Zephyr.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -100,7 +100,7 @@
 					};
 				};
 			};
-			buildConfigurationList = A100000000000000000000B1 /* Build configuration list for PBXProject "Zulip" */;
+			buildConfigurationList = A100000000000000000000B1 /* Build configuration list for PBXProject "Zephyr" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -117,7 +117,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A100000000000000000000D1 /* Zulip */,
+				A100000000000000000000D1 /* Zephyr */,
 			);
 		};
 /* End PBXProject section */
@@ -267,7 +267,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Zulip/Zulip.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Zephyr/Zephyr.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -284,7 +284,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.twarge.zulip;
+				PRODUCT_BUNDLE_IDENTIFIER = com.twarge.zephyr;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -298,7 +298,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Zulip/Zulip.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Zephyr/Zephyr.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -315,7 +315,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.twarge.zulip;
+				PRODUCT_BUNDLE_IDENTIFIER = com.twarge.zephyr;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -327,7 +327,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A100000000000000000000B1 /* Build configuration list for PBXProject "Zulip" */ = {
+		A100000000000000000000B1 /* Build configuration list for PBXProject "Zephyr" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A100000000000000000000B2 /* Debug */,
@@ -336,7 +336,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A100000000000000000000D2 /* Build configuration list for PBXNativeTarget "Zulip" */ = {
+		A100000000000000000000D2 /* Build configuration list for PBXNativeTarget "Zephyr" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A100000000000000000000D3 /* Debug */,

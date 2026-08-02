@@ -32,7 +32,7 @@ struct MainSplitView: View {
         } detail: {
             detailContent
         }
-        .navigationTitle(store.realmName ?? "Zulip")
+        .navigationTitle(store.realmName ?? "Zephyr")
         // Channel/topic/message links inside message content navigate in-app.
         .environment(
             \.openURL,

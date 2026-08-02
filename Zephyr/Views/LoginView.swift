@@ -32,7 +32,7 @@ struct LoginView: View {
             Image(systemName: "bubble.left.and.bubble.right.fill")
                 .font(.system(size: 40))
                 .foregroundStyle(.tint)
-            Text("Zulip for macOS")
+            Text("Zephyr for Zulip")
                 .font(.title2.weight(.semibold))
 
             switch step {

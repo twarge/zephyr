@@ -1,7 +1,9 @@
-# Product Specification — Zulip for macOS
+# Product Specification — Zephyr (for Zulip)
 
-Working title: **Zulip for macOS** (final name TBD; it is a third-party client, so the
-shipping name/icon must not imply it is official — see Open questions).
+The app is named **Zephyr** ("Zephyr for Zulip" in marketing contexts): a zephyr is a
+soft, fast breeze — the calm-and-quick feel this app aims for — and Zulip itself descends
+from MIT's Zephyr messaging system, so the name honors the lineage. As a third-party
+client, the name and icon deliberately don't imply official status.
 
 ## 1. Vision
 
@@ -217,9 +219,9 @@ feature, not as a later pass.
 
 ## 9. Open questions
 
-1. **Name & identity** — needs a distinct name/icon that doesn't claim official status
-   (Zulip's trademark guidance applies); "Zulip for macOS" is a placeholder.
-2. **Menu-bar background mode** — valuable (notifications with the window closed) but has
+1. **Menu-bar background mode** — valuable (notifications with the window closed) but has
    energy/App Store implications; revisit at M3.
-3. **Mac App Store** — sandbox is compatible, but web-auth flow and Sparkle-vs-MAS
+2. **Mac App Store** — sandbox is compatible, but web-auth flow and Sparkle-vs-MAS
    updating differ; decide at M3.
+3. **App icon** — Zephyr needs an icon (wind/breeze motif?); the asset catalog slots are
+   empty.

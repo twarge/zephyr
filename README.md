@@ -1,19 +1,23 @@
-# Zulip for macOS
+# Zephyr — for Zulip
 
-A truly native macOS Zulip client, designed to feel like Apple Messages: a calm two-pane
-window, a unified conversation list, and a focused transcript — instead of the dense
-multi-column web UI.
+**Zephyr** is a truly native macOS client for [Zulip](https://zulip.com): a calm two-pane
+window in the spirit of Apple Messages, with the web app's sidebar concepts (channels,
+folders, topics, views) rendered natively. The name honors Zulip's ancestry in MIT's
+Zephyr messaging system — and a zephyr is a soft, fast breeze, which is the feel the app
+aims for. Zephyr is an independent project, not affiliated with the Zulip organization.
 
-**Status: M0 (foundations).** The `ZulipAPI` and `ZulipModel` packages are in place — typed
-API bindings, the per-account store, and the register→poll→rebuild sync engine — plus the
-Xcode app project with a placeholder window. The real UI lands in M1.
+**Status: reading client (M1 complete).** Live-syncing sidebar (channels grouped by
+folder, topics on disclosure, DMs), channel feeds with recipient bars, focused topic
+transcripts, full native content rendering (code with syntax colors, tables, math via
+SwiftMath, polls, link previews, media with Quick Look), and search with token pills and
+recents. Composing/sending is next (M2).
 
 ## Building
 
-Open `Zulip.xcodeproj` and run the `Zulip` scheme, or from the command line:
+Open `Zephyr.xcodeproj` and run the `Zephyr` scheme, or from the command line:
 
 ```bash
-xcodebuild -project Zulip.xcodeproj -scheme Zulip build     # the app
+xcodebuild -project Zephyr.xcodeproj -scheme Zephyr build   # the app
 swift test --package-path Packages/ZulipKit                 # package tests
 swift run --package-path Packages/ZulipKit zulip-harness    # headless harness
 ```

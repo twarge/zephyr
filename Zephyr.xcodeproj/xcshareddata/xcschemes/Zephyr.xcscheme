@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A100000000000000000000D1"
-               BuildableName = "Zulip.app"
-               BlueprintName = "Zulip"
-               ReferencedContainer = "container:Zulip.xcodeproj">
+               BuildableName = "Zephyr.app"
+               BlueprintName = "Zephyr"
+               ReferencedContainer = "container:Zephyr.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -44,9 +44,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A100000000000000000000D1"
-            BuildableName = "Zulip.app"
-            BlueprintName = "Zulip"
-            ReferencedContainer = "container:Zulip.xcodeproj">
+            BuildableName = "Zephyr.app"
+            BlueprintName = "Zephyr"
+            ReferencedContainer = "container:Zephyr.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -61,9 +61,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A100000000000000000000D1"
-            BuildableName = "Zulip.app"
-            BlueprintName = "Zulip"
-            ReferencedContainer = "container:Zulip.xcodeproj">
+            BuildableName = "Zephyr.app"
+            BlueprintName = "Zephyr"
+            ReferencedContainer = "container:Zephyr.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

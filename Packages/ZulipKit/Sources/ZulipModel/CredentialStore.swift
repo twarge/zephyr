@@ -16,7 +16,7 @@ public struct KeychainError: Error, Sendable {
 public struct KeychainCredentialStore: CredentialStore {
     public var service: String
 
-    public init(service: String = "com.twarge.zulip.api-key") {
+    public init(service: String = "com.twarge.zephyr.api-key") {
         self.service = service
     }
 

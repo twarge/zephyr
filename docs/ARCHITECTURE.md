@@ -1,4 +1,4 @@
-# Architecture — Zulip for macOS
+# Architecture — Zephyr (for Zulip)
 
 This document defines the technical architecture. It deliberately adapts the design of
 [zulip-flutter](https://github.com/zulip/zulip-flutter) — the official next-gen client,
@@ -33,12 +33,12 @@ with all platform-independent code in the ZulipKit SwiftPM package.
 
 ```
 zulip-macos/
-├── Zulip.xcodeproj      # app project (synchronized folder groups: new files in
-│                        # Zulip/ are picked up automatically; shared Zulip scheme)
-├── Zulip/               # the macOS app target (SwiftUI) — thin: UI + platform glue
-│   ├── ZulipApp.swift / ContentView.swift   (M1: sidebar, transcript, compose)
+├── Zephyr.xcodeproj      # app project (synchronized folder groups: new files in
+│                        # Zephyr/ are picked up automatically; shared Zephyr scheme)
+├── Zephyr/              # the macOS app target (SwiftUI) — thin: UI + platform glue
+│   ├── ZephyrApp.swift / ContentView.swift   (M1: sidebar, transcript, compose)
 │   ├── Assets.xcassets
-│   └── Zulip.entitlements                   (sandbox + network client)
+│   └── Zephyr.entitlements                   (sandbox + network client)
 ├── Packages/ZulipKit/   # one SwiftPM package, several targets
 │   ├── Package.swift
 │   ├── Sources/
@@ -71,7 +71,7 @@ them portable and testable from the command line.
 
 - **`ApiConnection`**: realm URL, email + API key (precomputed Basic-auth header),
   mutable `zulipFeatureLevel`, a `URLSession`, and the `User-Agent`
-  (`ZulipForMac/<version> (macOS <os>)`). One instance per logged-in account. Feature-gated
+  (`Zephyr/<version> (macOS <os>)`). One instance per logged-in account. Feature-gated
   behavior lives in route functions (`if connection.featureLevel >= N …`), keyed to the
   floor in PROTOCOL.md §5.
 - **Routes** are free functions/namespaced statics taking an `ApiConnection` — mirrors

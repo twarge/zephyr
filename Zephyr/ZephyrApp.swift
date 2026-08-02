@@ -2,7 +2,7 @@ import SwiftUI
 import ZulipModel
 
 @main
-struct ZulipApp: App {
+struct ZephyrApp: App {
     @State private var model = AppModel()
 
     var body: some Scene {

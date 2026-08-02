@@ -433,7 +433,7 @@ func downloadMediaFile(path: String, connection: ApiConnection) async -> URL? {
     let filename = (path as NSString).lastPathComponent.removingPercentEncoding
         .flatMap { $0.isEmpty ? nil : $0 } ?? "file"
     let directory = FileManager.default.temporaryDirectory
-        .appendingPathComponent("ZulipPreviews", isDirectory: true)
+        .appendingPathComponent("ZephyrPreviews", isDirectory: true)
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     do {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

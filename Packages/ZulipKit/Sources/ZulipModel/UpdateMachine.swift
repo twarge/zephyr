@@ -28,7 +28,7 @@ public final class UpdateMachine {
 
     private let sleep: SleepFunction
     private var pollTask: Task<Void, Never>?
-    private let logger = Logger(subsystem: "com.twarge.zulip", category: "sync")
+    private let logger = Logger(subsystem: "com.twarge.zephyr", category: "sync")
 
     public init(
         store: PerAccountStore,

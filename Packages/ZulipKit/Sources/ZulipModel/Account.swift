@@ -71,12 +71,12 @@ public struct JSONFileAccountsStore: AccountsStore {
         self.fileURL = fileURL
     }
 
-    /// Default location: ~/Library/Application Support/com.twarge.zulip/accounts.json
+    /// Default location: ~/Library/Application Support/com.twarge.zephyr/accounts.json
     public static func standard() throws -> JSONFileAccountsStore {
         let base = try FileManager.default.url(
             for: .applicationSupportDirectory, in: .userDomainMask,
             appropriateFor: nil, create: true)
-        let dir = base.appendingPathComponent("com.twarge.zulip", isDirectory: true)
+        let dir = base.appendingPathComponent("com.twarge.zephyr", isDirectory: true)
         return JSONFileAccountsStore(fileURL: dir.appendingPathComponent("accounts.json"))
     }
 

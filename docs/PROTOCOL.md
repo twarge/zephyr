@@ -180,7 +180,7 @@ With `apply_markdown: true`, `content` is server-rendered HTML (`content_type:
 
 - Rate limits: default 200 req/min/user; honor `X-RateLimit-*` headers and 429
   `retry-after` (never hardcode limits).
-- `User-Agent: ZulipForMac/<version> (macOS <os-version>)` — the server parses this into
+- `User-Agent: Zephyr/<version> (macOS <os-version>)` — the server parses this into
   its `Client` analytics and the `read_by_sender` heuristic.
 - Exponential backoff on all reconnects; `dont_block: true` on recovery polls; delete
   event queues on sign-out.

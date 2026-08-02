@@ -163,7 +163,7 @@ extension ConversationKey {
 extension InternalLink {
     var appURL: URL? {
         var components = URLComponents()
-        components.scheme = "zulipmac"
+        components.scheme = "zephyr"
         components.host = "narrow"
         switch self {
         case .channel(let streamId):
@@ -181,7 +181,7 @@ extension InternalLink {
     }
 
     init?(appURL: URL) {
-        guard appURL.scheme == "zulipmac", appURL.host() == "narrow",
+        guard appURL.scheme == "zephyr", appURL.host() == "narrow",
               let components = URLComponents(url: appURL, resolvingAgainstBaseURL: false),
               let streamValue = components.queryItems?.first(where: { $0.name == "stream" })?.value,
               let streamId = Int(streamValue)

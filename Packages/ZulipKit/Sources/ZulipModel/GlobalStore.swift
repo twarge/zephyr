@@ -24,7 +24,7 @@ public final class GlobalStore: UpdateMachineDelegate {
     private let credentials: any CredentialStore
     private let transport: any ApiTransport
     private let sleep: UpdateMachine.SleepFunction
-    private let logger = Logger(subsystem: "com.twarge.zulip", category: "store")
+    private let logger = Logger(subsystem: "com.twarge.zephyr", category: "store")
 
     public init(
         accountsStore: any AccountsStore,
