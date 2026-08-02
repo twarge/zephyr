@@ -138,7 +138,9 @@ struct SidebarView: View {
         // The suggestions popover's anchor sits directly under the search
         // field; inside the searchable subtree so it sees `isSearching`.
         .safeAreaInset(edge: .top, spacing: 0) {
-            SearchSuggestionsAnchor(search: search)
+            SearchSuggestionsAnchor(search: search) {
+                runSearch(recordInRecents: true)
+            }
         }
         .listStyle(.sidebar)
         // One field, two roles: typing filters the sidebar live (suggestions

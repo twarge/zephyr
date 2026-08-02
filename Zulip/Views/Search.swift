@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import ZulipAPI
 import ZulipModel
@@ -85,6 +86,10 @@ final class SidebarSearchModel {
 
     private static let recentSearchesKey = "recentSearches"
     private static let maxRecentSearches = 5
+
+    /// Submit hook installed by SidebarView (called on Return via the key
+    /// monitor).
+    @ObservationIgnored var onSubmit: (() -> Void)?
 
     init(store: PerAccountStore) {
         self.store = store
@@ -214,32 +219,94 @@ final class SidebarSearchModel {
 }
 
 /// A hidden anchor placed directly beneath the sidebar search field: it
-/// tracks the search session (`isSearching`) and presents the suggestions as
-/// a native popover pointing at the field — shown only while the field is
-/// active and suggestions exist.
+/// tracks the search session (`isSearching`), presents the suggestions as a
+/// native popover to the right of the field (anchor rect reaches up to the
+/// field's vertical centerline so the arrow points at the field itself), and
+/// captures Return while the field is active — SwiftUI's onSubmit(of:
+/// .search) does not fire reliably for token search fields on macOS.
 struct SearchSuggestionsAnchor: View {
     let search: SidebarSearchModel
+    let onSubmitSearch: () -> Void
+
     @Environment(\.isSearching) private var isSearching
     @State private var showPopover = false
+    @State private var keyMonitor: Any?
+
+    /// The search field sits just above this anchor; reach up to its
+    /// vertical centerline.
+    private static let fieldCenterlineOffset: CGFloat = -24
 
     var body: some View {
-        Color.clear
-            .frame(height: 1)
-            .popover(
-                isPresented: $showPopover,
-                attachmentAnchor: .rect(.bounds),
-                arrowEdge: .bottom
-            ) {
-                SearchSuggestionsList(search: search)
-            }
-            .onChange(of: isSearching) { sync() }
-            .onChange(of: search.filterText) { sync() }
-            .onChange(of: search.tokens) { sync() }
-            .onAppear { sync() }
+        GeometryReader { proxy in
+            Color.clear
+                .popover(
+                    isPresented: $showPopover,
+                    attachmentAnchor: .rect(
+                        .rect(
+                            CGRect(
+                                x: 0, y: Self.fieldCenterlineOffset,
+                                width: proxy.size.width, height: 8))),
+                    arrowEdge: .trailing
+                ) {
+                    SearchSuggestionsList(search: search)
+                }
+        }
+        .frame(height: 1)
+        .onChange(of: isSearching) {
+            syncMonitor()
+            syncPopover()
+        }
+        .onChange(of: search.filterText) { syncPopover() }
+        .onChange(of: search.tokens) { syncPopover() }
+        .onAppear {
+            syncMonitor()
+            syncPopover()
+        }
+        .onDisappear { removeMonitor() }
     }
 
-    private func sync() {
+    private func syncPopover() {
         showPopover = isSearching && !search.suggestions.isEmpty
+    }
+
+    private func syncMonitor() {
+        if isSearching {
+            installMonitor()
+        } else {
+            removeMonitor()
+        }
+    }
+
+    private func installMonitor() {
+        guard keyMonitor == nil else { return }
+        search.onSubmit = onSubmitSearch
+        keyMonitor = Self.makeReturnMonitor(search: search)
+    }
+
+    /// nonisolated so the AppKit handler closure infers nonisolated (the
+    /// monitor fires on the main thread; assumeIsolated hops back safely).
+    private nonisolated static func makeReturnMonitor(search: SidebarSearchModel) -> Any? {
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let isReturn = event.keyCode == 36 || event.keyCode == 76
+            let plain = event.modifierFlags
+                .intersection([.command, .option, .control]).isEmpty
+            guard isReturn, plain else { return event }
+            let consumed = MainActor.assumeIsolated { () -> Bool in
+                let hasQuery = !search.filterText.trimmingCharacters(in: .whitespaces).isEmpty
+                    || !search.tokens.isEmpty
+                guard hasQuery, let submit = search.onSubmit else { return false }
+                submit()
+                return true
+            }
+            return consumed ? nil : event
+        }
+    }
+
+    private func removeMonitor() {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
+        }
     }
 }
 
@@ -287,6 +354,10 @@ extension Array {
         }
     }
 }
+
+/// Confined to the main actor in practice (all access is @MainActor; the key
+/// monitor fires on the main thread and hops via assumeIsolated).
+extension SidebarSearchModel: @unchecked Sendable {}
 
 /// A full search: token filters plus free text (the server's full-text
 /// `search` operator).
