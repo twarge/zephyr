@@ -16,6 +16,7 @@ public struct Event: Sendable {
         case deleteMessage(DeleteMessageEvent)
         case updateMessageFlags(UpdateMessageFlagsEvent)
         case reaction(ReactionEvent)
+        case typing(TypingEvent)
         case realmUserAdd(User)
         case realmUserUpdate(RealmUserUpdate)
         case realmUserRemove(userId: Int)
@@ -59,6 +60,24 @@ public struct UpdateMessageFlagsEvent: Decodable, Sendable {
     public var flag: String
     public var messages: [Int]
     public var all: Bool
+}
+
+public struct TypingEvent: Decodable, Sendable {
+    public struct UserRef: Decodable, Sendable {
+        public var userId: Int
+    }
+
+    public var op: String
+    /// "direct" or "stream".
+    public var messageType: String?
+    private var sender: UserRef
+    /// Direct typing: all recipients (including the sender).
+    public var recipients: [UserRef]?
+    /// Channel typing.
+    public var streamId: Int?
+    public var topic: String?
+
+    public var senderId: Int { sender.userId }
 }
 
 public struct ReactionEvent: Decodable, Sendable {
@@ -133,6 +152,8 @@ extension Event: Decodable {
             kind = .updateMessageFlags(try UpdateMessageFlagsEvent(from: decoder))
         case ("reaction", "add"), ("reaction", "remove"):
             kind = .reaction(try ReactionEvent(from: decoder))
+        case ("typing", "start"), ("typing", "stop"):
+            kind = .typing(try TypingEvent(from: decoder))
         case ("realm_user", "add"):
             kind = .realmUserAdd(try PersonEnvelope<User>(from: decoder).person)
         case ("realm_user", "update"):

@@ -42,6 +42,19 @@ public final class PerAccountStore {
 
     /// Optimistically-sent messages awaiting their server echo event.
     public private(set) var outbox: [OutboxMessage] = []
+    /// Who's typing where (from typing events).
+    public let typing = TypingStatus()
+    /// Unicode emoji (from server_emoji_data_url) + realm custom emoji, for
+    /// pickers and :shortcode: autocomplete. Loaded lazily.
+    public private(set) var emojiEntries: [EmojiEntry] = []
+
+    private let serverEmojiDataUrl: String?
+    private let typingStartedWaitMs: Int
+    private let typingStoppedWaitMs: Int
+    private let typingStartedExpiryMs: Int
+    @ObservationIgnored private var emojiCatalogLoadStarted = false
+    @ObservationIgnored private var typingSendState:
+        [SendDestination: (lastStart: Date, stopTask: Task<Void, Never>)] = [:]
 
     /// True while the event stream is failing and being retried; UI shows a
     /// "connecting" banner.
@@ -58,6 +71,10 @@ public final class PerAccountStore {
         zulipFeatureLevel = snapshot.zulipFeatureLevel
         eventQueueLongpollTimeoutSeconds = snapshot.eventQueueLongpollTimeoutSeconds ?? 90
         realmName = snapshot.realmName
+        serverEmojiDataUrl = snapshot.serverEmojiDataUrl
+        typingStartedWaitMs = snapshot.serverTypingStartedWaitPeriodMilliseconds ?? 10000
+        typingStoppedWaitMs = snapshot.serverTypingStoppedWaitPeriodMilliseconds ?? 5000
+        typingStartedExpiryMs = snapshot.serverTypingStartedExpiryPeriodMilliseconds ?? 15000
 
         let allUsers = (snapshot.realmUsers ?? [])
             + (snapshot.realmNonActiveUsers ?? [])
@@ -181,6 +198,76 @@ public final class PerAccountStore {
         }
     }
 
+    // MARK: Typing (send side)
+
+    /// Call on every keystroke with content present: sends `start` throttled
+    /// to the server's cadence and schedules an automatic `stop` on idle.
+    public func typingActivity(in destination: SendDestination) {
+        let now = Date.now
+        let previous = typingSendState[destination]
+        previous?.stopTask.cancel()
+        var lastStart = previous?.lastStart
+        if lastStart == nil
+            || now.timeIntervalSince(lastStart!) * 1000 >= Double(typingStartedWaitMs) {
+            sendTypingRequest(op: "start", destination: destination)
+            lastStart = now
+        }
+        let stopTask = Task { [weak self, typingStoppedWaitMs] in
+            try? await Task.sleep(for: .milliseconds(typingStoppedWaitMs))
+            guard !Task.isCancelled else { return }
+            self?.typingStopped(in: destination)
+        }
+        typingSendState[destination] = (lastStart ?? now, stopTask)
+    }
+
+    /// Call when composing ends (sent, cleared, or idle).
+    public func typingStopped(in destination: SendDestination) {
+        guard let state = typingSendState.removeValue(forKey: destination) else { return }
+        state.stopTask.cancel()
+        sendTypingRequest(op: "stop", destination: destination)
+    }
+
+    private func sendTypingRequest(op: String, destination: SendDestination) {
+        let connection = connection
+        Task {
+            switch destination {
+            case .topic(let streamId, let topic):
+                try? await connection.setTyping(op: op, streamId: streamId, topic: topic)
+            case .dm(let userIds):
+                try? await connection.setTyping(op: op, userIds: userIds)
+            }
+        }
+    }
+
+    // MARK: Emoji catalog
+
+    public func loadEmojiCatalogIfNeeded() {
+        guard !emojiCatalogLoadStarted else { return }
+        emojiCatalogLoadStarted = true
+        let realmEntries = realmEmoji
+            .filter { !$0.value.deactivated }
+            .map { id, item in
+                EmojiEntry(name: item.name, code: id, character: nil, realmSrc: item.sourceUrl)
+            }
+            .sorted { $0.name < $1.name }
+        guard let urlString = serverEmojiDataUrl,
+              let url = URL(string: urlString, relativeTo: connection.realmURL)?.absoluteURL
+        else {
+            emojiEntries = realmEntries
+            return
+        }
+        Task { [weak self] in
+            let unicodeEntries: [EmojiEntry]
+            if let (data, _) = try? await URLSession.shared.data(from: url),
+               let parsed = try? EmojiCatalog.parse(data) {
+                unicodeEntries = parsed
+            } else {
+                unicodeEntries = []
+            }
+            self?.emojiEntries = realmEntries + unicodeEntries
+        }
+    }
+
     // MARK: Message actions
 
     public func toggleReaction(message: Message, emojiName: String, emojiCode: String, reactionType: String) {
@@ -295,6 +382,25 @@ public final class PerAccountStore {
             }
             messages[e.messageId] = message
             forEachMessageList { $0.handleChangedMessages(ids: [e.messageId]) }
+
+        case .typing(let e):
+            guard e.senderId != selfUserId else { break }
+            let key: ConversationKey?
+            if let streamId = e.streamId {
+                key = .topic(streamId: streamId, topic: e.topic ?? "")
+            } else if let recipients = e.recipients {
+                key = Unreads.dmKey(
+                    participantIds: recipients.map(\.userId), selfUserId: selfUserId)
+            } else {
+                key = nil
+            }
+            guard let key else { break }
+            if e.op == "start" {
+                typing.handleStart(
+                    key: key, userId: e.senderId, expiryMilliseconds: typingStartedExpiryMs)
+            } else {
+                typing.handleStop(key: key, userId: e.senderId)
+            }
 
         case .realmUserAdd(let user):
             users[user.userId] = user

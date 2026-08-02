@@ -196,15 +196,6 @@ extension InternalLink {
     }
 }
 
-/// Emoji character from Zulip's dash-joined hex codepoints ("1f44d-1f3fc").
-func emojiCharacter(fromCodes codes: String) -> String? {
-    let scalars = codes.split(separator: "-")
-        .compactMap { UInt32($0, radix: 16) }
-        .compactMap { Unicode.Scalar($0) }
-    guard !scalars.isEmpty else { return nil }
-    return String(String.UnicodeScalarView(scalars))
-}
-
 /// Messages-style day labels: Today, Yesterday, weekday within a week,
 /// then dates.
 func daySeparatorLabel(for date: Date) -> String {

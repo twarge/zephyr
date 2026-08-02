@@ -1,0 +1,116 @@
+import Foundation
+import Testing
+import ZulipAPI
+import ZulipTestSupport
+@testable import ZulipModel
+
+struct ComposeAutocompleteTests {
+    private func token(_ text: String) -> ComposeAutocomplete.Token? {
+        ComposeAutocomplete.trailingToken(in: text)?.token
+    }
+
+    @Test func detectsTrailingTokens() {
+        #expect(token("hello @Ti") == .mention("Ti"))
+        #expect(token("@") == .mention(""))
+        #expect(token("hey :oct") == .emoji("oct"))
+        #expect(token("see #des") == .channel("des"))
+        #expect(token("ping @Tim Ab") == .mention("Tim Ab"))
+    }
+
+    @Test func requiresBoundaryBeforeTrigger() {
+        #expect(token("a@b") == nil)
+        #expect(token("http://x") == nil)  // ':' not after whitespace
+        #expect(token("c#4") == nil)
+    }
+
+    @Test func completedTokensStopSuggesting() {
+        #expect(token("hi @**Tim Abbott** ") == nil)
+        #expect(token("emoji :+1: done") == nil)  // ':' followed by space-containing tail
+        #expect(token("in #**design** ") == nil)
+    }
+
+    @Test func laterTriggerWins() {
+        #expect(token("@Tim said :thu") == .emoji("thu"))
+        #expect(token(":+1 in #gen") == .channel("gen"))
+    }
+
+    @Test func replacementRangeCoversTrigger() throws {
+        let text = "hello @Ti"
+        let result = try #require(ComposeAutocomplete.trailingToken(in: text))
+        var replaced = text
+        replaced.replaceSubrange(result.triggerIndex..<text.endIndex, with: "@**Tim Abbott** ")
+        #expect(replaced == "hello @**Tim Abbott** ")
+    }
+}
+
+struct EmojiCatalogTests {
+    @Test func parsesServerEmojiData() throws {
+        let json = #"{"code_to_names": {"1f419": ["octopus"], "1f44d": ["+1", "thumbs_up"], "invalid": ["broken"]}}"#
+        let entries = try EmojiCatalog.parse(Data(json.utf8))
+        // "invalid" hex is dropped; canonical (first) names win; sorted.
+        #expect(entries.map(\.name) == ["+1", "octopus"])
+        #expect(entries.first { $0.name == "octopus" }?.character == "🐙")
+        #expect(entries.first { $0.name == "+1" }?.character == "👍")
+    }
+}
+
+@MainActor
+struct TypingTests {
+    private func makeStore(transport: FakeTransport) throws -> PerAccountStore {
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key", transport: transport)
+        return PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+    }
+
+    @Test func typingEventsTrackTypists() throws {
+        let store = try makeStore(transport: FakeTransport(defaultResponse: .hang))
+        let key = ConversationKey.topic(streamId: 10, topic: "greetings")
+
+        let start = #"{"id": 1, "type": "typing", "op": "start", "message_type": "stream", "sender": {"user_id": 2, "email": "other@example.com"}, "stream_id": 10, "topic": "greetings"}"#
+        store.handleEvent(try decodeEvent(start))
+        #expect(store.typing.typistIds(in: key) == [2])
+
+        // Own typing events are ignored.
+        let selfStart = #"{"id": 2, "type": "typing", "op": "start", "message_type": "stream", "sender": {"user_id": 1, "email": "self@example.com"}, "stream_id": 10, "topic": "greetings"}"#
+        store.handleEvent(try decodeEvent(selfStart))
+        #expect(store.typing.typistIds(in: key) == [2])
+
+        let stop = #"{"id": 3, "type": "typing", "op": "stop", "message_type": "stream", "sender": {"user_id": 2, "email": "other@example.com"}, "stream_id": 10, "topic": "greetings"}"#
+        store.handleEvent(try decodeEvent(stop))
+        #expect(store.typing.typistIds(in: key).isEmpty)
+    }
+
+    @Test func dmTypingKeysNormalize() throws {
+        let store = try makeStore(transport: FakeTransport(defaultResponse: .hang))
+        let start = #"{"id": 1, "type": "typing", "op": "start", "message_type": "direct", "sender": {"user_id": 5, "email": "u5@example.com"}, "recipients": [{"user_id": 1, "email": "self@example.com"}, {"user_id": 5, "email": "u5@example.com"}]}"#
+        store.handleEvent(try decodeEvent(start))
+        #expect(store.typing.typistIds(in: .dm("5")) == [5])
+    }
+
+    @Test func typingActivityThrottlesStarts() async throws {
+        let transport = FakeTransport(defaultResponse: .json(#"{"result": "success", "msg": ""}"#))
+        let store = try makeStore(transport: transport)
+        let destination = SendDestination.topic(streamId: 10, topic: "greetings")
+
+        store.typingActivity(in: destination)
+        store.typingActivity(in: destination)
+        store.typingActivity(in: destination)
+        try await eventually("one throttled start sent") {
+            transport.requests.filter { $0.path == "/api/v1/typing" }.count == 1
+        }
+        let start = try #require(transport.requests.first { $0.path == "/api/v1/typing" })
+        #expect(start.formValue("op") == "start")
+        #expect(start.formValue("stream_id") == "10")
+
+        store.typingStopped(in: destination)
+        try await eventually("stop sent") {
+            transport.requests.filter { $0.path == "/api/v1/typing" }.count == 2
+        }
+        let stop = transport.requests.filter { $0.path == "/api/v1/typing" }.last
+        #expect(stop?.formValue("op") == "stop")
+    }
+}

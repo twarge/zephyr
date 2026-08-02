@@ -39,6 +39,22 @@ struct MessageFeedList: View {
         }
     }
 
+    /// Names of people typing in this exact conversation (topic/DM narrows).
+    private var typistNames: [String]? {
+        let key: ConversationKey?
+        switch model.narrow {
+        case .topic(let streamId, let topic):
+            key = .topic(streamId: streamId, topic: topic)
+        case .dm(let userIds):
+            key = Unreads.dmKey(participantIds: userIds, selfUserId: store.selfUserId)
+        default:
+            key = nil
+        }
+        guard let key else { return nil }
+        return store.typing.typistIds(in: key)
+            .compactMap { store.users[$0]?.fullName }
+    }
+
     private enum Item: Identifiable {
         case daySeparator(String)
         case conversationHeader(key: ConversationKey, firstMessageId: Int)
@@ -122,6 +138,18 @@ struct MessageFeedList: View {
                         OutboxRow(store: store, message: outboxMessage)
                             .id("out-\(outboxMessage.id)")
                     }
+                }
+                if let names = typistNames, !names.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "ellipsis.bubble")
+                            .foregroundStyle(.secondary)
+                        Text("\(names.joined(separator: ", ")) \(names.count == 1 ? "is" : "are") typing…")
+                            .italic()
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.callout)
+                    .padding(.vertical, 6)
+                    .padding(.leading, 42)
                 }
                 if model.messages.isEmpty && outboxMessages.isEmpty {
                     ContentUnavailableView("No Messages", systemImage: "bubble")
@@ -249,6 +277,9 @@ struct MessageRow: View {
     let cache: MessageContentCache
     var useMatchHighlights = false
 
+    @State private var hovering = false
+    @State private var showReactionPicker = false
+
     private var content: MessageContent {
         if useMatchHighlights, let match = message.matchContent {
             // Uncached: search results are one-shot lists.
@@ -296,6 +327,30 @@ struct MessageRow: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, 1)
+        .onHover { hovering = $0 }
+        .overlay(alignment: .topTrailing) {
+            if hovering || showReactionPicker {
+                Button {
+                    showReactionPicker = true
+                } label: {
+                    Image(systemName: "face.smiling")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(5)
+                        .background(.quaternary.opacity(0.6), in: .circle)
+                }
+                .buttonStyle(.plain)
+                .help("Add reaction")
+                .popover(isPresented: $showReactionPicker) {
+                    EmojiPickerView(store: store) { entry in
+                        store.toggleReaction(
+                            message: message, emojiName: entry.name,
+                            emojiCode: entry.code, reactionType: entry.reactionType)
+                    }
+                }
+                .padding(.top, showHeader ? 8 : 0)
+            }
+        }
         .contextMenu {
             let isStarred = (message.flags ?? []).contains("starred")
             Button(isStarred ? "Unstar" : "Star", systemImage: "star") {
@@ -320,6 +375,8 @@ struct ReactionsRow: View {
     let message: Message
 
     private var reactions: [Reaction] { message.reactions }
+
+    @State private var showPicker = false
 
     private struct Group: Identifiable {
         var id: String
@@ -372,6 +429,26 @@ struct ReactionsRow: View {
                 .help(group.reactedBySelf
                     ? "Remove your :\(group.sample.emojiName): reaction"
                     : "React with :\(group.sample.emojiName):")
+            }
+            Button {
+                showPicker = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(.quaternary, in: .capsule)
+                    .contentShape(.capsule)
+            }
+            .buttonStyle(.plain)
+            .help("Add reaction")
+            .popover(isPresented: $showPicker) {
+                EmojiPickerView(store: store) { entry in
+                    store.toggleReaction(
+                        message: message, emojiName: entry.name,
+                        emojiCode: entry.code, reactionType: entry.reactionType)
+                }
             }
         }
         .padding(.top, 1)

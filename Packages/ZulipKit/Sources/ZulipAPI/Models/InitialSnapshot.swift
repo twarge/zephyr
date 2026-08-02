@@ -12,6 +12,11 @@ public struct InitialSnapshot: Decodable, Sendable {
 
     public var realmName: String?
     public var maxMessageLength: Int?
+    /// Static JSON mapping unicode emoji codepoints to shortcode names.
+    public var serverEmojiDataUrl: String?
+    public var serverTypingStartedWaitPeriodMilliseconds: Int?
+    public var serverTypingStoppedWaitPeriodMilliseconds: Int?
+    public var serverTypingStartedExpiryPeriodMilliseconds: Int?
 
     public var realmUsers: [User]?
     public var realmNonActiveUsers: [User]?

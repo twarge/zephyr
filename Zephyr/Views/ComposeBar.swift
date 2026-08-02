@@ -1,4 +1,5 @@
 import SwiftUI
+import ZulipAPI
 import ZulipModel
 
 /// Per-conversation draft persistence (survives switching conversations;
@@ -21,8 +22,32 @@ final class DraftStore {
     }
 }
 
-/// The Messages-style compose bar. Fixed mode composes into a known
-/// conversation; channel mode adds a topic field.
+private enum ComposeSuggestion: Identifiable {
+    case mention(User)
+    case emoji(EmojiEntry)
+    case channel(Subscription)
+
+    var id: String {
+        switch self {
+        case .mention(let user): "m\(user.userId)"
+        case .emoji(let entry): "e\(entry.id)"
+        case .channel(let sub): "c\(sub.streamId)"
+        }
+    }
+
+    /// The Zulip markdown inserted on accept.
+    var completion: String {
+        switch self {
+        case .mention(let user): "@**\(user.fullName)** "
+        case .emoji(let entry): ":\(entry.name): "
+        case .channel(let sub): "#**\(sub.name)** "
+        }
+    }
+}
+
+/// The Messages-style compose bar with @/#/:-autocomplete and typing
+/// notifications. Fixed mode composes into a known conversation; channel
+/// mode adds a topic field.
 struct ComposeBar: View {
     enum Mode {
         case fixed(SendDestination, placeholder: String)
@@ -34,6 +59,9 @@ struct ComposeBar: View {
 
     @State private var text = ""
     @State private var topicText = ""
+    @State private var suggestions: [ComposeSuggestion] = []
+    @State private var selectedSuggestion = 0
+    @State private var tokenTriggerIndex: String.Index?
     @FocusState private var messageFocused: Bool
 
     private var destination: SendDestination? {
@@ -62,6 +90,9 @@ struct ComposeBar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if !suggestions.isEmpty {
+                suggestionsCard
+            }
             if case .channel = mode {
                 TextField("Topic", text: $topicText)
                     .textFieldStyle(.plain)
@@ -80,6 +111,15 @@ struct ComposeBar: View {
                     .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 17))
                     .focused($messageFocused)
                     .onSubmit { send() }
+                    .onKeyPress(.upArrow) { moveSelection(-1) }
+                    .onKeyPress(.downArrow) { moveSelection(1) }
+                    .onKeyPress(.tab) { acceptSelection() }
+                    .onKeyPress(.return) { acceptSelection() }
+                    .onKeyPress(.escape) {
+                        guard !suggestions.isEmpty else { return .ignored }
+                        suggestions = []
+                        return .handled
+                    }
                 Button(action: send) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 24))
@@ -103,13 +143,149 @@ struct ComposeBar: View {
             if case .fixed(let destination, _) = mode {
                 DraftStore.shared.setDraft(text, for: destination)
             }
+            if let destination {
+                if text.trimmingCharacters(in: .whitespaces).isEmpty {
+                    store.typingStopped(in: destination)
+                } else {
+                    store.typingActivity(in: destination)
+                }
+            }
+            updateSuggestions()
         }
     }
 
+    // MARK: Suggestions
+
+    private var suggestionsCard: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
+                Button {
+                    accept(suggestion)
+                } label: {
+                    suggestionLabel(suggestion)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            index == selectedSuggestion
+                                ? AnyShapeStyle(.tint.opacity(0.2))
+                                : AnyShapeStyle(.clear),
+                            in: RoundedRectangle(cornerRadius: 5))
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .frame(maxWidth: 360)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private func suggestionLabel(_ suggestion: ComposeSuggestion) -> some View {
+        switch suggestion {
+        case .mention(let user):
+            HStack(spacing: 6) {
+                AvatarView(store: store, userId: user.userId, size: 18)
+                Text(user.fullName)
+                if user.isBot {
+                    Image(systemName: "cpu").font(.caption2).foregroundStyle(.tertiary)
+                }
+            }
+        case .emoji(let entry):
+            HStack(spacing: 6) {
+                if let character = entry.character {
+                    Text(character)
+                } else if let src = entry.realmSrc,
+                          let image = EmojiImageLoader.shared.image(
+                            src: src, connection: store.connection) {
+                    Image(nsImage: image)
+                } else {
+                    Image(systemName: "face.smiling")
+                }
+                Text(":\(entry.name):")
+                    .font(.callout)
+            }
+        case .channel(let sub):
+            HStack(spacing: 6) {
+                Image(systemName: "number")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(sub.name)
+            }
+        }
+    }
+
+    private func updateSuggestions() {
+        guard let (token, triggerIndex) = ComposeAutocomplete.trailingToken(in: text) else {
+            suggestions = []
+            tokenTriggerIndex = nil
+            return
+        }
+        tokenTriggerIndex = triggerIndex
+        selectedSuggestion = 0
+        switch token {
+        case .mention(let query):
+            let users = store.users.values
+                .filter { $0.isActive != false }
+                .filter { query.isEmpty || $0.fullName.localizedCaseInsensitiveContains(query) }
+                .sorted {
+                    $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending
+                }
+                .prefix(6)
+            suggestions = users.map { .mention($0) }
+        case .emoji(let query):
+            store.loadEmojiCatalogIfNeeded()
+            let prefixMatches = store.emojiEntries.filter {
+                $0.name.hasPrefix(query.lowercased())
+            }
+            let containsMatches = store.emojiEntries.filter {
+                !$0.name.hasPrefix(query.lowercased())
+                    && $0.name.localizedCaseInsensitiveContains(query)
+            }
+            suggestions = (prefixMatches + containsMatches).prefix(8).map { .emoji($0) }
+        case .channel(let query):
+            let channels = store.subscriptions.values
+                .filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                .prefix(6)
+            suggestions = channels.map { .channel($0) }
+        }
+    }
+
+    private func moveSelection(_ delta: Int) -> KeyPress.Result {
+        guard !suggestions.isEmpty else { return .ignored }
+        selectedSuggestion = (selectedSuggestion + delta + suggestions.count) % suggestions.count
+        return .handled
+    }
+
+    private func acceptSelection() -> KeyPress.Result {
+        guard !suggestions.isEmpty, suggestions.indices.contains(selectedSuggestion) else {
+            return .ignored
+        }
+        accept(suggestions[selectedSuggestion])
+        return .handled
+    }
+
+    private func accept(_ suggestion: ComposeSuggestion) {
+        guard let triggerIndex = tokenTriggerIndex, triggerIndex <= text.endIndex else {
+            suggestions = []
+            return
+        }
+        text.replaceSubrange(triggerIndex..<text.endIndex, with: suggestion.completion)
+        suggestions = []
+        tokenTriggerIndex = nil
+        messageFocused = true
+    }
+
+    // MARK: Send
+
     private func send() {
+        guard suggestions.isEmpty else { return }
         guard canSend, let destination else { return }
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         store.send(content, to: destination)
+        store.typingStopped(in: destination)
         text = ""
         DraftStore.shared.setDraft("", for: destination)
     }
