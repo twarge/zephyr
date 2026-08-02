@@ -6,11 +6,14 @@ folders, topics, views) rendered natively. The name honors Zulip's ancestry in M
 Zephyr messaging system — and a zephyr is a soft, fast breeze, which is the feel the app
 aims for. Zephyr is an independent project, not affiliated with the Zulip organization.
 
-**Status: reading client (M1 complete).** Live-syncing sidebar (channels grouped by
-folder, topics on disclosure, DMs), channel feeds with recipient bars, focused topic
-transcripts, full native content rendering (code with syntax colors, tables, math via
-SwiftMath, polls, link previews, media with Quick Look), and search with token pills and
-recents. Composing/sending is next (M2).
+**Status: full messaging client (M2 complete).** Live-syncing sidebar (channel folders,
+disclosure topics, DMs with presence dots), channel feeds with recipient bars, focused
+transcripts, full native content rendering (syntax-colored code, tables, math via
+SwiftMath, polls, link previews, media with Quick Look), search with token pills and
+recents — and full composing: send with local echo, @/#/:-autocomplete, emoji reactions
+with a picker, typing indicators both ways, file upload via drag or attach, ⌘N new
+conversations, and editing/deleting your own messages. Next: Mac polish (M3) —
+notifications, multi-account UI, and distribution.
 
 ## Building
 
