@@ -5,9 +5,21 @@ window, a unified conversation list, and a focused transcript — instead of the
 multi-column web UI.
 
 **Status: M0 (foundations).** The `ZulipAPI` and `ZulipModel` packages are in place — typed
-API bindings, the per-account store, and the register→poll→rebuild sync engine — with a
-headless harness (`swift run zulip-harness`) that signs in and streams live events. No app
-UI yet; that's M1.
+API bindings, the per-account store, and the register→poll→rebuild sync engine — plus the
+Xcode app project with a placeholder window. The real UI lands in M1.
+
+## Building
+
+Open `Zulip.xcodeproj` and run the `Zulip` scheme, or from the command line:
+
+```bash
+xcodebuild -project Zulip.xcodeproj -scheme Zulip build     # the app
+swift test --package-path Packages/ZulipKit                 # package tests
+swift run --package-path Packages/ZulipKit zulip-harness    # headless harness
+```
+
+The harness signs in (env vars, or `… zulip-harness login` to fetch a key interactively),
+syncs, prints recent messages, and streams live events until ^C.
 
 ## Why
 

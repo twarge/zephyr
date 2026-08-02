@@ -28,36 +28,39 @@ Protocol facts it depends on are collected in [PROTOCOL.md](PROTOCOL.md).
 
 ## 2. Module layout
 
-One SwiftPM package ("ZulipKit") of platform-independent targets at the repo root; the
-Xcode app target (M1) will depend on it as a local package.
+The standard "app project + local packages" layout: a thin Xcode app target at the root,
+with all platform-independent code in the ZulipKit SwiftPM package.
 
 ```
 zulip-macos/
-├── Package.swift
-├── Sources/
-│   ├── ZulipAPI/        # protocol bindings — no app logic
-│   │   ├── ApiConnection.swift  (realm URL, credentials, feature level, transport)
-│   │   ├── Routes/              (one func per endpoint: registerQueue, getEvents,
-│   │   │                         getMessages, …)
-│   │   ├── Models/              (strict Codable: Message, User, ZulipStream,
-│   │   │                         Subscription, InitialSnapshot, …)
-│   │   ├── Events.swift         (Event decoded by type/op; .unexpected fallback)
-│   │   └── WebAuth.swift        (mobile_flow_otp OTP generation + XOR decrypt)
-│   ├── ZulipModel/      # the data layer — pure Swift, no UI imports
-│   │   ├── GlobalStore / PerAccountStore
-│   │   ├── UpdateMachine.swift  (poll → apply → recover; register lives in GlobalStore)
-│   │   ├── Narrow.swift         (first-class narrow types)
-│   │   ├── Unreads.swift        (conversation-keyed unread bookkeeping)
-│   │   ├── Account.swift / CredentialStore.swift  (accounts file + Keychain)
-│   │   └── (M1: MessageListModel, ConversationList, TypingStatus, Presence)
-│   ├── ZulipContent/    # (M1) message HTML → typed AST (parser only, no rendering)
-│   ├── ZulipTestSupport/  (FakeTransport, response fixtures)
-│   └── Harness/         # M0 CLI target: login, sync, stream events headlessly
-├── Tests/               # ZulipAPITests, ZulipModelTests (Swift Testing)
-└── App/                 # (M1) the macOS app target (SwiftUI)
-    ├── Views/           (sidebar, transcript, compose, content renderer, settings)
-    ├── Auth/            (login UI, ASWebAuthenticationSession flow)
-    └── Platform/        (notifications, badge, sounds, Quick Look, file panels)
+├── Zulip.xcodeproj      # app project (synchronized folder groups: new files in
+│                        # Zulip/ are picked up automatically; shared Zulip scheme)
+├── Zulip/               # the macOS app target (SwiftUI) — thin: UI + platform glue
+│   ├── ZulipApp.swift / ContentView.swift   (M1: sidebar, transcript, compose)
+│   ├── Assets.xcassets
+│   └── Zulip.entitlements                   (sandbox + network client)
+├── Packages/ZulipKit/   # one SwiftPM package, several targets
+│   ├── Package.swift
+│   ├── Sources/
+│   │   ├── ZulipAPI/        # protocol bindings — no app logic
+│   │   │   ├── ApiConnection.swift  (realm URL, credentials, feature level, transport)
+│   │   │   ├── Routes/              (one func per endpoint: registerQueue, getEvents,
+│   │   │   │                         getMessages, …)
+│   │   │   ├── Models/              (strict Codable: Message, User, ZulipStream,
+│   │   │   │                         Subscription, InitialSnapshot, …)
+│   │   │   ├── Events.swift         (Event decoded by type/op; .unexpected fallback)
+│   │   │   └── WebAuth.swift        (mobile_flow_otp OTP generation + XOR decrypt)
+│   │   ├── ZulipModel/      # the data layer — pure Swift, no UI imports
+│   │   │   ├── GlobalStore / PerAccountStore
+│   │   │   ├── UpdateMachine.swift  (poll → apply → recover; register in GlobalStore)
+│   │   │   ├── Narrow.swift / Unreads.swift
+│   │   │   ├── Account.swift / CredentialStore.swift  (accounts file + Keychain)
+│   │   │   └── (M1: MessageListModel, ConversationList, TypingStatus, Presence)
+│   │   ├── ZulipContent/    # (M1) message HTML → typed AST (parser only, no rendering)
+│   │   ├── ZulipTestSupport/  (FakeTransport, response fixtures)
+│   │   └── Harness/         # CLI target: login, sync, stream events headlessly
+│   └── Tests/           # ZulipAPITests, ZulipModelTests (Swift Testing)
+└── docs/
 ```
 
 Dependency rule: `App → {ZulipModel, ZulipContent, ZulipAPI}`, `ZulipModel → ZulipAPI`,
