@@ -83,17 +83,18 @@ struct SidebarView: View {
             if !isFiltering, !search.recentSearches.isEmpty {
                 Section("Recent Searches", isExpanded: expansion("recents")) {
                     ForEach(search.recentSearches, id: \.self) { query in
-                        Label(query.displayDescription, systemImage: "magnifyingglass")
-                            .lineLimit(1)
-                            .tag(Destination.search(query))
-                            .contextMenu {
-                                Button("Remove") {
-                                    search.removeRecentSearch(query)
-                                }
-                                Button("Clear Recent Searches") {
-                                    search.clearRecentSearches()
-                                }
+                        RecentSearchRow(query: query) {
+                            search.removeRecentSearch(query)
+                        }
+                        .tag(Destination.search(query))
+                        .contextMenu {
+                            Button("Remove") {
+                                search.removeRecentSearch(query)
                             }
+                            Button("Clear Recent Searches") {
+                                search.clearRecentSearches()
+                            }
+                        }
                     }
                 }
             }
@@ -258,6 +259,30 @@ struct SidebarView: View {
             }
         }
         .tag(tag)
+    }
+}
+
+/// A Recent Searches row with a hover-revealed remove button.
+private struct RecentSearchRow: View {
+    let query: SearchQuery
+    let onRemove: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Label(query.displayDescription, systemImage: "magnifyingglass")
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if isHovering {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Remove from Recent Searches")
+            }
+        }
+        .onHover { isHovering = $0 }
     }
 }
 
