@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import ZulipAPI
 import ZulipContent
+import ZulipMath
 import ZulipModel
 
 /// Renders a parsed message AST natively: one view per block node, inline
@@ -22,6 +23,7 @@ struct MessageContentView: View {
 struct BlockNodeView: View {
     let block: BlockNode
     let connection: ApiConnection
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         switch block {
@@ -52,7 +54,7 @@ struct BlockNodeView: View {
         case .image(let node):
             MessageImageView(node: node, connection: connection)
         case .mathBlock(let tex):
-            CodeBlockView(label: "TeX", code: tex)
+            MathBlockView(tex: tex)
         case .thematicBreak:
             Divider()
         case .unimplemented:
@@ -63,7 +65,27 @@ struct BlockNodeView: View {
     }
 
     private func inlineText(_ inlines: [InlineNode]) -> Text {
-        Text(InlineRenderer.attributed(inlines, realmURL: connection.realmURL))
+        InlineRenderer.text(inlines, realmURL: connection.realmURL, colorScheme: colorScheme)
+    }
+}
+
+/// Display math, natively typeset from the TeX source; falls back to showing
+/// the source when SwiftMath can't parse the expression.
+private struct MathBlockView: View {
+    let tex: String
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        if let rendered = ZulipMath.render(
+            tex: tex, fontSize: 18,
+            color: InlineRenderer.mathColor(for: colorScheme), display: true) {
+            ScrollView(.horizontal) {
+                Image(nsImage: rendered.image)
+                    .padding(.vertical, 4)
+            }
+        } else {
+            CodeBlockView(label: "TeX", code: tex)
+        }
     }
 }
 
@@ -120,6 +142,7 @@ private struct SpoilerView: View {
     let content: [BlockNode]
     let connection: ApiConnection
     @State private var revealed = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -132,7 +155,8 @@ private struct SpoilerView: View {
                     if header.isEmpty {
                         Text("Spoiler").italic()
                     } else {
-                        Text(InlineRenderer.attributed(header, realmURL: connection.realmURL))
+                        InlineRenderer.text(
+                            header, realmURL: connection.realmURL, colorScheme: colorScheme)
                     }
                 }
             }
@@ -219,75 +243,127 @@ enum InlineRenderer {
         var isHighlight = false
     }
 
-    static func attributed(_ inlines: [InlineNode], realmURL: URL) -> AttributedString {
-        var out = AttributedString()
-        append(inlines, style: Style(), realmURL: realmURL, into: &out)
-        return out
+    static func text(_ inlines: [InlineNode], realmURL: URL, colorScheme: ColorScheme) -> Text {
+        let builder = Builder(realmURL: realmURL, mathColor: mathColor(for: colorScheme))
+        append(inlines, style: Style(), into: builder)
+        return builder.finish()
+    }
+
+    /// Approximates the primary label color (math images bake their color at
+    /// render time, so it's resolved per scheme and re-rendered on change).
+    static func mathColor(for scheme: ColorScheme) -> NSColor {
+        NSColor(white: scheme == .dark ? 1.0 : 0.0, alpha: 0.85)
+    }
+
+    /// Accumulates styled runs, flushing to `Text` segments whenever an
+    /// inline math image interrupts the attributed text.
+    final class Builder {
+        let realmURL: URL
+        let mathColor: NSColor
+        private var segments: [Text] = []
+        private var buffer = AttributedString()
+
+        init(realmURL: URL, mathColor: NSColor) {
+            self.realmURL = realmURL
+            self.mathColor = mathColor
+        }
+
+        static func += (builder: Builder, attributed: AttributedString) {
+            builder.buffer += attributed
+        }
+
+        func appendMath(_ tex: String, fallback: AttributedString) {
+            if let rendered = ZulipMath.render(
+                tex: tex, fontSize: 14, color: mathColor, display: false) {
+                flush()
+                segments.append(
+                    Text(Image(nsImage: rendered.image))
+                        .baselineOffset(-rendered.descent))
+            } else {
+                buffer += fallback
+            }
+        }
+
+        private func flush() {
+            if !buffer.characters.isEmpty {
+                segments.append(Text(buffer))
+                buffer = AttributedString()
+            }
+        }
+
+        func finish() -> Text {
+            flush()
+            guard var result = segments.first else { return Text(verbatim: "") }
+            for segment in segments.dropFirst() {
+                result = result + segment
+            }
+            return result
+        }
     }
 
     private static func append(
-        _ inlines: [InlineNode], style: Style, realmURL: URL, into out: inout AttributedString
+        _ inlines: [InlineNode], style: Style, into builder: Builder
     ) {
         for inline in inlines {
             switch inline {
             case .text(let text):
-                out += styled(text, style)
+                builder += styled(text, style)
             case .lineBreak:
-                out += styled("\n", style)
+                builder += styled("\n", style)
             case .strong(let children):
                 var nested = style
                 nested.intents.insert(.stronglyEmphasized)
-                append(children, style: nested, realmURL: realmURL, into: &out)
+                append(children, style: nested, into: builder)
             case .emphasis(let children):
                 var nested = style
                 nested.intents.insert(.emphasized)
-                append(children, style: nested, realmURL: realmURL, into: &out)
+                append(children, style: nested, into: builder)
             case .strikethrough(let children):
                 var nested = style
                 nested.intents.insert(.strikethrough)
-                append(children, style: nested, realmURL: realmURL, into: &out)
+                append(children, style: nested, into: builder)
             case .inlineCode(let code):
                 var nested = style
                 nested.intents.insert(.code)
-                out += styled(code, nested)
+                builder += styled(code, nested)
             case .link(let link):
                 var nested = style
                 // Channel/topic/message links navigate in-app when parseable
                 // (MainSplitView's OpenURLAction decodes the custom scheme).
                 if link.kind != .plain,
-                   let internalLink = InternalLink.parse(href: link.href, realmURL: realmURL),
+                   let internalLink = InternalLink.parse(href: link.href, realmURL: builder.realmURL),
                    let appURL = internalLink.appURL {
                     nested.link = appURL
                 } else {
-                    nested.link = URL(string: link.href, relativeTo: realmURL)?.absoluteURL
+                    nested.link = URL(string: link.href, relativeTo: builder.realmURL)?.absoluteURL
                 }
-                append(link.text, style: nested, realmURL: realmURL, into: &out)
+                append(link.text, style: nested, into: builder)
             case .mention(let mention):
                 var nested = style
                 nested.isMention = !mention.silent
-                out += styled(mention.text, nested)
+                builder += styled(mention.text, nested)
             case .emoji(.unicode(let character, _)):
-                out += styled(character, style)
+                builder += styled(character, style)
             case .emoji(.realm(_, let name)):
-                out += styled(":\(name):", style)
+                builder += styled(":\(name):", style)
             case .inlineMath(let tex):
                 var nested = style
                 nested.intents.insert(.code)
-                out += styled(tex, nested)
+                builder.appendMath(tex, fallback: styled(tex, nested))
             case .highlight(let children):
                 var nested = style
                 nested.isHighlight = true
-                append(children, style: nested, realmURL: realmURL, into: &out)
+                append(children, style: nested, into: builder)
             case .globalTime(let datetime):
                 let display = ISO8601DateFormatter().date(from: datetime)
                     .map { $0.formatted(date: .abbreviated, time: .shortened) } ?? datetime
                 var nested = style
                 nested.isSecondary = true
-                out += styled("🕐\u{202f}\(display)", nested)
+                builder += styled("🕐\u{202f}\(display)", nested)
             case .unimplemented:
                 var nested = style
                 nested.isSecondary = true
-                out += styled("⟨unsupported⟩", nested)
+                builder += styled("⟨unsupported⟩", nested)
             }
         }
     }

@@ -10,6 +10,7 @@
 		A100000000000000000000F4 /* ZulipAPI in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000F2 /* ZulipAPI */; };
 		A100000000000000000000F5 /* ZulipModel in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000F3 /* ZulipModel */; };
 		A100000000000000000000F7 /* ZulipContent in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000F6 /* ZulipContent */; };
+		A100000000000000000000F9 /* ZulipMath in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000F8 /* ZulipMath */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +33,7 @@
 				A100000000000000000000F4 /* ZulipAPI in Frameworks */,
 				A100000000000000000000F5 /* ZulipModel in Frameworks */,
 				A100000000000000000000F7 /* ZulipContent in Frameworks */,
+				A100000000000000000000F9 /* ZulipMath in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -77,6 +79,7 @@
 				A100000000000000000000F2 /* ZulipAPI */,
 				A100000000000000000000F3 /* ZulipModel */,
 				A100000000000000000000F6 /* ZulipContent */,
+				A100000000000000000000F8 /* ZulipMath */,
 			);
 			productName = Zulip;
 			productReference = A100000000000000000000C3 /* Zulip.app */;
@@ -363,6 +366,10 @@
 		A100000000000000000000F6 /* ZulipContent */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ZulipContent;
+		};
+		A100000000000000000000F8 /* ZulipMath */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ZulipMath;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
