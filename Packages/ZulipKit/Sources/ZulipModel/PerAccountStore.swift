@@ -318,6 +318,33 @@ public final class PerAccountStore {
         }
     }
 
+    public func setChannelMuted(_ streamId: Int, muted: Bool) {
+        // Optimistic; the subscription/update event confirms.
+        if var subscription = subscriptions[streamId] {
+            subscription.isMuted = muted
+            subscriptions[streamId] = subscription
+        }
+        let connection = connection
+        Task {
+            try? await connection.setSubscriptionProperty(
+                streamId: streamId, property: "is_muted", value: muted)
+        }
+    }
+
+    public func subscribe(toChannel name: String) {
+        let connection = connection
+        Task {
+            try? await connection.subscribe(toChannel: name)
+        }
+    }
+
+    public func unsubscribe(fromChannel name: String) {
+        let connection = connection
+        Task {
+            try? await connection.unsubscribe(fromChannel: name)
+        }
+    }
+
     public func editMessage(_ messageId: Int, content: String) {
         let connection = connection
         Task {
@@ -455,6 +482,20 @@ public final class PerAccountStore {
             for id in streamIds {
                 subscriptions.removeValue(forKey: id)
             }
+
+        case .subscriptionUpdate(let e):
+            guard var subscription = subscriptions[e.streamId] else { break }
+            switch e.property {
+            case "is_muted":
+                subscription.isMuted = e.boolValue ?? subscription.isMuted
+            case "pin_to_top":
+                subscription.pinToTop = e.boolValue ?? subscription.pinToTop
+            case "color":
+                subscription.color = e.stringValue ?? subscription.color
+            default:
+                break
+            }
+            subscriptions[e.streamId] = subscription
 
         case .streamCreate(let streams):
             for stream in streams {

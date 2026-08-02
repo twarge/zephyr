@@ -105,6 +105,8 @@ struct SidebarView: View {
                         "Mentions", icon: "at", tag: .mentions,
                         badge: store.unreads.mentionIds.count)
                     viewRow("Starred messages", icon: "star", tag: .starred, badge: 0)
+                    viewRow(
+                        "All channels", icon: "rectangle.stack", tag: .allChannels, badge: 0)
                 }
             }
             Section("Direct messages", isExpanded: expansion("dms")) {
@@ -194,6 +196,14 @@ struct SidebarView: View {
                         isExpanded: expandedChannels.contains(streamId),
                         onToggle: isFiltering ? nil : { toggleChannel(streamId) })
                         .tag(Destination.channel(streamId: streamId))
+                        .contextMenu {
+                            Button(subscription.muted ? "Unmute Channel" : "Mute Channel") {
+                                store.setChannelMuted(streamId, muted: !subscription.muted)
+                            }
+                            Button("Unsubscribe") {
+                                store.unsubscribe(fromChannel: subscription.name)
+                            }
+                        }
                     if isFiltering {
                         ForEach(topicMatches.prefix(8), id: \.name) { topic in
                             SidebarTopicRow(store: store, streamId: streamId, topic: topic)

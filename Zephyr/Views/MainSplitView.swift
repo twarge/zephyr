@@ -12,6 +12,7 @@ enum Destination: Hashable {
     case mentions
     case starred
     case search(SearchQuery)
+    case allChannels
 }
 
 /// The Messages-style main window: unified conversation sidebar + transcript.
@@ -163,6 +164,8 @@ struct MainSplitView: View {
                     narrow: .custom(query.narrowElements),
                     useMatchHighlights: true, selection: $selection)
                     .id(query)
+            case .allChannels:
+                AllChannelsView(store: store, selection: $selection)
             case nil:
                 ContentUnavailableView(
                     "No Conversation Selected",

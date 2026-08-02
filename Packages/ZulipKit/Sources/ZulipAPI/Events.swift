@@ -22,6 +22,7 @@ public struct Event: Sendable {
         case realmUserRemove(userId: Int)
         case subscriptionAdd([Subscription])
         case subscriptionRemove(streamIds: [Int])
+        case subscriptionUpdate(SubscriptionUpdateEvent)
         case streamCreate([ZulipStream])
         case streamDelete(streamIds: [Int])
         case unexpected(type: String, op: String?)
@@ -60,6 +61,27 @@ public struct UpdateMessageFlagsEvent: Decodable, Sendable {
     public var flag: String
     public var messages: [Int]
     public var all: Bool
+}
+
+/// A per-channel setting change (`subscription`/`update`): value is
+/// property-dependent (bool for is_muted/pin_to_top, string for color).
+public struct SubscriptionUpdateEvent: Decodable, Sendable {
+    public var streamId: Int
+    public var property: String
+    public var boolValue: Bool?
+    public var stringValue: String?
+
+    enum CodingKeys: String, CodingKey {
+        case streamId, property, value
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        streamId = try container.decode(Int.self, forKey: .streamId)
+        property = try container.decode(String.self, forKey: .property)
+        boolValue = try? container.decode(Bool.self, forKey: .value)
+        stringValue = try? container.decode(String.self, forKey: .value)
+    }
 }
 
 public struct TypingEvent: Decodable, Sendable {
@@ -165,6 +187,8 @@ extension Event: Decodable {
         case ("subscription", "remove"):
             kind = .subscriptionRemove(
                 streamIds: try RemovedSubscriptionsEnvelope(from: decoder).subscriptions.map(\.streamId))
+        case ("subscription", "update"):
+            kind = .subscriptionUpdate(try SubscriptionUpdateEvent(from: decoder))
         case ("stream", "create"):
             kind = .streamCreate(try StreamsEnvelope(from: decoder).streams)
         case ("stream", "delete"):
