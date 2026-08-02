@@ -78,6 +78,12 @@ public struct ApiError: Error, Sendable {
     public var isMalformedResponse: Bool { code == Self.malformedResponseCode }
 }
 
+extension ApiError: LocalizedError {
+    public var errorDescription: String? {
+        message.isEmpty ? "\(code) (HTTP \(httpStatus))" : "\(code): \(message)"
+    }
+}
+
 /// Central JSON configuration: the Zulip API is snake_case throughout.
 public enum ZulipJSON {
     public static var decoder: JSONDecoder {

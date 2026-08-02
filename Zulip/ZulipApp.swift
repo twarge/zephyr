@@ -30,15 +30,29 @@ struct RootView: View {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 36))
                         .foregroundStyle(.secondary)
-                    Text(message)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 420)
-                    Button("Sign Out") {
-                        Task { await model.signOut() }
+                    Text("Couldn't connect")
+                        .font(.headline)
+                    ScrollView {
+                        Text(message)
+                            .font(.callout.monospaced())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxWidth: 520, maxHeight: 180)
+                    .padding(8)
+                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+                    HStack {
+                        Button("Retry") {
+                            Task { await model.retry() }
+                        }
+                        .keyboardShortcut(.defaultAction)
+                        Button("Sign Out") {
+                            Task { await model.signOut() }
+                        }
                     }
                 }
                 .padding(40)
-                .frame(minWidth: 400, minHeight: 300)
+                .frame(minWidth: 480, minHeight: 340)
             case .ready(let accountId):
                 if let store = model.global.stores[accountId] {
                     MainSplitView(store: store)

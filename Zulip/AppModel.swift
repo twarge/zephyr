@@ -49,16 +49,17 @@ final class AppModel {
             let store = try await global.perAccountStore(for: accountId)
             phase = .ready(accountId)
             await store.seedConversations()
-        } catch let error as ModelError {
-            if case .serverTooOld(let version, let level) = error {
-                phase = .failed(
-                    "This server runs Zulip \(version) (feature level \(level)); Zulip \(ServerCompat.minVersionLabel)+ is required.")
-            } else {
-                phase = .failed(String(describing: error))
-            }
         } catch {
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    func retry() async {
+        guard let account = global.accounts.first else {
+            phase = .needsAccount
+            return
+        }
+        await load(accountId: account.id)
     }
 
     /// Called by LoginView with a validated API key.

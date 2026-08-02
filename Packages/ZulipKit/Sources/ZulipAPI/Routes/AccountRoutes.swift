@@ -65,6 +65,12 @@ extension ApiConnection {
 
     /// GET /users/me — identity check; the source of `userId` when the API key
     /// was entered manually.
+    ///
+    /// Caution: the returned `email` is the "Zulip API email", which on
+    /// realms that hide addresses is a `user{id}@{host}` alias — it is NOT
+    /// valid as the Basic-auth username (the server requires the delivery
+    /// email and answers "Invalid API key" otherwise). Persist the email
+    /// used to sign in, not this one.
     public func getOwnUser() async throws -> OwnUser {
         try await request(ApiRequest(method: .get, path: "/api/v1/users/me"))
     }

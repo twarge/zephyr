@@ -12,6 +12,11 @@ used unconditionally; features above 277 note their FL gate.
 ## 1. Auth (api/fetch-api-key, api/get-server-settings)
 
 - All REST calls: HTTP Basic auth, `email:api_key`, base path `https://<realm>/api/v1/`.
+  ⚠ The username must be the user's **delivery email** (what they log in with) —
+  verified in server source (`access_user_by_api_key`): a mismatch raises "Invalid
+  API key" even when the key is correct. On realms that hide addresses, user objects
+  (including `/users/me`) carry a `user{id}@{host}` alias in `email` — never use that
+  for auth. `fetch_api_key`'s `email` response field is the canonical auth email.
 - **Realm discovery**: `GET /server_settings` (unauthenticated) → `zulip_version`,
   `zulip_feature_level`, `realm_url`, `realm_name`, `realm_icon`, `email_auth_enabled`,
   `external_authentication_methods: [{name, display_name, display_icon, login_url, …}]`.

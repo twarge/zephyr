@@ -14,6 +14,19 @@ public enum ModelError: Error, Sendable {
     case serverTooOld(version: String, featureLevel: Int)
 }
 
+extension ModelError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .accountNotFound:
+            "Account not found."
+        case .missingCredentials:
+            "No API key stored for this account — sign in again."
+        case .serverTooOld(let version, let featureLevel):
+            "This server runs Zulip \(version) (feature level \(featureLevel)); Zulip \(ServerCompat.minVersionLabel)+ is required."
+        }
+    }
+}
+
 /// A signed-in account. The API key is deliberately NOT here — it lives in the
 /// `CredentialStore` (Keychain in production).
 public struct Account: Codable, Sendable, Hashable, Identifiable {

@@ -139,19 +139,26 @@ struct LoginView: View {
 
     private func signIn(_ settings: ServerSettings, realm: URL) {
         run {
+            // Basic auth requires the user's *delivery* email (the server
+            // rejects the per-user API alias like user123@realm as "Invalid
+            // API key"). fetch_api_key returns the canonical one; for manual
+            // keys, the typed email must be it.
             let key: String
+            let authEmail: String
             switch method {
             case .password:
-                key = try await ApiConnection.fetchApiKey(
-                    realm: realm, username: email, password: password
-                ).apiKey
+                let result = try await ApiConnection.fetchApiKey(
+                    realm: realm, username: email, password: password)
+                key = result.apiKey
+                authEmail = result.email
             case .apiKey:
                 key = apiKey.trimmingCharacters(in: .whitespaces)
+                authEmail = email.trimmingCharacters(in: .whitespaces)
             }
-            let probe = ApiConnection(realmURL: realm, email: email, apiKey: key)
+            let probe = ApiConnection(realmURL: realm, email: authEmail, apiKey: key)
             let me = try await probe.getOwnUser()
             await model.addAccount(
-                realm: realm, email: me.email, apiKey: key,
+                realm: realm, email: authEmail, apiKey: key,
                 userId: me.userId, realmName: settings.realmName)
         }
     }

@@ -20,20 +20,35 @@ public struct GetEventsResult: Decodable, Sendable {
 }
 
 extension ApiConnection {
+    /// The event types this client consumes; filtering both lists shrinks the
+    /// register response dramatically on large realms (docs: "often saves 90%
+    /// of bandwidth"). Extend both as the app grows.
+    public static let subscribedEventTypes = [
+        "message", "update_message", "delete_message", "update_message_flags",
+        "realm_user", "subscription", "stream", "heartbeat",
+    ]
+    public static let fetchedEventTypes = [
+        "realm", "realm_user", "stream", "subscription", "message",
+        "update_message_flags", "recent_private_conversations",
+    ]
+
     /// POST /register — creates the event queue and returns the initial
-    /// snapshot. `apply_markdown: true` (content arrives as rendered HTML)
-    /// and unfiltered event types for now (M0; filter before shipping).
+    /// snapshot. `apply_markdown: true` (content arrives as rendered HTML).
+    /// The response can be tens of megabytes on large realms even filtered,
+    /// hence the long timeout.
     public func registerQueue(idleQueueTimeoutSeconds: Int? = nil) async throws -> InitialSnapshot {
         var params: [Param] = [
             Param("apply_markdown", "true"),
             Param("client_gravatar", "false"),
             Param("client_capabilities", try ZulipJSON.encodeString(ClientCapabilities())),
+            Param("event_types", try ZulipJSON.encodeString(Self.subscribedEventTypes)),
+            Param("fetch_event_types", try ZulipJSON.encodeString(Self.fetchedEventTypes)),
         ]
         if let idleQueueTimeoutSeconds, (featureLevel ?? 0) >= 481 {
             params.append(Param("idle_queue_timeout", String(idleQueueTimeoutSeconds)))
         }
         return try await request(
-            ApiRequest(method: .post, path: "/api/v1/register", params: params))
+            ApiRequest(method: .post, path: "/api/v1/register", params: params, timeout: 300))
     }
 
     /// GET /events — the long poll. `timeoutSeconds` should exceed the
