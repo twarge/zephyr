@@ -103,11 +103,27 @@ public final class PerAccountStore {
     /// the resulting event confirms.
     public func markConversationRead(_ key: ConversationKey) {
         guard let ids = unreads.unreadIds[key], !ids.isEmpty else { return }
-        let sorted = ids.sorted()
-        unreads.removeMessages(ids: sorted)
+        markRead(ids: ids.sorted())
+    }
+
+    /// Marks every topic in a channel read (used when the channel feed is
+    /// opened at the newest messages).
+    public func markChannelRead(_ streamId: Int) {
+        var ids: [Int] = []
+        for (key, set) in unreads.unreadIds {
+            if case .topic(let id, _) = key, id == streamId {
+                ids.append(contentsOf: set)
+            }
+        }
+        guard !ids.isEmpty else { return }
+        markRead(ids: ids.sorted())
+    }
+
+    private func markRead(ids: [Int]) {
+        unreads.removeMessages(ids: ids)
         let connection = connection
         Task {
-            try? await connection.updateMessageFlags(messages: sorted, op: .add, flag: "read")
+            try? await connection.updateMessageFlags(messages: ids, op: .add, flag: "read")
         }
     }
 

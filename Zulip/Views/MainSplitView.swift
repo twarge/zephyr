@@ -1,11 +1,12 @@
 import SwiftUI
 import ZulipModel
 
-/// What the detail column shows: a conversation transcript, or a channel's
-/// topic list.
+/// What the detail column shows: a DM/topic transcript, a channel's
+/// interleaved message feed, or a channel's topic list.
 enum Destination: Hashable {
     case conversation(ConversationKey)
     case channel(streamId: Int)
+    case channelTopics(streamId: Int)
 }
 
 /// The Messages-style main window: unified conversation sidebar + transcript.
@@ -24,6 +25,9 @@ struct MainSplitView: View {
                 TranscriptView(store: store, conversation: key, selection: $selection)
                     .id(key)
             case .channel(let streamId):
+                ChannelFeedView(store: store, streamId: streamId, selection: $selection)
+                    .id(streamId)
+            case .channelTopics(let streamId):
                 ChannelTopicsView(store: store, streamId: streamId, selection: $selection)
                     .id(streamId)
             case nil:

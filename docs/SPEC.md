@@ -12,9 +12,11 @@ Messages app. One window, two panes, a recency-sorted list of conversations on t
 single focused transcript on the right, compose at the bottom. Everything else (channel
 browsing, search, settings) stays out of the way until summoned.
 
-The bet that makes this work: **a Zulip topic maps naturally onto a Messages
-conversation.** Topics are small, titled, threaded conversations — exactly what Messages
-rows are. We lean into that instead of reproducing the web app's channel-centric sidebar.
+The organizing idea (revised after using the first prototype): **the sidebar holds the
+things you'd name — channels and people — and topics are structure inside a channel.**
+An early prototype tried a unified recency-sorted inbox of topics; in practice topics are
+too ephemeral to be top-level siblings of DM threads. Channels + DMs on the left; on the
+right, a channel reads as one interleaved feed with topic headers you can click to focus.
 
 ## 2. Goals and non-goals
 
@@ -55,40 +57,39 @@ Non-goals (initially)
 
 | Zulip concept | This app |
 |---|---|
-| DM conversation (1:1 or group) | Conversation (like a Messages thread) |
-| Channel topic | Conversation, titled "topic" with a channel badge |
-| Channel (all topics) | Channel view: a scoped conversation list, reached from a topic's header or the channel browser — not a primary sidebar concept |
-| Combined feed / interleaved views | Not reproduced; the unified sidebar plus search covers it |
+| DM conversation (1:1 or group) | Sidebar row in the Direct Messages section (like a Messages thread) |
+| Channel | Sidebar row in the Channels section; opens the channel feed |
+| Channel feed | Detail view: the channel's messages interleaved across topics, with clickable topic headers |
+| Channel topic | A header run inside the channel feed; clicking it focuses a single-topic transcript |
+| Combined feed / interleaved "all messages" | Not reproduced |
 
 ### Window layout
 
 `NavigationSplitView`, two columns, unified toolbar:
 
-- **Sidebar** (min ~280pt): scope control + search field, then the unified conversation
-  list, sorted by latest activity. Scopes: **All · Unread · DMs · Mentions · Starred**
-  (menu or segmented control in the sidebar header, like Messages' filters).
-- **Detail**: the transcript for the selected conversation, compose bar at the bottom.
-- No third column. Channel browsing and "new conversation" are modal/summoned flows
-  (sheet, popover, or push within the sidebar), keeping the Messages silhouette.
+- **Sidebar** (min ~280pt): the **Direct Messages** section (recent DM threads,
+  recency-sorted, Messages-style rows) above the **Channels** section (subscriptions:
+  pinned first, then alphabetical, muted last and dimmed).
+- **Detail**: the selected channel's feed (topic headers interleaved) or a DM/topic
+  transcript, compose bar at the bottom. A channel's topic list is one click away from
+  the feed toolbar; a topic transcript links back to its channel via the toolbar chip.
+- No third column. "New conversation" is a summoned flow, keeping the Messages
+  silhouette.
 
 ### Sidebar row anatomy
 
-- Leading: avatar — sender/group avatar for DMs; for topics, a circular badge in the
-  channel's color with a `#` (or lock for private channels) glyph.
-- Line 1: title — person/group name, or `Topic title` with a small `#channel` chip.
-- Line 2: snippet — last message, plaintext-flattened, prefixed with sender first name.
-- Trailing: relative timestamp; unread indicator (blue dot, Messages-style; an `@` badge
-  when the unread includes a mention); bell-slash glyph when muted.
-- Context menu: mark read/unread, mute/unmute topic, star, follow topic, open channel,
-  copy link, hide.
+- DM rows: avatar, name(s), snippet (last message, plaintext-flattened), relative
+  timestamp, unread blue dot / `@` mention badge.
+- Channel rows: circular badge in the channel's color with a `#` (lock when private)
+  glyph, name, unread count badge; bell-slash and dimmed when muted.
+- Context menus (later): mark read, mute/unmute, pin, copy link.
 
-### Where conversations come from
+### Data sources
 
-The sidebar is seeded at load from: `recent_private_conversations` (register payload),
-`unread_msgs` (register payload), and one combined-feed message fetch to establish topic
-recency. It is maintained live from message events. Muted topics/channels are excluded
-from All (visible in the channel view, greyed). This mirrors the web app's "recent
-conversations" data approach; details in ARCHITECTURE.md §6.
+DM recency/snippets seed from `recent_private_conversations` + `unread_msgs` + a
+combined-feed fetch, maintained live from message events. Channel rows come straight
+from subscriptions; their unread badges aggregate per-topic unreads. Channel feeds and
+topic transcripts are anchor-fetched message lists (ARCHITECTURE.md §4).
 
 ## 5. Transcript (conversation view)
 
