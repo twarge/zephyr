@@ -28,6 +28,13 @@ public final class PerAccountStore {
     /// Canonical map of every message we've seen (fetched or via events).
     public private(set) var messages: [Int: Message] = [:]
     public let unreads: Unreads
+    /// The unified sidebar model.
+    public let conversations: ConversationList
+
+    private struct WeakMessageList {
+        weak var value: MessageListModel?
+    }
+    private var messageLists: [UUID: WeakMessageList] = [:]
 
     /// True while the event stream is failing and being retried; UI shows a
     /// "connecting" banner.
@@ -56,6 +63,52 @@ public final class PerAccountStore {
             (snapshot.subscriptions ?? []).map { ($0.streamId, $0) },
             uniquingKeysWith: { first, _ in first })
         unreads = Unreads(snapshot: snapshot.unreadMsgs, selfUserId: account.userId)
+        conversations = ConversationList(snapshot: snapshot, selfUserId: account.userId)
+    }
+
+    // MARK: Message-list fan-out
+
+    /// Events are applied to the canonical message map once, then fanned out
+    /// to each registered (open) message list.
+    public func register(_ list: MessageListModel) {
+        messageLists[list.id] = WeakMessageList(value: list)
+    }
+
+    public func unregister(_ listId: UUID) {
+        messageLists.removeValue(forKey: listId)
+    }
+
+    private func forEachMessageList(_ body: (MessageListModel) -> Void) {
+        for (key, ref) in messageLists {
+            if let list = ref.value {
+                body(list)
+            } else {
+                messageLists.removeValue(forKey: key)
+            }
+        }
+    }
+
+    /// Seeds the sidebar's topic recency from a combined-feed fetch (DM
+    /// recency comes from the register snapshot).
+    public func seedConversations(count: Int = 100) async {
+        guard let result = try? await connection.getMessages(
+            anchor: .newest, numBefore: count, numAfter: 0)
+        else { return }
+        reconcileFetchedMessages(result.messages)
+        conversations.seed(messages: result.messages, selfUserId: selfUserId)
+    }
+
+    /// Marks a whole conversation read (the Messages-style behavior when a
+    /// conversation is opened): optimistic local clear + server flag update;
+    /// the resulting event confirms.
+    public func markConversationRead(_ key: ConversationKey) {
+        guard let ids = unreads.unreadIds[key], !ids.isEmpty else { return }
+        let sorted = ids.sorted()
+        unreads.removeMessages(ids: sorted)
+        let connection = connection
+        Task {
+            try? await connection.updateMessageFlags(messages: sorted, op: .add, flag: "read")
+        }
     }
 
     /// Adds fetched messages to the canonical map, applying zulip-flutter's
@@ -77,6 +130,8 @@ public final class PerAccountStore {
             message.flags = e.flags
             messages[message.id] = message
             unreads.handleMessage(message, flags: e.flags)
+            conversations.noteMessage(message, selfUserId: selfUserId)
+            forEachMessageList { $0.handleNewMessage(message, selfUserId: selfUserId) }
 
         case .updateMessage(let e):
             // Content edits only for M0; topic/channel moves land with the
@@ -89,12 +144,14 @@ public final class PerAccountStore {
                 message.lastEditTimestamp = edited
             }
             messages[e.messageId] = message
+            forEachMessageList { $0.handleChangedMessages(ids: [e.messageId]) }
 
         case .deleteMessage(let e):
             for id in e.allIds {
                 messages.removeValue(forKey: id)
             }
             unreads.removeMessages(ids: e.allIds)
+            forEachMessageList { $0.handleDeletedMessages(ids: e.allIds) }
 
         case .updateMessageFlags(let e):
             guard let op = UpdateFlagsOp(rawValue: e.op) else {
@@ -115,6 +172,7 @@ public final class PerAccountStore {
             unreads.handleFlagsEvent(
                 op: op, flag: e.flag, ids: e.messages, all: e.all,
                 locate: { self.messages[$0] })
+            forEachMessageList { $0.handleChangedMessages(ids: ids) }
 
         case .realmUserAdd(let user):
             users[user.userId] = user

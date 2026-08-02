@@ -16,10 +16,12 @@ public enum Fixtures {
         queueId: String,
         lastEventId: Int = -1,
         featureLevel: Int = 400,
-        unreadMsgs: String = emptyUnreadsJSON
+        unreadMsgs: String = emptyUnreadsJSON,
+        recentPrivateConversations: String = "[]"
     ) -> String {
         """
         {"result": "success", "msg": "",
+         "recent_private_conversations": \(recentPrivateConversations),
          "queue_id": "\(queueId)", "last_event_id": \(lastEventId),
          "zulip_version": "12.0", "zulip_feature_level": \(featureLevel),
          "event_queue_longpoll_timeout_seconds": 90,

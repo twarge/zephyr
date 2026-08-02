@@ -19,4 +19,12 @@ public struct InitialSnapshot: Decodable, Sendable {
     public var streams: [ZulipStream]?
     public var subscriptions: [Subscription]?
     public var unreadMsgs: UnreadMessagesSnapshot?
+    public var recentPrivateConversations: [RecentPrivateConversation]?
+}
+
+/// One entry of the register payload's `recent_private_conversations`:
+/// a DM thread the user recently participated in. `userIds` excludes self.
+public struct RecentPrivateConversation: Decodable, Sendable {
+    public var maxMessageId: Int
+    public var userIds: [Int]
 }

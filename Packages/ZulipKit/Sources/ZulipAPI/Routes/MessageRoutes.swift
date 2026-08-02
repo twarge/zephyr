@@ -59,7 +59,26 @@ public struct GetMessagesResult: Decodable, Sendable {
     public var anchor: Int?
 }
 
+public enum FlagOp: String, Sendable {
+    case add
+    case remove
+}
+
 extension ApiConnection {
+    /// POST /messages/flags — set/clear a flag (`read`, `starred`, …) on a
+    /// set of messages.
+    public func updateMessageFlags(messages: [Int], op: FlagOp, flag: String) async throws {
+        _ = try await send(
+            ApiRequest(
+                method: .post,
+                path: "/api/v1/messages/flags",
+                params: [
+                    Param("messages", "[\(messages.map(String.init).joined(separator: ","))]"),
+                    Param("op", op.rawValue),
+                    Param("flag", flag),
+                ]))
+    }
+
     /// GET /messages — anchor-based history fetch.
     public func getMessages(
         anchor: MessageAnchor,

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		A100000000000000000000F4 /* ZulipAPI in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000F2 /* ZulipAPI */; };
 		A100000000000000000000F5 /* ZulipModel in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000F3 /* ZulipModel */; };
+		A100000000000000000000F7 /* ZulipContent in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000F6 /* ZulipContent */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 			files = (
 				A100000000000000000000F4 /* ZulipAPI in Frameworks */,
 				A100000000000000000000F5 /* ZulipModel in Frameworks */,
+				A100000000000000000000F7 /* ZulipContent in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,6 +76,7 @@
 			packageProductDependencies = (
 				A100000000000000000000F2 /* ZulipAPI */,
 				A100000000000000000000F3 /* ZulipModel */,
+				A100000000000000000000F6 /* ZulipContent */,
 			);
 			productName = Zulip;
 			productReference = A100000000000000000000C3 /* Zulip.app */;
@@ -263,9 +266,11 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Zulip/Zulip.entitlements;
 				CODE_SIGN_IDENTITY = "-";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 257KW9ZJFP;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -292,9 +297,11 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Zulip/Zulip.entitlements;
 				CODE_SIGN_IDENTITY = "-";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 257KW9ZJFP;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -352,6 +359,10 @@
 		A100000000000000000000F3 /* ZulipModel */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ZulipModel;
+		};
+		A100000000000000000000F6 /* ZulipContent */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ZulipContent;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
