@@ -163,14 +163,18 @@ struct SidebarView: View {
         }
     }
 
-    /// Runs the current query. Return records it in Recent Searches (and the
-    /// new row, tagged with the same query, highlights as the selection);
-    /// intermediate token-commit searches don't clutter the recents.
+    /// Runs the current query. Return finalizes it: the query is recorded in
+    /// Recent Searches, the field clears back to filter duty, and the
+    /// recorded row (tagged with the same query) highlights as the
+    /// selection. Intermediate token-commit searches show results but leave
+    /// the field composing and don't touch recents.
     private func runSearch(recordInRecents: Bool) {
         let query = SearchQuery(tokens: search.tokens, text: search.filterText)
         guard !query.isEmpty else { return }
         if recordInRecents {
             search.recordSearch(query)
+            search.filterText = ""
+            search.tokens = []
         }
         selection = .search(query)
     }

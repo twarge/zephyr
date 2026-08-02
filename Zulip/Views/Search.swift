@@ -228,7 +228,7 @@ struct SearchSuggestionsAnchor: View {
             .popover(
                 isPresented: $showPopover,
                 attachmentAnchor: .rect(.bounds),
-                arrowEdge: .trailing
+                arrowEdge: .bottom
             ) {
                 SearchSuggestionsList(search: search)
             }
