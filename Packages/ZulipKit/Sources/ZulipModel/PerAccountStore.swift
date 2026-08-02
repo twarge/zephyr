@@ -25,6 +25,8 @@ public final class PerAccountStore {
     public private(set) var users: [Int: User] = [:]
     public private(set) var channels: [Int: ZulipStream] = [:]
     public private(set) var subscriptions: [Int: Subscription] = [:]
+    /// Sidebar channel groupings (Zulip 12+), in display order.
+    public private(set) var channelFolders: [ChannelFolder] = []
     /// Canonical map of every message we've seen (fetched or via events).
     public private(set) var messages: [Int: Message] = [:]
     public let unreads: Unreads
@@ -64,6 +66,7 @@ public final class PerAccountStore {
             uniquingKeysWith: { first, _ in first })
         unreads = Unreads(snapshot: snapshot.unreadMsgs, selfUserId: account.userId)
         conversations = ConversationList(snapshot: snapshot, selfUserId: account.userId)
+        channelFolders = (snapshot.channelFolders ?? []).sorted { $0.order < $1.order }
     }
 
     // MARK: Message-list fan-out

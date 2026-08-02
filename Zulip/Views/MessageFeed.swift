@@ -10,11 +10,20 @@ import ZulipModel
 /// anchor, which keeps the viewport stable while older history prepends; the
 /// anchor advances to new messages only when already at the bottom.
 struct MessageFeedList: View {
+    /// How conversation-run headers render: hidden (single-topic/DM
+    /// transcripts), topic name only (a channel's own feed), or
+    /// "#channel › topic" (cross-channel views like Mentions).
+    enum HeaderMode {
+        case hidden
+        case topicOnly
+        case channelAndTopic
+    }
+
     let store: PerAccountStore
     let model: MessageListModel
     let cache: MessageContentCache
-    var showTopicHeaders = false
-    var onTopicTap: ((String) -> Void)?
+    var headerMode = HeaderMode.hidden
+    var onHeaderTap: ((ConversationKey) -> Void)?
     var onNewMessages: (() -> Void)?
 
     @State private var anchorId: String?
@@ -22,25 +31,25 @@ struct MessageFeedList: View {
 
     private enum Item: Identifiable {
         case daySeparator(String)
-        case topicHeader(topic: String, firstMessageId: Int)
+        case conversationHeader(key: ConversationKey, firstMessageId: Int)
         case message(Message, showHeader: Bool)
 
         var id: String {
             switch self {
             case .daySeparator(let label): "day-\(label)"
-            case .topicHeader(_, let firstMessageId): "topic-\(firstMessageId)"
+            case .conversationHeader(_, let firstMessageId): "hdr-\(firstMessageId)"
             case .message(let message, _): "msg-\(message.id)"
             }
         }
     }
 
-    /// Messages interleaved with day separators (and topic headers in channel
-    /// feeds); consecutive messages from the same sender within 5 minutes
-    /// coalesce under one header.
+    /// Messages interleaved with day separators (and conversation headers in
+    /// multi-conversation feeds); consecutive messages from the same sender
+    /// within 5 minutes coalesce under one header.
     private var items: [Item] {
         var out: [Item] = []
         var lastDay: DateComponents?
-        var lastTopic: String?
+        var lastKey: ConversationKey?
         var lastSender: Int?
         var lastTimestamp = 0
         for message in model.messages {
@@ -51,9 +60,11 @@ struct MessageFeedList: View {
                 lastDay = day
                 lastSender = nil
             }
-            if showTopicHeaders, message.subject.caseInsensitiveCompare(lastTopic ?? "\0") != .orderedSame {
-                out.append(.topicHeader(topic: message.subject, firstMessageId: message.id))
-                lastTopic = message.subject
+            if headerMode != .hidden,
+               let key = Unreads.conversationKey(for: message, selfUserId: store.selfUserId),
+               key != lastKey {
+                out.append(.conversationHeader(key: key, firstMessageId: message.id))
+                lastKey = key
                 lastSender = nil
             }
             let showHeader = message.senderId != lastSender || message.timestamp - lastTimestamp > 300
@@ -84,8 +95,11 @@ struct MessageFeedList: View {
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
-                    case .topicHeader(let topic, _):
-                        TopicHeaderRow(topic: topic, onTap: onTopicTap)
+                    case .conversationHeader(let key, _):
+                        ConversationHeaderRow(
+                            store: store, conversationKey: key,
+                            includeChannel: headerMode == .channelAndTopic,
+                            onTap: onHeaderTap)
                     case .message(let message, let showHeader):
                         MessageRow(
                             store: store, message: message,
@@ -121,23 +135,51 @@ struct MessageFeedList: View {
     }
 }
 
-private struct TopicHeaderRow: View {
-    let topic: String
-    let onTap: ((String) -> Void)?
+private struct ConversationHeaderRow: View {
+    let store: PerAccountStore
+    let conversationKey: ConversationKey
+    let includeChannel: Bool
+    let onTap: ((ConversationKey) -> Void)?
+
+    private var isResolved: Bool {
+        if case .topic(_, let topic) = conversationKey {
+            return TopicName.isResolved(topic)
+        }
+        return false
+    }
+
+    private var label: String {
+        switch conversationKey {
+        case .topic(let streamId, let topic):
+            let display = TopicName.displayName(topic).isEmpty
+                ? "general chat" : TopicName.displayName(topic)
+            guard includeChannel else { return display }
+            let channel = store.channels[streamId]?.name
+                ?? store.subscriptions[streamId]?.name ?? "?"
+            return "#\(channel) › \(display)"
+        case .dm:
+            return conversationKey.displayTitle(in: store)
+        }
+    }
 
     var body: some View {
         Button {
-            onTap?(topic)
+            onTap?(conversationKey)
         } label: {
             HStack(spacing: 6) {
-                if TopicName.isResolved(topic) {
+                if case .dm = conversationKey {
+                    Image(systemName: "person.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if isResolved {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.caption)
                 }
-                Text(TopicName.displayName(topic).isEmpty
-                    ? "general chat" : TopicName.displayName(topic))
+                Text(label)
                     .font(.callout.weight(.semibold))
+                    .lineLimit(1)
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
@@ -150,7 +192,7 @@ private struct TopicHeaderRow: View {
         }
         .buttonStyle(.plain)
         .padding(.top, 8)
-        .help("Open this topic")
+        .help("Open this conversation")
     }
 }
 

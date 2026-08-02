@@ -67,9 +67,12 @@ Non-goals (initially)
 
 `NavigationSplitView`, two columns, unified toolbar:
 
-- **Sidebar** (min ~280pt): the **Direct Messages** section (recent DM threads,
-  recency-sorted, Messages-style rows) above the **Channels** section (subscriptions:
-  pinned first, then alphabetical, muted last and dimmed).
+- **Sidebar** (min ~280pt), modeled on the Zulip web app's left rail: a filter field,
+  a **Views** section (Combined feed, Mentions, Starred; Inbox/Recent later), compact
+  one-line **Direct Messages** rows (presence dot, name, bot marker, count badge), then
+  channels grouped by **channel folder** (Zulip 12+; one flat Channels section on older
+  servers) — colored type glyph (`#`/lock/globe), name, gray count badge; pinned first,
+  muted dimmed and last.
 - **Detail**: the selected channel's feed (topic headers interleaved) or a DM/topic
   transcript, compose bar at the bottom. A channel's topic list is one click away from
   the feed toolbar; a topic transcript links back to its channel via the toolbar chip.

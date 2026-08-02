@@ -7,9 +7,20 @@ public struct ZulipStream: Decodable, Sendable, Hashable, Identifiable {
     public var name: String
     public var description: String
     public var inviteOnly: Bool
+    public var isWebPublic: Bool?
     public var isArchived: Bool?
+    /// The channel folder this channel is filed under (Zulip 12+), if any.
+    public var folderId: Int?
 
     public var id: Int { streamId }
+}
+
+/// A sidebar grouping of channels (register `channel_folders`, Zulip 12+).
+public struct ChannelFolder: Decodable, Sendable, Hashable, Identifiable {
+    public var id: Int
+    public var name: String
+    /// 0-indexed display order.
+    public var order: Int
 }
 
 /// A subscription: a channel plus the user's per-channel settings (subset).

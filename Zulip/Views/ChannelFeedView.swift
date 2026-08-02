@@ -20,9 +20,9 @@ struct ChannelFeedView: View {
             if let model, model.didInitialFetch {
                 MessageFeedList(
                     store: store, model: model, cache: cache,
-                    showTopicHeaders: true,
-                    onTopicTap: { topic in
-                        selection = .conversation(.topic(streamId: streamId, topic: topic))
+                    headerMode: .topicOnly,
+                    onHeaderTap: { key in
+                        selection = .conversation(key)
                     },
                     onNewMessages: { store.markChannelRead(streamId) })
             } else {

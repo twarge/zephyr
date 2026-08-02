@@ -20,6 +20,7 @@ public struct InitialSnapshot: Decodable, Sendable {
     public var subscriptions: [Subscription]?
     public var unreadMsgs: UnreadMessagesSnapshot?
     public var recentPrivateConversations: [RecentPrivateConversation]?
+    public var channelFolders: [ChannelFolder]?
 }
 
 /// One entry of the register payload's `recent_private_conversations`:

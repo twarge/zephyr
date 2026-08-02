@@ -2,11 +2,14 @@ import SwiftUI
 import ZulipModel
 
 /// What the detail column shows: a DM/topic transcript, a channel's
-/// interleaved message feed, or a channel's topic list.
+/// interleaved message feed, a channel's topic list, or a cross-channel view.
 enum Destination: Hashable {
     case conversation(ConversationKey)
     case channel(streamId: Int)
     case channelTopics(streamId: Int)
+    case combinedFeed
+    case mentions
+    case starred
 }
 
 /// The Messages-style main window: unified conversation sidebar + transcript.
@@ -30,6 +33,20 @@ struct MainSplitView: View {
             case .channelTopics(let streamId):
                 ChannelTopicsView(store: store, streamId: streamId, selection: $selection)
                     .id(streamId)
+            case .combinedFeed:
+                NarrowFeedView(
+                    store: store, title: "Combined feed", narrow: .combinedFeed,
+                    selection: $selection)
+                    .id(Destination.combinedFeed)
+            case .mentions:
+                NarrowFeedView(
+                    store: store, title: "Mentions", narrow: .mentions, selection: $selection)
+                    .id(Destination.mentions)
+            case .starred:
+                NarrowFeedView(
+                    store: store, title: "Starred messages", narrow: .starred,
+                    selection: $selection)
+                    .id(Destination.starred)
             case nil:
                 ContentUnavailableView(
                     "No Conversation Selected",
