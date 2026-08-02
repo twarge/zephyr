@@ -35,6 +35,13 @@ public struct Reaction: Decodable, Sendable, Hashable {
     public var emojiCode: String
     public var reactionType: String
     public var userId: Int
+
+    public init(emojiName: String, emojiCode: String, reactionType: String, userId: Int) {
+        self.emojiName = emojiName
+        self.emojiCode = emojiCode
+        self.reactionType = reactionType
+        self.userId = userId
+    }
 }
 
 /// A message as returned by GET /messages and `message` events, with

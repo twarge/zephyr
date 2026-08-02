@@ -31,6 +31,9 @@ struct ChannelFeedView: View {
             }
         }
         .navigationTitle("#\(channelName)")
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            ComposeBar(store: store, mode: .channel(streamId: streamId))
+        }
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {

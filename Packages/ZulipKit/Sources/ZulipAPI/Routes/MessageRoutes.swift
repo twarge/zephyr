@@ -64,6 +64,81 @@ public enum FlagOp: String, Sendable {
     case remove
 }
 
+public struct SendMessageResult: Decodable, Sendable {
+    public var id: Int
+}
+
+extension ApiConnection {
+    /// POST /messages, channel flavor. `queueId` + `localId` enable local
+    /// echo: the resulting `message` event carries `local_message_id`.
+    public func sendChannelMessage(
+        streamId: Int, topic: String, content: String,
+        queueId: String? = nil, localId: String? = nil
+    ) async throws -> Int {
+        var params = [
+            Param("type", "channel"),
+            Param("to", String(streamId)),
+            Param("topic", topic),
+            Param("content", content),
+        ]
+        if (featureLevel ?? 0) >= 236 {
+            params.append(Param("read_by_sender", "true"))
+        }
+        if let queueId, let localId {
+            params.append(Param("queue_id", queueId))
+            params.append(Param("local_id", localId))
+        }
+        let result: SendMessageResult = try await request(
+            ApiRequest(method: .post, path: "/api/v1/messages", params: params))
+        return result.id
+    }
+
+    /// POST /messages, direct flavor. `userIds` are the recipients (the
+    /// sender may be omitted; the server adds it).
+    public func sendDirectMessage(
+        userIds: [Int], content: String,
+        queueId: String? = nil, localId: String? = nil
+    ) async throws -> Int {
+        var params = [
+            Param("type", "direct"),
+            Param("to", "[\(userIds.map(String.init).joined(separator: ","))]"),
+            Param("content", content),
+        ]
+        if (featureLevel ?? 0) >= 236 {
+            params.append(Param("read_by_sender", "true"))
+        }
+        if let queueId, let localId {
+            params.append(Param("queue_id", queueId))
+            params.append(Param("local_id", localId))
+        }
+        let result: SendMessageResult = try await request(
+            ApiRequest(method: .post, path: "/api/v1/messages", params: params))
+        return result.id
+    }
+
+    /// POST/DELETE /messages/{id}/reactions.
+    public func updateReaction(
+        messageId: Int, add: Bool,
+        emojiName: String, emojiCode: String, reactionType: String
+    ) async throws {
+        _ = try await send(
+            ApiRequest(
+                method: add ? .post : .delete,
+                path: "/api/v1/messages/\(messageId)/reactions",
+                params: [
+                    Param("emoji_name", emojiName),
+                    Param("emoji_code", emojiCode),
+                    Param("reaction_type", reactionType),
+                ]))
+    }
+
+    /// DELETE /messages/{id} — permission-gated server-side.
+    public func deleteMessage(messageId: Int) async throws {
+        _ = try await send(
+            ApiRequest(method: .delete, path: "/api/v1/messages/\(messageId)"))
+    }
+}
+
 extension ApiConnection {
     /// POST /messages/flags — set/clear a flag (`read`, `starred`, …) on a
     /// set of messages.

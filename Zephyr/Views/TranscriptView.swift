@@ -32,6 +32,13 @@ struct TranscriptView: View {
             }
         }
         .navigationTitle(isTopic ? "" : conversation.displayTitle(in: store))
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            ComposeBar(
+                store: store,
+                mode: .fixed(
+                    conversation.sendDestination(selfUserId: store.selfUserId),
+                    placeholder: conversation.displayTitle(in: store)))
+        }
         .toolbar {
             // Topic transcripts title as a breadcrumb: "#channel › topic",
             // where the channel segment opens the channel's topic list.

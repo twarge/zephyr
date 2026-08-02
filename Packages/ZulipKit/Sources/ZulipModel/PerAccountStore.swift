@@ -40,6 +40,9 @@ public final class PerAccountStore {
     }
     private var messageLists: [UUID: WeakMessageList] = [:]
 
+    /// Optimistically-sent messages awaiting their server echo event.
+    public private(set) var outbox: [OutboxMessage] = []
+
     /// True while the event stream is failing and being retried; UI shows a
     /// "connecting" banner.
     public var isRecoveringEventStream = false
@@ -133,6 +136,82 @@ public final class PerAccountStore {
         }
     }
 
+    // MARK: Sending
+
+    /// Sends optimistically: an outbox entry appears in matching lists
+    /// immediately; the server's echo event (local_message_id) replaces it.
+    public func send(_ content: String, to destination: SendDestination) {
+        let localId = UUID().uuidString
+        outbox.append(
+            OutboxMessage(
+                id: localId, destination: destination, content: content,
+                timestamp: Int(Date.now.timeIntervalSince1970), state: .sending))
+        Task { await performSend(localId: localId) }
+    }
+
+    public func retrySend(_ localId: String) {
+        guard let index = outbox.firstIndex(where: { $0.id == localId }) else { return }
+        outbox[index].state = .sending
+        Task { await performSend(localId: localId) }
+    }
+
+    public func discardSend(_ localId: String) {
+        outbox.removeAll { $0.id == localId }
+    }
+
+    private func performSend(localId: String) async {
+        guard let message = outbox.first(where: { $0.id == localId }) else { return }
+        do {
+            switch message.destination {
+            case .topic(let streamId, let topic):
+                _ = try await connection.sendChannelMessage(
+                    streamId: streamId, topic: topic, content: message.content,
+                    queueId: queueId, localId: localId)
+            case .dm(let userIds):
+                _ = try await connection.sendDirectMessage(
+                    userIds: userIds, content: message.content,
+                    queueId: queueId, localId: localId)
+            }
+            // Leave the entry in place: the echo event clears it (and may
+            // already have, if it raced the response).
+        } catch {
+            if let index = outbox.firstIndex(where: { $0.id == localId }) {
+                outbox[index].state = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    // MARK: Message actions
+
+    public func toggleReaction(message: Message, emojiName: String, emojiCode: String, reactionType: String) {
+        let mine = message.reactions.contains {
+            $0.userId == selfUserId && $0.emojiCode == emojiCode
+                && $0.reactionType == reactionType
+        }
+        let connection = connection
+        let id = message.id
+        Task {
+            try? await connection.updateReaction(
+                messageId: id, add: !mine,
+                emojiName: emojiName, emojiCode: emojiCode, reactionType: reactionType)
+        }
+    }
+
+    public func setStarred(_ starred: Bool, messageId: Int) {
+        let connection = connection
+        Task {
+            try? await connection.updateMessageFlags(
+                messages: [messageId], op: starred ? .add : .remove, flag: "starred")
+        }
+    }
+
+    public func deleteMessage(_ messageId: Int) {
+        let connection = connection
+        Task {
+            try? await connection.deleteMessage(messageId: messageId)
+        }
+    }
+
     /// Adds fetched messages to the canonical map, applying zulip-flutter's
     /// reconcile rule: a message we already have wins over a fetched copy
     /// (events applied to it can't be replayed; the fetch may predate them).
@@ -154,6 +233,9 @@ public final class PerAccountStore {
             unreads.handleMessage(message, flags: e.flags)
             conversations.noteMessage(message, selfUserId: selfUserId)
             forEachMessageList { $0.handleNewMessage(message, selfUserId: selfUserId) }
+            if let localId = e.localMessageId {
+                outbox.removeAll { $0.id == localId }
+            }
 
         case .updateMessage(let e):
             // Content edits only for M0; topic/channel moves land with the
@@ -195,6 +277,24 @@ public final class PerAccountStore {
                 op: op, flag: e.flag, ids: e.messages, all: e.all,
                 locate: { self.messages[$0] })
             forEachMessageList { $0.handleChangedMessages(ids: ids) }
+
+        case .reaction(let e):
+            guard var message = messages[e.messageId] else { break }
+            switch e.op {
+            case "add":
+                if !message.reactions.contains(e.reaction) {
+                    message.reactions.append(e.reaction)
+                }
+            case "remove":
+                message.reactions.removeAll {
+                    $0.userId == e.userId && $0.emojiCode == e.emojiCode
+                        && $0.reactionType == e.reactionType
+                }
+            default:
+                break
+            }
+            messages[e.messageId] = message
+            forEachMessageList { $0.handleChangedMessages(ids: [e.messageId]) }
 
         case .realmUserAdd(let user):
             users[user.userId] = user

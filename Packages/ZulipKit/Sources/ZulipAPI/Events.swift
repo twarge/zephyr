@@ -15,6 +15,7 @@ public struct Event: Sendable {
         case updateMessage(UpdateMessageEvent)
         case deleteMessage(DeleteMessageEvent)
         case updateMessageFlags(UpdateMessageFlagsEvent)
+        case reaction(ReactionEvent)
         case realmUserAdd(User)
         case realmUserUpdate(RealmUserUpdate)
         case realmUserRemove(userId: Int)
@@ -58,6 +59,21 @@ public struct UpdateMessageFlagsEvent: Decodable, Sendable {
     public var flag: String
     public var messages: [Int]
     public var all: Bool
+}
+
+public struct ReactionEvent: Decodable, Sendable {
+    public var op: String
+    public var messageId: Int
+    public var userId: Int
+    public var emojiName: String
+    public var emojiCode: String
+    public var reactionType: String
+
+    public var reaction: Reaction {
+        Reaction(
+            emojiName: emojiName, emojiCode: emojiCode,
+            reactionType: reactionType, userId: userId)
+    }
 }
 
 extension Event: Decodable {
@@ -115,6 +131,8 @@ extension Event: Decodable {
             kind = .deleteMessage(try DeleteMessageEvent(from: decoder))
         case ("update_message_flags", "add"), ("update_message_flags", "remove"):
             kind = .updateMessageFlags(try UpdateMessageFlagsEvent(from: decoder))
+        case ("reaction", "add"), ("reaction", "remove"):
+            kind = .reaction(try ReactionEvent(from: decoder))
         case ("realm_user", "add"):
             kind = .realmUserAdd(try PersonEnvelope<User>(from: decoder).person)
         case ("realm_user", "update"):

@@ -25,8 +25,8 @@ extension ApiConnection {
     /// of bandwidth"). Extend both as the app grows.
     public static let subscribedEventTypes = [
         "message", "update_message", "delete_message", "update_message_flags",
-        "realm_user", "subscription", "stream", "channel_folder", "realm_emoji",
-        "submessage", "heartbeat",
+        "reaction", "realm_user", "subscription", "stream", "channel_folder",
+        "realm_emoji", "submessage", "heartbeat",
     ]
     public static let fetchedEventTypes = [
         "realm", "realm_user", "stream", "subscription", "message",

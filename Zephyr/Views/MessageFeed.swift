@@ -33,6 +33,12 @@ struct MessageFeedList: View {
     @State private var anchorId: String?
     @State private var nearBottom = true
 
+    private var outboxMessages: [OutboxMessage] {
+        store.outbox.filter {
+            $0.destination.matches(narrow: model.narrow, selfUserId: store.selfUserId)
+        }
+    }
+
     private enum Item: Identifiable {
         case daySeparator(String)
         case conversationHeader(key: ConversationKey, firstMessageId: Int)
@@ -111,7 +117,13 @@ struct MessageFeedList: View {
                             useMatchHighlights: useMatchHighlights)
                     }
                 }
-                if model.messages.isEmpty {
+                if model.haveNewest {
+                    ForEach(outboxMessages) { outboxMessage in
+                        OutboxRow(store: store, message: outboxMessage)
+                            .id("out-\(outboxMessage.id)")
+                    }
+                }
+                if model.messages.isEmpty && outboxMessages.isEmpty {
                     ContentUnavailableView("No Messages", systemImage: "bubble")
                         .padding(.top, 60)
                 }
@@ -136,6 +148,11 @@ struct MessageFeedList: View {
                 anchorId = "msg-\(newLastId)"
             }
             onNewMessages?()
+        }
+        .onChange(of: outboxMessages.last?.id) { _, newLastId in
+            if let newLastId, nearBottom {
+                anchorId = "out-\(newLastId)"
+            }
         }
     }
 }
@@ -273,18 +290,36 @@ struct MessageRow: View {
                         content: content, connection: store.connection)
                 }
                 if !message.reactions.isEmpty {
-                    ReactionsRow(store: store, reactions: message.reactions)
+                    ReactionsRow(store: store, message: message)
                 }
             }
             Spacer(minLength: 0)
         }
         .padding(.vertical, 1)
+        .contextMenu {
+            let isStarred = (message.flags ?? []).contains("starred")
+            Button(isStarred ? "Unstar" : "Star", systemImage: "star") {
+                store.setStarred(!isStarred, messageId: message.id)
+            }
+            Button("Copy Text", systemImage: "doc.on.doc") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(content.plainText, forType: .string)
+            }
+            if message.senderId == store.selfUserId {
+                Divider()
+                Button("Delete Message", systemImage: "trash", role: .destructive) {
+                    store.deleteMessage(message.id)
+                }
+            }
+        }
     }
 }
 
 struct ReactionsRow: View {
     let store: PerAccountStore
-    let reactions: [Reaction]
+    let message: Message
+
+    private var reactions: [Reaction] { message.reactions }
 
     private struct Group: Identifiable {
         var id: String
@@ -313,18 +348,30 @@ struct ReactionsRow: View {
     var body: some View {
         HStack(spacing: 4) {
             ForEach(groups) { group in
-                HStack(spacing: 3) {
-                    emojiView(group.sample)
-                    Text("\(group.count)")
-                        .monospacedDigit()
+                Button {
+                    store.toggleReaction(
+                        message: message,
+                        emojiName: group.sample.emojiName,
+                        emojiCode: group.sample.emojiCode,
+                        reactionType: group.sample.reactionType)
+                } label: {
+                    HStack(spacing: 3) {
+                        emojiView(group.sample)
+                        Text("\(group.count)")
+                            .monospacedDigit()
+                    }
+                    .font(.caption)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(
+                        group.reactedBySelf ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.quaternary),
+                        in: .capsule)
+                    .contentShape(.capsule)
                 }
-                .font(.caption)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(
-                    group.reactedBySelf ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.quaternary),
-                    in: .capsule)
-                .help(group.sample.emojiName)
+                .buttonStyle(.plain)
+                .help(group.reactedBySelf
+                    ? "Remove your :\(group.sample.emojiName): reaction"
+                    : "React with :\(group.sample.emojiName):")
             }
         }
         .padding(.top, 1)
