@@ -375,6 +375,18 @@ struct SearchQuery: Hashable, Codable {
         if !trimmed.isEmpty {
             elements.append(NarrowElement("search", .string(trimmed)))
         }
+        // Narrows lacking a channel operator search only the user's personal
+        // message history (API docs) — nearly empty for new accounts. Scope
+        // unscoped queries to all public channels, like the web app.
+        let hasScope = tokens.contains { token in
+            switch token {
+            case .channel, .dm, .starred, .mentioned: true
+            case .topic, .sender: false
+            }
+        }
+        if !hasScope {
+            elements.append(NarrowElement("channels", .string("public")))
+        }
         return elements
     }
 

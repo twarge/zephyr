@@ -16,12 +16,19 @@ struct NarrowFeedView: View {
     var body: some View {
         Group {
             if let model, model.didInitialFetch {
-                MessageFeedList(
-                    store: store, model: model, cache: cache,
-                    headerMode: .channelAndTopic,
-                    onHeaderTap: { key in
-                        selection = .conversation(key)
-                    })
+                if let error = model.fetchError, model.messages.isEmpty {
+                    ContentUnavailableView(
+                        "Couldn't Load Messages",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(error.localizedDescription))
+                } else {
+                    MessageFeedList(
+                        store: store, model: model, cache: cache,
+                        headerMode: .channelAndTopic,
+                        onHeaderTap: { key in
+                            selection = .conversation(key)
+                        })
+                }
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -76,7 +76,10 @@ used unconditionally; features above 277 note their FL gate.
   channel **id**), `topic`, `dm` (operand: user-id array), `dm-including`, `sender`,
   `search`, `id`, `near`, `with`, `is` (`unread|mentioned|starred|followed|dm|resolved`),
   `has` (`link|image|attachment|reaction`). All modern names are < FL 277 — safe
-  unconditionally.
+  unconditionally. ⚠ Narrows lacking a `channel`/`channels` operator search only the
+  user's **personal message history** (near-empty for new accounts) — add
+  `{"operator": "channels", "operand": "public"}` to unscoped searches to cover shared
+  history, like the web app.
 - **Send**: `POST /messages` — `type: "direct"` (`to`: user-id array) or `"channel"`
   (`to`: channel id, `topic`). Local echo: pass `queue_id` + `local_id`; the `message`
   event echoes `local_message_id`. `read_by_sender: true` (FL 236).
