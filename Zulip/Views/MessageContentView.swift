@@ -1,4 +1,5 @@
 import AppKit
+import QuickLook
 import SwiftUI
 import ZulipAPI
 import ZulipContent
@@ -176,12 +177,17 @@ private struct SpoilerView: View {
     }
 }
 
-/// Loads `/user_uploads/…` thumbnails with the connection's auth header
-/// (plain URLs load directly).
+/// An inline image: thumbnail loaded with the connection's auth header.
+/// Single click selects (accent ring); Space quick-looks the full-size
+/// original; double-click opens it in the default viewer (Preview).
 private struct MessageImageView: View {
     let node: ImageNode
     let connection: ApiConnection
+
     @State private var image: NSImage?
+    @State private var localFileURL: URL?
+    @State private var quickLookURL: URL?
+    @FocusState private var isSelected: Bool
 
     private var displaySize: CGSize {
         let maxWidth: CGFloat = 320
@@ -210,24 +216,80 @@ private struct MessageImageView: View {
         }
         .frame(width: displaySize.width, height: displaySize.height)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.accentColor, lineWidth: isSelected ? 3 : 0))
+        .focusable()
+        .focused($isSelected)
+        .focusEffectDisabled()
+        .onTapGesture(count: 2) { openInDefaultViewer() }
+        .onTapGesture { isSelected = true }
+        .onKeyPress(.space) {
+            guard isSelected else { return .ignored }
+            quickLook()
+            return .handled
+        }
+        .quickLookPreview($quickLookURL)
         .task(id: node.src) { await load() }
         .accessibilityLabel(node.alt ?? "Image")
+        .help("Click to select, Space for Quick Look, double-click to open")
     }
 
     private func load() async {
-        // mediaSession strips the auth header when the server redirects to a
-        // CDN (Zulip Cloud serves uploads from S3, which rejects basic auth).
-        let src = node.src
-        let request: URLRequest?
-        if src.hasPrefix("http") {
-            request = URL(string: src).map { URLRequest(url: $0) }
-        } else {
-            request = try? connection.authorizedURLRequest(path: src)
-        }
-        guard let request,
-              let (data, _) = try? await ApiConnection.mediaSession.data(for: request)
-        else { return }
+        guard let (data, _) = await fetch(path: node.src) else { return }
         image = NSImage(data: data)
+    }
+
+    private func openInDefaultViewer() {
+        Task {
+            if let url = await downloadOriginal() {
+                NSWorkspace.shared.open(url)
+            }
+        }
+    }
+
+    private func quickLook() {
+        Task {
+            quickLookURL = await downloadOriginal()
+        }
+    }
+
+    /// Downloads the full-size original to a temp file (real filename, so
+    /// Preview/Quick Look title it sensibly); cached per view.
+    private func downloadOriginal() async -> URL? {
+        if let localFileURL {
+            return localFileURL
+        }
+        let path = node.originalSrc ?? node.src
+        guard let (data, _) = await fetch(path: path) else { return nil }
+        let filename = (path as NSString).lastPathComponent.removingPercentEncoding
+            .flatMap { $0.isEmpty ? nil : $0 } ?? "image"
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ZulipPreviews", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+            let fileURL = directory.appendingPathComponent(filename)
+            try data.write(to: fileURL)
+            localFileURL = fileURL
+            return fileURL
+        } catch {
+            return nil
+        }
+    }
+
+    /// mediaSession strips the auth header when the server redirects to a
+    /// CDN (Zulip Cloud serves uploads from S3, which rejects basic auth).
+    private func fetch(path: String) async -> (Data, URLResponse)? {
+        let request: URLRequest?
+        if path.hasPrefix("http") {
+            request = URL(string: path).map { URLRequest(url: $0) }
+        } else {
+            request = try? connection.authorizedURLRequest(path: path)
+        }
+        guard let request else { return nil }
+        return try? await ApiConnection.mediaSession.data(for: request)
     }
 }
 
