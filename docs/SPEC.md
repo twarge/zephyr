@@ -72,7 +72,9 @@ Non-goals (initially)
   one-line **Direct Messages** rows (presence dot, name, bot marker, count badge), then
   channels grouped by **channel folder** (Zulip 12+; one flat Channels section on older
   servers) — colored type glyph (`#`/lock/globe), name, gray count badge; pinned first,
-  muted dimmed and last.
+  muted dimmed and last. Each channel row carries a disclosure triangle expanding an
+  indented list of its recent topics inline (fetched on expand, unread badges, capped
+  with an "All topics…" overflow row).
 - **Detail**: the selected channel's feed (topic headers interleaved) or a DM/topic
   transcript, compose bar at the bottom. A channel's topic list is one click away from
   the feed toolbar; a topic transcript links back to its channel via the toolbar chip.

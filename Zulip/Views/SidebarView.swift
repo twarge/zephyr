@@ -12,6 +12,10 @@ struct SidebarView: View {
 
     @State private var filterText = ""
     @State private var collapsedSections: Set<String> = []
+    @State private var expandedChannels: Set<Int> = []
+    @State private var channelTopics: [Int: [ChannelTopic]] = [:]
+
+    private static let maxInlineTopics = 10
 
     private var isFiltering: Bool {
         !filterText.trimmingCharacters(in: .whitespaces).isEmpty
@@ -100,8 +104,55 @@ struct SidebarView: View {
         if !channels.isEmpty {
             Section(title, isExpanded: expansion(id)) {
                 ForEach(channels) { subscription in
-                    ChannelRow(store: store, subscription: subscription)
-                        .tag(Destination.channel(streamId: subscription.streamId))
+                    let streamId = subscription.streamId
+                    ChannelRow(
+                        store: store, subscription: subscription,
+                        isExpanded: expandedChannels.contains(streamId),
+                        onToggle: isFiltering ? nil : { toggleChannel(streamId) })
+                        .tag(Destination.channel(streamId: streamId))
+                    if !isFiltering, expandedChannels.contains(streamId) {
+                        topicRows(for: streamId)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func topicRows(for streamId: Int) -> some View {
+        if let topics = channelTopics[streamId] {
+            ForEach(topics.prefix(Self.maxInlineTopics), id: \.name) { topic in
+                SidebarTopicRow(store: store, streamId: streamId, topic: topic)
+                    .tag(Destination.conversation(
+                        .topic(streamId: streamId, topic: topic.name)))
+            }
+            if topics.count > Self.maxInlineTopics {
+                Text("All topics…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 26)
+                    .tag(Destination.channelTopics(streamId: streamId))
+            }
+        } else {
+            ProgressView()
+                .controlSize(.small)
+                .padding(.leading, 26)
+        }
+    }
+
+    private func toggleChannel(_ streamId: Int) {
+        withAnimation(.snappy) {
+            if expandedChannels.contains(streamId) {
+                expandedChannels.remove(streamId)
+            } else {
+                expandedChannels.insert(streamId)
+            }
+        }
+        // Refresh on every expand — topics move fast on active channels.
+        if expandedChannels.contains(streamId) {
+            Task {
+                if let topics = try? await store.connection.getTopics(streamId: streamId) {
+                    channelTopics[streamId] = topics
                 }
             }
         }
@@ -176,10 +227,13 @@ private struct DirectMessageRow: View {
     }
 }
 
-/// Web-style channel row: colored type glyph (globe/lock/#), name, badge.
+/// Web-style channel row: disclosure triangle for inline topics, colored
+/// type glyph (globe/lock/#), name, badge.
 private struct ChannelRow: View {
     let store: PerAccountStore
     let subscription: Subscription
+    var isExpanded = false
+    var onToggle: (() -> Void)?
 
     private var unreadCount: Int {
         store.unreads.unreadCount(inChannel: subscription.streamId)
@@ -199,6 +253,18 @@ private struct ChannelRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            if let onToggle {
+                Button(action: onToggle) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .frame(width: 12)
+                .help(isExpanded ? "Hide topics" : "Show topics")
+            }
             Image(systemName: glyph)
                 .font(.callout.weight(.medium))
                 .foregroundStyle(color)
@@ -217,6 +283,52 @@ private struct ChannelRow: View {
             }
         }
         .opacity(subscription.muted ? 0.6 : 1)
+        .padding(.vertical, 1)
+    }
+}
+
+/// An indented topic row under an expanded channel.
+private struct SidebarTopicRow: View {
+    let store: PerAccountStore
+    let streamId: Int
+    let topic: ChannelTopic
+
+    private var key: ConversationKey {
+        .topic(streamId: streamId, topic: topic.name)
+    }
+
+    private var unreadCount: Int {
+        store.unreads.unreadIds[key]?.count ?? 0
+    }
+
+    private var hasMention: Bool {
+        guard let ids = store.unreads.unreadIds[key] else { return false }
+        return !ids.isDisjoint(with: store.unreads.mentionIds)
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if TopicName.isResolved(topic.name) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.green)
+            }
+            Text(TopicName.displayName(topic.name).isEmpty
+                ? "general chat" : TopicName.displayName(topic.name))
+                .font(.callout.weight(unreadCount > 0 ? .semibold : .regular))
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if hasMention {
+                Text("@")
+                    .font(.caption2.bold())
+                    .foregroundStyle(.white)
+                    .frame(width: 14, height: 14)
+                    .background(.tint, in: .circle)
+            } else if unreadCount > 0 {
+                CountBadge(count: unreadCount)
+            }
+        }
+        .padding(.leading, 26)
         .padding(.vertical, 1)
     }
 }
