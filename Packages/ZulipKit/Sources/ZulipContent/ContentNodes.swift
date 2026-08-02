@@ -16,17 +16,90 @@ public struct MessageContent: Sendable, Equatable {
 public indirect enum BlockNode: Sendable, Equatable {
     case paragraph([InlineNode])
     case heading(level: Int, [InlineNode])
-    /// `div.codehilite` — code kept as plain text for M1 (Pygments token
-    /// colors are a later refinement).
-    case codeBlock(language: String?, code: String)
+    /// `div.codehilite` — Pygments token spans preserved for syntax coloring.
+    case codeBlock(language: String?, spans: [CodeSpan])
     case blockquote([BlockNode])
     case unorderedList(items: [[BlockNode]])
     case orderedList(start: Int, items: [[BlockNode]])
     case spoiler(header: [InlineNode], content: [BlockNode])
     case image(ImageNode)
+    /// Two or more consecutive image previews, grouped for grid display.
+    case imageGallery([ImageNode])
+    case video(VideoNode)
+    case audio(src: String)
+    case table(TableNode)
+    /// `div.message_embed` — a website link preview card.
+    case linkPreview(LinkPreviewNode)
+    /// `<details>`/`<summary>` disclosure.
+    case collapsible(summary: [InlineNode], content: [BlockNode])
     case mathBlock(tex: String)
     case thematicBreak
     case unimplemented(html: String)
+}
+
+/// One run of code with its Pygments token class ("k", "s2", "c1", …; nil for
+/// plain text).
+public struct CodeSpan: Sendable, Equatable {
+    public var text: String
+    public var tokenClass: String?
+
+    public init(text: String, tokenClass: String? = nil) {
+        self.text = text
+        self.tokenClass = tokenClass
+    }
+}
+
+extension [CodeSpan] {
+    public var plainText: String {
+        map(\.text).joined()
+    }
+}
+
+public struct TableNode: Sendable, Equatable {
+    public enum ColumnAlignment: Sendable, Equatable {
+        case left, center, right
+    }
+
+    public var headerCells: [[InlineNode]]
+    public var alignments: [ColumnAlignment?]
+    public var rows: [[[InlineNode]]]
+
+    public init(
+        headerCells: [[InlineNode]], alignments: [ColumnAlignment?], rows: [[[InlineNode]]]
+    ) {
+        self.headerCells = headerCells
+        self.alignments = alignments
+        self.rows = rows
+    }
+}
+
+public struct VideoNode: Sendable, Equatable {
+    /// The watch/download link (upload path, or external URL for embeds).
+    public var href: String
+    /// Poster/preview image, when the server provides one (YouTube etc.).
+    public var previewImageSrc: String?
+    /// True for external embeds (YouTube/Vimeo); false for uploaded videos.
+    public var isEmbed: Bool
+
+    public init(href: String, previewImageSrc: String?, isEmbed: Bool) {
+        self.href = href
+        self.previewImageSrc = previewImageSrc
+        self.isEmbed = isEmbed
+    }
+}
+
+public struct LinkPreviewNode: Sendable, Equatable {
+    public var url: String
+    public var title: String?
+    public var descriptionText: String?
+    public var imageSrc: String?
+
+    public init(url: String, title: String?, descriptionText: String?, imageSrc: String?) {
+        self.url = url
+        self.title = title
+        self.descriptionText = descriptionText
+        self.imageSrc = imageSrc
+    }
 }
 
 public indirect enum InlineNode: Sendable, Equatable {
@@ -102,16 +175,28 @@ extension BlockNode {
         switch self {
         case .paragraph(let inlines), .heading(_, let inlines):
             inlines.map(\.plainText).joined()
-        case .codeBlock(_, let code):
-            code.replacingOccurrences(of: "\n", with: " ")
+        case .codeBlock(_, let spans):
+            spans.plainText.replacingOccurrences(of: "\n", with: " ")
         case .blockquote(let blocks):
             blocks.map(\.plainText).joined(separator: " ")
         case .unorderedList(let items), .orderedList(_, let items):
             items.map { $0.map(\.plainText).joined(separator: " ") }.joined(separator: " ")
         case .spoiler(let header, _):
             header.map(\.plainText).joined()
+        case .collapsible(let summary, _):
+            summary.map(\.plainText).joined()
         case .image:
             "🖼️"
+        case .imageGallery(let images):
+            "🖼️ ×\(images.count)"
+        case .video:
+            "🎬"
+        case .audio:
+            "🎵"
+        case .table:
+            "table"
+        case .linkPreview(let preview):
+            preview.title ?? preview.url
         case .mathBlock(let tex):
             tex
         case .thematicBreak:

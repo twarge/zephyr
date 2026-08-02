@@ -51,6 +51,44 @@ final class AvatarLoader {
     }
 }
 
+/// Fetches and caches custom realm emoji images, pre-sized for inline text
+/// embedding. Observable so text that fell back to `:name:` re-renders once
+/// the image arrives.
+@MainActor
+@Observable
+final class EmojiImageLoader {
+    static let shared = EmojiImageLoader()
+    private(set) var images: [String: NSImage] = [:]
+    @ObservationIgnored private var inflight: Set<String> = []
+
+    /// Returns the cached image, kicking off a fetch on miss (nil this pass;
+    /// observation re-renders callers when it lands).
+    func image(src: String, connection: ApiConnection) -> NSImage? {
+        if let image = images[src] {
+            return image
+        }
+        guard !inflight.contains(src) else { return nil }
+        inflight.insert(src)
+        Task {
+            let request: URLRequest?
+            if src.hasPrefix("http") {
+                request = URL(string: src).map { URLRequest(url: $0) }
+            } else {
+                request = try? connection.authorizedURLRequest(path: src)
+            }
+            guard let request,
+                  let (data, _) = try? await ApiConnection.mediaSession.data(for: request),
+                  let image = NSImage(data: data)
+            else { return }
+            let height: CGFloat = 16
+            let ratio = image.size.height > 0 ? image.size.width / image.size.height : 1
+            image.size = NSSize(width: height * ratio, height: height)
+            images[src] = image
+        }
+        return nil
+    }
+}
+
 /// A user avatar: the real image when available, initials while loading or
 /// on failure.
 struct AvatarView: View {

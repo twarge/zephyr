@@ -103,12 +103,118 @@ struct ContentParserTests {
         #expect(topicLink.kind == .channelTopic(streamId: 9))
     }
 
-    @Test func codeBlockPreservesWhitespaceAndLanguage() {
+    @Test func codeBlockPreservesWhitespaceAndTokens() {
         let content = ContentParser.parse(
             html: "<div class=\"codehilite\" data-code-language=\"Python\"><pre><span></span><code><span class=\"k\">def</span> <span class=\"nf\">f</span><span class=\"p\">():</span>\n    <span class=\"k\">pass</span>\n</code></pre></div>")
-        #expect(content.blocks == [
-            .codeBlock(language: "Python", code: "def f():\n    pass")
+        guard case .codeBlock(let language, let spans) = content.blocks[0] else {
+            Issue.record("expected code block")
+            return
+        }
+        #expect(language == "Python")
+        #expect(spans.plainText == "def f():\n    pass")
+        #expect(spans.first == CodeSpan(text: "def", tokenClass: "k"))
+        #expect(spans.contains(CodeSpan(text: "pass", tokenClass: "k")))
+        #expect(spans.contains(CodeSpan(text: "():", tokenClass: "p")))
+    }
+
+    @Test func table() {
+        let content = ContentParser.parse(
+            html: """
+                <table>
+                <thead>
+                <tr>
+                <th>Name</th>
+                <th style="text-align: right;">Count</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                <td><strong>a</strong></td>
+                <td>1</td>
+                </tr>
+                <tr>
+                <td>b</td>
+                <td>2</td>
+                </tr>
+                </tbody>
+                </table>
+                """)
+        guard case .table(let table) = content.blocks[0] else {
+            Issue.record("expected table")
+            return
+        }
+        #expect(table.headerCells == [[.text("Name")], [.text("Count")]])
+        #expect(table.alignments == [nil, .right])
+        #expect(table.rows == [
+            [[.strong([.text("a")])], [.text("1")]],
+            [[.text("b")], [.text("2")]],
         ])
+    }
+
+    @Test func linkPreviewCard() {
+        let content = ContentParser.parse(
+            html: #"<div class="message_embed"><a class="message_embed_image" href="https://example.com/post" style="background-image: url('https://cdn.example.com/thumb.jpg')"></a><div class="data-container"><div class="message_embed_title"><a href="https://example.com/post" title="A Post">A Post</a></div><div class="message_embed_description">Something interesting.</div></div></div>"#)
+        #expect(content.blocks == [
+            .linkPreview(
+                LinkPreviewNode(
+                    url: "https://example.com/post",
+                    title: "A Post",
+                    descriptionText: "Something interesting.",
+                    imageSrc: "https://cdn.example.com/thumb.jpg"))
+        ])
+    }
+
+    @Test func videos() {
+        let youtube = ContentParser.parse(
+            html: #"<div class="youtube-video message_inline_image"><a data-id="abc123" href="https://www.youtube.com/watch?v=abc123"><img src="https://i.ytimg.com/vi/abc123/default.jpg"></a></div>"#)
+        #expect(youtube.blocks == [
+            .video(
+                VideoNode(
+                    href: "https://www.youtube.com/watch?v=abc123",
+                    previewImageSrc: "https://i.ytimg.com/vi/abc123/default.jpg",
+                    isEmbed: true))
+        ])
+
+        let upload = ContentParser.parse(
+            html: #"<div class="message_inline_image message_inline_video"><a href="/user_uploads/2/ab/clip.mp4" title="clip.mp4"><video preload="metadata" src="/user_uploads/2/ab/clip.mp4"></video></a></div>"#)
+        #expect(upload.blocks == [
+            .video(
+                VideoNode(
+                    href: "/user_uploads/2/ab/clip.mp4",
+                    previewImageSrc: nil,
+                    isEmbed: false))
+        ])
+    }
+
+    @Test func audioAttachment() {
+        let content = ContentParser.parse(
+            html: #"<audio controls preload="metadata" src="/user_uploads/2/ab/song.mp3"></audio>"#)
+        #expect(content.blocks == [.audio(src: "/user_uploads/2/ab/song.mp3")])
+    }
+
+    @Test func detailsDisclosure() {
+        let content = ContentParser.parse(
+            html: "<details><summary>More info</summary>\n<p>hidden</p>\n</details>")
+        #expect(content.blocks == [
+            .collapsible(summary: [.text("More info")], content: [.paragraph([.text("hidden")])])
+        ])
+    }
+
+    @Test func consecutiveImagesGroupIntoGallery() {
+        let one = #"<div class="message_inline_image"><a href="/user_uploads/a.jpg"><img src="/thumb/a.webp"></a></div>"#
+        let two = #"<div class="message_inline_image"><a href="/user_uploads/b.jpg"><img src="/thumb/b.webp"></a></div>"#
+        let grouped = ContentParser.parse(html: one + two)
+        guard case .imageGallery(let images) = grouped.blocks[0] else {
+            Issue.record("expected gallery")
+            return
+        }
+        #expect(images.count == 2)
+
+        let single = ContentParser.parse(html: one)
+        guard case .image = single.blocks[0] else {
+            Issue.record("expected single image to stay an image")
+            return
+        }
     }
 
     @Test func lists() {
@@ -178,9 +284,10 @@ struct ContentParserTests {
     }
 
     @Test func unknownContentIsVisiblyUnimplemented() {
-        let table = ContentParser.parse(html: "<table><tbody><tr><td>x</td></tr></tbody></table>")
-        guard case .unimplemented = table.blocks[0] else {
-            Issue.record("expected unimplemented block for table")
+        // A table without a thead doesn't match the server's dialect.
+        let headerless = ContentParser.parse(html: "<table><tbody><tr><td>x</td></tr></tbody></table>")
+        guard case .unimplemented = headerless.blocks[0] else {
+            Issue.record("expected unimplemented block for headerless table")
             return
         }
 

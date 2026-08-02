@@ -52,7 +52,33 @@ public enum ContentParser {
             }
         }
         flushInlines()
-        return blocks
+        return coalesceGalleries(blocks)
+    }
+
+    /// Consecutive image previews group into a gallery grid.
+    private static func coalesceGalleries(_ blocks: [BlockNode]) -> [BlockNode] {
+        var out: [BlockNode] = []
+        var run: [ImageNode] = []
+
+        func flushRun() {
+            if run.count >= 2 {
+                out.append(.imageGallery(run))
+            } else if let single = run.first {
+                out.append(.image(single))
+            }
+            run = []
+        }
+
+        for block in blocks {
+            if case .image(let node) = block {
+                run.append(node)
+            } else {
+                flushRun()
+                out.append(block)
+            }
+        }
+        flushRun()
+        return out
     }
 
     /// Returns nil when the element is inline-level (to be wrapped in an
@@ -98,11 +124,10 @@ public enum ContentParser {
             guard let pre = element.children().first(), pre.tagName() == "pre" else {
                 return .unimplemented(html: outerHTML(element))
             }
-            var code = wholeText(pre)
-            if code.hasSuffix("\n") {
-                code = String(code.dropLast())
-            }
-            return .codeBlock(language: language, code: code)
+            // Pygments wraps the tokens in pre > code (with a stray empty
+            // leading span); token classes drive syntax coloring.
+            let container = pre.children().first(where: { $0.tagName() == "code" }) ?? pre
+            return .codeBlock(language: language, spans: codeSpans(container))
 
         case "div" where classes.contains("spoiler-block"):
             let children = element.children()
@@ -127,10 +152,39 @@ public enum ContentParser {
                 }
             return .spoiler(header: headerInlines, content: parseBlocks(content.getChildNodes()))
 
-        case "div" where classes.contains("message_inline_image"):
-            if classes.contains("message_inline_video") {
+        case "div" where classes.contains("message_embed"):
+            return parseLinkPreview(element)
+
+        case "div" where classes.contains("youtube-video"):
+            guard let anchor = element.children().first(where: { $0.tagName() == "a" }),
+                  let href = try2({ try anchor.attr("href") }), !href.isEmpty
+            else {
                 return .unimplemented(html: outerHTML(element))
             }
+            let img = anchor.children().first(where: { $0.tagName() == "img" })
+            return .video(
+                VideoNode(
+                    href: href,
+                    previewImageSrc: img.flatMap { image in try2 { try image.attr("src") } },
+                    isEmbed: true))
+
+        case "div" where classes.contains("message_inline_video"):
+            guard let anchor = element.children().first(where: { $0.tagName() == "a" }) else {
+                return .unimplemented(html: outerHTML(element))
+            }
+            let video = anchor.children().first(where: { $0.tagName() == "video" })
+            let href = try2 { try anchor.attr("href") } ?? ""
+            let src = video.flatMap { element in try2 { try element.attr("src") } }
+            guard !href.isEmpty || src?.isEmpty == false else {
+                return .unimplemented(html: outerHTML(element))
+            }
+            return .video(
+                VideoNode(
+                    href: href.isEmpty ? (src ?? "") : href,
+                    previewImageSrc: nil,
+                    isEmbed: false))
+
+        case "div" where classes.contains("message_inline_image"):
             guard let anchor = element.children().first(), anchor.tagName() == "a",
                   let img = anchor.children().first(where: { $0.tagName() == "img" })
             else {
@@ -146,12 +200,138 @@ public enum ContentParser {
                     originalWidth: dimensions.count == 2 ? dimensions[0] : nil,
                     originalHeight: dimensions.count == 2 ? dimensions[1] : nil))
 
-        case "div", "table", "video", "audio", "iframe", "details":
+        case "table":
+            return parseTable(element)
+
+        case "audio":
+            let src = try2 { try element.attr("src") } ?? ""
+            guard !src.isEmpty else {
+                return .unimplemented(html: outerHTML(element))
+            }
+            return .audio(src: src)
+
+        case "details":
+            let children = element.children()
+            let summary = children.first(where: { $0.tagName() == "summary" })
+            let summaryInlines = summary.map { trimInlines(parseInlines($0.getChildNodes())) } ?? []
+            let contentNodes = element.getChildNodes().filter {
+                ($0 as? Element)?.tagName() != "summary"
+            }
+            return .collapsible(summary: summaryInlines, content: parseBlocks(contentNodes))
+
+        case "div", "video", "iframe":
             return .unimplemented(html: outerHTML(element))
 
         default:
             return nil
         }
+    }
+
+    /// Flattens Pygments-highlighted code into runs tagged with their token
+    /// class, preserving whitespace exactly.
+    private static func codeSpans(_ container: Element) -> [CodeSpan] {
+        var spans: [CodeSpan] = []
+
+        func walk(_ node: Node, tokenClass: String?) {
+            if let text = node as? TextNode {
+                let content = text.getWholeText()
+                if !content.isEmpty {
+                    spans.append(CodeSpan(text: content, tokenClass: tokenClass))
+                }
+                return
+            }
+            guard let element = node as? Element else { return }
+            let elementClass = classList(element).first ?? tokenClass
+            for child in element.getChildNodes() {
+                walk(child, tokenClass: elementClass)
+            }
+        }
+
+        for child in container.getChildNodes() {
+            walk(child, tokenClass: nil)
+        }
+        if let last = spans.last, last.text.hasSuffix("\n") {
+            spans[spans.count - 1].text = String(last.text.dropLast())
+            if spans[spans.count - 1].text.isEmpty {
+                spans.removeLast()
+            }
+        }
+        return spans
+    }
+
+    private static func parseTable(_ table: Element) -> BlockNode {
+        guard let thead = table.children().first(where: { $0.tagName() == "thead" }),
+              let headerRow = thead.children().first(where: { $0.tagName() == "tr" }),
+              let tbody = table.children().first(where: { $0.tagName() == "tbody" })
+        else {
+            return .unimplemented(html: outerHTML(table))
+        }
+
+        func alignment(_ cell: Element) -> TableNode.ColumnAlignment? {
+            let style = try2 { try cell.attr("style") } ?? ""
+            if style.contains("center") { return .center }
+            if style.contains("right") { return .right }
+            if style.contains("left") { return .left }
+            return nil
+        }
+
+        let headerElements = headerRow.children().filter { $0.tagName() == "th" }
+        let headerCells = headerElements.map { trimInlines(parseInlines($0.getChildNodes())) }
+        let alignments = headerElements.map(alignment)
+
+        var rows: [[[InlineNode]]] = []
+        for row in tbody.children() where row.tagName() == "tr" {
+            rows.append(
+                row.children()
+                    .filter { $0.tagName() == "td" }
+                    .map { trimInlines(parseInlines($0.getChildNodes())) })
+        }
+        guard !headerCells.isEmpty else {
+            return .unimplemented(html: outerHTML(table))
+        }
+        return .table(TableNode(headerCells: headerCells, alignments: alignments, rows: rows))
+    }
+
+    private static func parseLinkPreview(_ element: Element) -> BlockNode {
+        let anchors = (try2 { try element.select("a") }).map(Array.init) ?? []
+        let titleAnchor = anchors.first { anchor in
+            var parent = anchor.parent()
+            while let current = parent {
+                if classList(current).contains("message_embed_title") { return true }
+                parent = current.parent()
+            }
+            return false
+        }
+        let url = (titleAnchor ?? anchors.first).flatMap { anchor in
+            try2 { try anchor.attr("href") }
+        }
+        guard let url, !url.isEmpty else {
+            return .unimplemented(html: outerHTML(element))
+        }
+        let title = titleAnchor.map { wholeText($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+        let description = (try2 { try element.select("div.message_embed_description").first() })
+            .flatMap { $0 }
+            .map { wholeText($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+        // The image is a CSS background: style="background-image: url(...)".
+        let imageAnchor = anchors.first { classList($0).contains("message_embed_image") }
+        let imageSrc = imageAnchor
+            .flatMap { anchor in try2 { try anchor.attr("style") } }
+            .flatMap(Self.backgroundImageURL)
+        return .linkPreview(
+            LinkPreviewNode(
+                url: url,
+                title: title.flatMap { $0.isEmpty ? nil : $0 },
+                descriptionText: description.flatMap { $0.isEmpty ? nil : $0 },
+                imageSrc: imageSrc))
+    }
+
+    static func backgroundImageURL(_ style: String) -> String? {
+        guard let range = style.range(of: #"url\((.*?)\)"#, options: .regularExpression) else {
+            return nil
+        }
+        var url = String(style[range].dropFirst(4).dropLast(1))
+        url = url.trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
+        return url.isEmpty ? nil : url
     }
 
     private static func listItems(_ list: Element) -> [[BlockNode]] {

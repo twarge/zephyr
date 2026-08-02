@@ -21,6 +21,16 @@ public struct InitialSnapshot: Decodable, Sendable {
     public var unreadMsgs: UnreadMessagesSnapshot?
     public var recentPrivateConversations: [RecentPrivateConversation]?
     public var channelFolders: [ChannelFolder]?
+    /// Custom emoji, keyed by emoji id (reaction `emoji_code` for
+    /// `realm_emoji` reactions).
+    public var realmEmoji: [String: RealmEmojiItem]?
+}
+
+public struct RealmEmojiItem: Decodable, Sendable {
+    public var name: String
+    public var sourceUrl: String
+    public var stillUrl: String?
+    public var deactivated: Bool
 }
 
 /// One entry of the register payload's `recent_private_conversations`:

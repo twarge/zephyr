@@ -27,6 +27,8 @@ public final class PerAccountStore {
     public private(set) var subscriptions: [Int: Subscription] = [:]
     /// Sidebar channel groupings (Zulip 12+), in display order.
     public private(set) var channelFolders: [ChannelFolder] = []
+    /// Custom emoji by id (reaction `emoji_code`).
+    public private(set) var realmEmoji: [String: RealmEmojiItem] = [:]
     /// Canonical map of every message we've seen (fetched or via events).
     public private(set) var messages: [Int: Message] = [:]
     public let unreads: Unreads
@@ -67,6 +69,7 @@ public final class PerAccountStore {
         unreads = Unreads(snapshot: snapshot.unreadMsgs, selfUserId: account.userId)
         conversations = ConversationList(snapshot: snapshot, selfUserId: account.userId)
         channelFolders = (snapshot.channelFolders ?? []).sorted { $0.order < $1.order }
+        realmEmoji = snapshot.realmEmoji ?? [:]
     }
 
     // MARK: Message-list fan-out

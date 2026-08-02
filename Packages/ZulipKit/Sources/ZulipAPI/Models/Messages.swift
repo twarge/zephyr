@@ -60,8 +60,18 @@ public struct Message: Decodable, Sendable, Identifiable {
     /// wrapped in `<span class="highlight">`.
     public var matchContent: String?
     public var matchSubject: String?
+    /// Widget data (polls, todo lists): the message's content is a
+    /// placeholder; the real state is built from these.
+    public var submessages: [Submessage]?
 
     public var topic: String { subject }
+}
+
+/// One widget submessage: `content` is a JSON-encoded widget event.
+public struct Submessage: Decodable, Sendable {
+    public var msgType: String
+    public var content: String
+    public var senderId: Int
 }
 
 // MARK: - Unreads (register payload)

@@ -33,8 +33,8 @@ struct BlockNodeView: View {
         case .heading(let level, let inlines):
             inlineText(inlines)
                 .font(.system(size: CGFloat(20 - min(level, 4) * 2), weight: .bold))
-        case .codeBlock(let language, let code):
-            CodeBlockView(label: language, code: code)
+        case .codeBlock(let language, let spans):
+            CodeBlockView(label: language, spans: spans)
         case .blockquote(let blocks):
             HStack(alignment: .top, spacing: 8) {
                 RoundedRectangle(cornerRadius: 2)
@@ -52,8 +52,22 @@ struct BlockNodeView: View {
             ContentListView(items: items, connection: connection, marker: { "\(start + $0)." })
         case .spoiler(let header, let content):
             SpoilerView(header: header, content: content, connection: connection)
+        case .collapsible(let summary, let content):
+            SpoilerView(header: summary, content: content, connection: connection)
         case .image(let node):
             MessageImageView(node: node, connection: connection)
+        case .imageGallery(let images):
+            ImageGalleryView(images: images, connection: connection)
+        case .video(let node):
+            MessageVideoView(node: node, connection: connection)
+        case .audio(let src):
+            MediaAttachmentChip(
+                path: src, connection: connection, icon: "waveform",
+                kind: "Audio")
+        case .table(let table):
+            MessageTableView(table: table, connection: connection)
+        case .linkPreview(let preview):
+            LinkPreviewCard(preview: preview, connection: connection)
         case .mathBlock(let tex):
             MathBlockView(tex: tex)
         case .thematicBreak:
@@ -66,7 +80,7 @@ struct BlockNodeView: View {
     }
 
     private func inlineText(_ inlines: [InlineNode]) -> Text {
-        InlineRenderer.text(inlines, realmURL: connection.realmURL, colorScheme: colorScheme)
+        InlineRenderer.text(inlines, connection: connection, colorScheme: colorScheme)
     }
 }
 
@@ -92,7 +106,28 @@ private struct MathBlockView: View {
 
 private struct CodeBlockView: View {
     let label: String?
-    let code: String
+    let spans: [CodeSpan]
+
+    init(label: String?, spans: [CodeSpan]) {
+        self.label = label
+        self.spans = spans
+    }
+
+    init(label: String?, code: String) {
+        self.init(label: label, spans: [CodeSpan(text: code)])
+    }
+
+    private var attributed: AttributedString {
+        var out = AttributedString()
+        for span in spans {
+            var run = AttributedString(span.text)
+            if let color = Self.tokenColor(span.tokenClass) {
+                run.foregroundColor = color
+            }
+            out += run
+        }
+        return out
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -104,13 +139,315 @@ private struct CodeBlockView: View {
                     .padding(.top, 6)
             }
             ScrollView(.horizontal) {
-                Text(code)
+                Text(attributed)
                     .font(.system(.callout, design: .monospaced))
                     .textSelection(.enabled)
                     .padding(10)
             }
         }
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// Pygments short token classes → semantic colors (Xcode-ish palette;
+    /// adaptive system colors work in both appearances).
+    static func tokenColor(_ tokenClass: String?) -> Color? {
+        guard let tokenClass else { return nil }
+        switch tokenClass.first {
+        case "k":  // keywords: k, kc, kd, kn, kp, kr, kt
+            return Color(nsColor: .systemPink)
+        case "s":  // strings: s, s1, s2, sb, sc, sd, si, sr, ss, …
+            return Color(nsColor: .systemRed)
+        case "c":  // comments: c, c1, cm, cp, cs, ch
+            return Color(nsColor: .systemGray)
+        case "m":  // numbers: m, mi, mf, mh, mo, mb
+            return Color(nsColor: .systemBlue)
+        case "n":  // names — only the interesting subtypes get color
+            switch tokenClass {
+            case "nf", "nc", "nn":  // function/class/namespace
+                return Color(nsColor: .systemTeal)
+            case "nb", "nd", "nt":  // builtin/decorator/tag
+                return Color(nsColor: .systemIndigo)
+            default:
+                return nil
+            }
+        case "o":  // operators
+            return nil
+        case "b":  // bp (builtin pseudo: self, True…)
+            return tokenClass == "bp" ? Color(nsColor: .systemIndigo) : nil
+        case "i":  // il (long int literal)
+            return tokenClass == "il" ? Color(nsColor: .systemBlue) : nil
+        default:
+            return nil
+        }
+    }
+}
+
+/// Consecutive image previews in an adaptive grid.
+private struct ImageGalleryView: View {
+    let images: [ImageNode]
+    let connection: ApiConnection
+
+    var body: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 6)],
+            alignment: .leading, spacing: 6
+        ) {
+            ForEach(images.indices, id: \.self) { index in
+                MessageImageView(node: images[index], connection: connection, compact: true)
+            }
+        }
+        .frame(maxWidth: 480)
+    }
+}
+
+/// Markdown tables as a native Grid, honoring per-column alignment.
+private struct MessageTableView: View {
+    let table: TableNode
+    let connection: ApiConnection
+    @Environment(\.colorScheme) private var colorScheme
+
+    private func alignment(_ column: Int) -> HorizontalAlignment {
+        switch table.alignments[safe: column] ?? nil {
+        case .center: .center
+        case .right: .trailing
+        case .left, nil: .leading
+        }
+    }
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            Grid(alignment: .topLeading, horizontalSpacing: 16, verticalSpacing: 5) {
+                GridRow {
+                    ForEach(table.headerCells.indices, id: \.self) { column in
+                        InlineRenderer.text(
+                            table.headerCells[column], connection: connection,
+                            colorScheme: colorScheme)
+                            .bold()
+                            .gridColumnAlignment(alignment(column))
+                    }
+                }
+                Divider()
+                ForEach(table.rows.indices, id: \.self) { rowIndex in
+                    GridRow {
+                        ForEach(table.rows[rowIndex].indices, id: \.self) { column in
+                            InlineRenderer.text(
+                                table.rows[rowIndex][column], connection: connection,
+                                colorScheme: colorScheme)
+                        }
+                    }
+                }
+            }
+            .padding(10)
+        }
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+/// A website preview card (`message_embed`): thumbnail, linked title,
+/// description.
+private struct LinkPreviewCard: View {
+    let preview: LinkPreviewNode
+    let connection: ApiConnection
+    @State private var thumbnail: NSImage?
+
+    private var destination: URL? {
+        URL(string: preview.url, relativeTo: connection.realmURL)?.absoluteURL
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            if preview.imageSrc != nil {
+                Group {
+                    if let thumbnail {
+                        Image(nsImage: thumbnail)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } else {
+                        Rectangle().fill(.quaternary.opacity(0.5))
+                    }
+                }
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                if let title = preview.title, let destination {
+                    Link(title, destination: destination)
+                        .font(.callout.weight(.semibold))
+                        .lineLimit(2)
+                } else if let title = preview.title {
+                    Text(title).font(.callout.weight(.semibold))
+                }
+                if let description = preview.descriptionText {
+                    Text(description)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: 460, alignment: .leading)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        .task(id: preview.imageSrc) {
+            guard let src = preview.imageSrc else { return }
+            guard let (data, _) = await fetchMedia(path: src, connection: connection) else { return }
+            thumbnail = NSImage(data: data)
+        }
+    }
+}
+
+/// Uploaded videos get an openable chip; embeds (YouTube…) show their
+/// preview frame linking out.
+private struct MessageVideoView: View {
+    let node: VideoNode
+    let connection: ApiConnection
+    @State private var preview: NSImage?
+
+    var body: some View {
+        if node.isEmbed {
+            embedBody
+        } else {
+            MediaAttachmentChip(
+                path: node.href, connection: connection, icon: "film", kind: "Video")
+        }
+    }
+
+    private var embedBody: some View {
+        Button {
+            if let url = URL(string: node.href) {
+                NSWorkspace.shared.open(url)
+            }
+        } label: {
+            ZStack {
+                Group {
+                    if let preview {
+                        Image(nsImage: preview)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } else {
+                        Rectangle().fill(.quaternary.opacity(0.5))
+                    }
+                }
+                .frame(width: 280, height: 158)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .shadow(radius: 4)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help(node.href)
+        .task(id: node.previewImageSrc) {
+            guard let src = node.previewImageSrc else { return }
+            guard let (data, _) = await fetchMedia(path: src, connection: connection) else { return }
+            preview = NSImage(data: data)
+        }
+    }
+}
+
+/// A file-attachment chip (uploaded video/audio): select, Space to Quick
+/// Look (which plays media), double-click to open in the default app.
+private struct MediaAttachmentChip: View {
+    let path: String
+    let connection: ApiConnection
+    let icon: String
+    let kind: String
+
+    @State private var localFileURL: URL?
+    @State private var quickLookURL: URL?
+    @FocusState private var isSelected: Bool
+
+    private var filename: String {
+        (path as NSString).lastPathComponent.removingPercentEncoding ?? kind
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(filename)
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
+                Text("\(kind) — Space to preview, double-click to open")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.accentColor, lineWidth: isSelected ? 3 : 0))
+        .focusable()
+        .focused($isSelected)
+        .focusEffectDisabled()
+        .onTapGesture(count: 2) {
+            Task {
+                if let url = await download() {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+        }
+        .onTapGesture { isSelected = true }
+        .onKeyPress(.space) {
+            guard isSelected else { return .ignored }
+            Task { quickLookURL = await download() }
+            return .handled
+        }
+        .quickLookPreview($quickLookURL)
+    }
+
+    private func download() async -> URL? {
+        if let localFileURL {
+            return localFileURL
+        }
+        let url = await downloadMediaFile(path: path, connection: connection)
+        localFileURL = url
+        return url
+    }
+}
+
+/// Fetches a media path (realm-relative with auth, or absolute) via the
+/// redirect-stripping media session.
+func fetchMedia(path: String, connection: ApiConnection) async -> (Data, URLResponse)? {
+    let request: URLRequest?
+    if path.hasPrefix("http") {
+        request = URL(string: path).map { URLRequest(url: $0) }
+    } else {
+        request = try? connection.authorizedURLRequest(path: path)
+    }
+    guard let request else { return nil }
+    return try? await ApiConnection.mediaSession.data(for: request)
+}
+
+/// Downloads media to a temp file with its real filename (so Preview/Quick
+/// Look title it sensibly).
+func downloadMediaFile(path: String, connection: ApiConnection) async -> URL? {
+    guard let (data, _) = await fetchMedia(path: path, connection: connection) else { return nil }
+    let filename = (path as NSString).lastPathComponent.removingPercentEncoding
+        .flatMap { $0.isEmpty ? nil : $0 } ?? "file"
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("ZulipPreviews", isDirectory: true)
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    do {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent(filename)
+        try data.write(to: fileURL)
+        return fileURL
+    } catch {
+        return nil
+    }
+}
+
+extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 
@@ -157,7 +494,7 @@ private struct SpoilerView: View {
                         Text("Spoiler").italic()
                     } else {
                         InlineRenderer.text(
-                            header, realmURL: connection.realmURL, colorScheme: colorScheme)
+                            header, connection: connection, colorScheme: colorScheme)
                     }
                 }
             }
@@ -183,6 +520,7 @@ private struct SpoilerView: View {
 private struct MessageImageView: View {
     let node: ImageNode
     let connection: ApiConnection
+    var compact = false
 
     @State private var image: NSImage?
     @State private var localFileURL: URL?
@@ -190,6 +528,9 @@ private struct MessageImageView: View {
     @FocusState private var isSelected: Bool
 
     private var displaySize: CGSize {
+        if compact {
+            return CGSize(width: 150, height: 110)
+        }
         let maxWidth: CGFloat = 320
         let maxHeight: CGFloat = 240
         guard let w = node.originalWidth, let h = node.originalHeight, w > 0, h > 0 else {
@@ -236,7 +577,8 @@ private struct MessageImageView: View {
     }
 
     private func load() async {
-        guard let (data, _) = await fetch(path: node.src) else { return }
+        guard let (data, _) = await fetchMedia(path: node.src, connection: connection)
+        else { return }
         image = NSImage(data: data)
     }
 
@@ -254,42 +596,14 @@ private struct MessageImageView: View {
         }
     }
 
-    /// Downloads the full-size original to a temp file (real filename, so
-    /// Preview/Quick Look title it sensibly); cached per view.
     private func downloadOriginal() async -> URL? {
         if let localFileURL {
             return localFileURL
         }
-        let path = node.originalSrc ?? node.src
-        guard let (data, _) = await fetch(path: path) else { return nil }
-        let filename = (path as NSString).lastPathComponent.removingPercentEncoding
-            .flatMap { $0.isEmpty ? nil : $0 } ?? "image"
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ZulipPreviews", isDirectory: true)
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        do {
-            try FileManager.default.createDirectory(
-                at: directory, withIntermediateDirectories: true)
-            let fileURL = directory.appendingPathComponent(filename)
-            try data.write(to: fileURL)
-            localFileURL = fileURL
-            return fileURL
-        } catch {
-            return nil
-        }
-    }
-
-    /// mediaSession strips the auth header when the server redirects to a
-    /// CDN (Zulip Cloud serves uploads from S3, which rejects basic auth).
-    private func fetch(path: String) async -> (Data, URLResponse)? {
-        let request: URLRequest?
-        if path.hasPrefix("http") {
-            request = URL(string: path).map { URLRequest(url: $0) }
-        } else {
-            request = try? connection.authorizedURLRequest(path: path)
-        }
-        guard let request else { return nil }
-        return try? await ApiConnection.mediaSession.data(for: request)
+        let url = await downloadMediaFile(
+            path: node.originalSrc ?? node.src, connection: connection)
+        localFileURL = url
+        return url
     }
 }
 
@@ -305,8 +619,10 @@ enum InlineRenderer {
         var isHighlight = false
     }
 
-    static func text(_ inlines: [InlineNode], realmURL: URL, colorScheme: ColorScheme) -> Text {
-        let builder = Builder(realmURL: realmURL, mathColor: mathColor(for: colorScheme))
+    static func text(
+        _ inlines: [InlineNode], connection: ApiConnection, colorScheme: ColorScheme
+    ) -> Text {
+        let builder = Builder(connection: connection, mathColor: mathColor(for: colorScheme))
         append(inlines, style: Style(), into: builder)
         return builder.finish()
     }
@@ -320,13 +636,15 @@ enum InlineRenderer {
     /// Accumulates styled runs, flushing to `Text` segments whenever an
     /// inline math image interrupts the attributed text.
     final class Builder {
-        let realmURL: URL
+        let connection: ApiConnection
         let mathColor: NSColor
         private var segments: [Text] = []
         private var buffer = AttributedString()
 
-        init(realmURL: URL, mathColor: NSColor) {
-            self.realmURL = realmURL
+        var realmURL: URL { connection.realmURL }
+
+        init(connection: ApiConnection, mathColor: NSColor) {
+            self.connection = connection
             self.mathColor = mathColor
         }
 
@@ -341,6 +659,15 @@ enum InlineRenderer {
                 segments.append(
                     Text(Image(nsImage: rendered.image))
                         .baselineOffset(-rendered.descent))
+            } else {
+                buffer += fallback
+            }
+        }
+
+        func appendEmojiImage(src: String, fallback: AttributedString) {
+            if let image = EmojiImageLoader.shared.image(src: src, connection: connection) {
+                flush()
+                segments.append(Text(Image(nsImage: image)).baselineOffset(-3))
             } else {
                 buffer += fallback
             }
@@ -406,8 +733,8 @@ enum InlineRenderer {
                 builder += styled(mention.text, nested)
             case .emoji(.unicode(let character, _)):
                 builder += styled(character, style)
-            case .emoji(.realm(_, let name)):
-                builder += styled(":\(name):", style)
+            case .emoji(.realm(let src, let name)):
+                builder.appendEmojiImage(src: src, fallback: styled(":\(name):", style))
             case .inlineMath(let tex):
                 var nested = style
                 nested.intents.insert(.code)

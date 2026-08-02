@@ -266,10 +266,14 @@ struct MessageRow: View {
                     }
                     .padding(.top, 10)
                 }
-                MessageContentView(
-                    content: content, connection: store.connection)
+                if let widget = MessageWidget.parse(message) {
+                    MessageWidgetView(widget: widget, store: store)
+                } else {
+                    MessageContentView(
+                        content: content, connection: store.connection)
+                }
                 if !message.reactions.isEmpty {
-                    ReactionsRow(reactions: message.reactions, selfUserId: store.selfUserId)
+                    ReactionsRow(store: store, reactions: message.reactions)
                 }
             }
             Spacer(minLength: 0)
@@ -279,43 +283,63 @@ struct MessageRow: View {
 }
 
 struct ReactionsRow: View {
+    let store: PerAccountStore
     let reactions: [Reaction]
-    let selfUserId: Int
 
     private struct Group: Identifiable {
-        var display: String
+        var id: String
+        var sample: Reaction
         var count: Int
         var reactedBySelf: Bool
-        var id: String { display }
     }
 
     private var groups: [Group] {
         var byEmoji: [String: Group] = [:]
+        var order: [String] = []
         for reaction in reactions {
-            let display = reaction.reactionType == "unicode_emoji"
-                ? (emojiCharacter(fromCodes: reaction.emojiCode) ?? ":\(reaction.emojiName):")
-                : ":\(reaction.emojiName):"
-            byEmoji[display, default: Group(display: display, count: 0, reactedBySelf: false)]
-                .count += 1
-            if reaction.userId == selfUserId {
-                byEmoji[display]?.reactedBySelf = true
+            let key = "\(reaction.reactionType):\(reaction.emojiCode)"
+            if byEmoji[key] == nil {
+                byEmoji[key] = Group(id: key, sample: reaction, count: 0, reactedBySelf: false)
+                order.append(key)
+            }
+            byEmoji[key]?.count += 1
+            if reaction.userId == store.selfUserId {
+                byEmoji[key]?.reactedBySelf = true
             }
         }
-        return byEmoji.values.sorted { $0.count > $1.count }
+        return order.compactMap { byEmoji[$0] }.sorted { $0.count > $1.count }
     }
 
     var body: some View {
         HStack(spacing: 4) {
             ForEach(groups) { group in
-                Text("\(group.display) \(group.count)")
-                    .font(.caption)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(
-                        group.reactedBySelf ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.quaternary),
-                        in: .capsule)
+                HStack(spacing: 3) {
+                    emojiView(group.sample)
+                    Text("\(group.count)")
+                        .monospacedDigit()
+                }
+                .font(.caption)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(
+                    group.reactedBySelf ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.quaternary),
+                    in: .capsule)
+                .help(group.sample.emojiName)
             }
         }
         .padding(.top, 1)
+    }
+
+    @ViewBuilder
+    private func emojiView(_ reaction: Reaction) -> some View {
+        if reaction.reactionType == "unicode_emoji",
+           let character = emojiCharacter(fromCodes: reaction.emojiCode) {
+            Text(character)
+        } else if let src = store.realmEmoji[reaction.emojiCode]?.sourceUrl,
+                  let image = EmojiImageLoader.shared.image(src: src, connection: store.connection) {
+            Image(nsImage: image)
+        } else {
+            Text(":\(reaction.emojiName):")
+        }
     }
 }
