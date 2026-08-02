@@ -159,8 +159,13 @@ in PROTOCOL.md §7; pipeline in ARCHITECTURE.md §5.
 - **Channel view**: scoped conversation list for one channel (topics by recency), with a
   subscribe/unsubscribe and notification-settings header. Reached via channel chips or the
   channel browser (⇧⌘K: searchable list of subscribed + browsable public channels).
-- **Search (⌘K)**: global search field driving the server `search` narrow; results as a
-  transient conversation-list scope. In-conversation find (⌘F) filters within the narrow.
+- **Search**: the sidebar field plays two roles. Typing filters the sidebar live
+  (channels, DMs, topics). Typeahead suggestions (channels, topics, people, flag
+  filters) commit to native search tokens — the analog of the web app's search pills —
+  and any committed token searches immediately; Return searches the free text via the
+  server's full-text `search` operator. Results render in the main view as a feed with
+  recipient bars; search results are static (no live appends). In-conversation find
+  (⌘F) filters within the narrow (later).
 
 ## 7. macOS integration
 

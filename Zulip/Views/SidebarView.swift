@@ -11,6 +11,7 @@ struct SidebarView: View {
     @Binding var selection: Destination?
 
     @State private var filterText = ""
+    @State private var searchTokens: [SearchToken] = []
     @State private var collapsedSections: Set<String> = []
     @State private var expandedChannels: Set<Int> = []
     @State private var channelTopics: [Int: [ChannelTopic]] = [:]
@@ -143,10 +144,80 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .searchable(text: $filterText, placement: .sidebar, prompt: "Filter")
+        // One field, two roles: typing filters the sidebar live; suggestions
+        // commit to token bubbles (which search immediately); Return searches
+        // the free text server-side, results in the main view.
+        .searchable(
+            text: $filterText, tokens: $searchTokens,
+            placement: .sidebar, prompt: "Filter or search"
+        ) { token in
+            Text(token.bubbleText)
+        }
+        .searchSuggestions {
+            ForEach(tokenSuggestions) { token in
+                Label(token.suggestionTitle, systemImage: token.suggestionIcon)
+                    .searchCompletion(token)
+            }
+        }
+        .onSubmit(of: .search) {
+            runSearch()
+        }
+        .onChange(of: searchTokens) {
+            if !searchTokens.isEmpty {
+                runSearch()
+            }
+        }
         .onChange(of: filterText) {
             loadAllTopicsIfNeeded()
         }
+    }
+
+    private func runSearch() {
+        let query = SearchQuery(tokens: searchTokens, text: filterText)
+        guard !query.isEmpty else { return }
+        selection = .search(query)
+    }
+
+    /// Typeahead: channels, topics (from the loaded cache), people, and flag
+    /// filters matching the typed text — excluding already-committed tokens.
+    private var tokenSuggestions: [SearchToken] {
+        let text = filterText.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return [] }
+        var result: [SearchToken] = []
+
+        result += sortedSubscriptions.lazy
+            .filter { $0.name.localizedCaseInsensitiveContains(text) }
+            .prefix(4)
+            .map { SearchToken.channel(streamId: $0.streamId, name: $0.name) }
+
+        var seenTopics = Set<String>()
+        var topicTokens: [SearchToken] = []
+        outer: for topics in channelTopics.values {
+            for topic in topics
+            where TopicName.displayName(topic.name).localizedCaseInsensitiveContains(text) {
+                if seenTopics.insert(topic.name.lowercased()).inserted {
+                    topicTokens.append(.topic(topic.name))
+                    if topicTokens.count >= 4 { break outer }
+                }
+            }
+        }
+        result += topicTokens
+
+        let people = Array(
+            store.users.values.lazy
+                .filter { $0.isActive != false && $0.fullName.localizedCaseInsensitiveContains(text) }
+                .prefix(3))
+        result += people.map { SearchToken.sender(userId: $0.userId, name: $0.fullName) }
+        result += people.lazy.filter { !$0.isBot }.prefix(2)
+            .map { SearchToken.dm(userId: $0.userId, name: $0.fullName) }
+
+        if text.count >= 3, "starred".localizedCaseInsensitiveContains(text) {
+            result.append(.starred)
+        }
+        if text.count >= 3, "mentions".localizedCaseInsensitiveContains(text) {
+            result.append(.mentioned)
+        }
+        return result.filter { !searchTokens.contains($0) }
     }
 
     @ViewBuilder

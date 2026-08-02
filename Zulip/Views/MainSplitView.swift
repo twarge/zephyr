@@ -10,6 +10,7 @@ enum Destination: Hashable {
     case combinedFeed
     case mentions
     case starred
+    case search(SearchQuery)
 }
 
 /// The Messages-style main window: unified conversation sidebar + transcript.
@@ -47,6 +48,11 @@ struct MainSplitView: View {
                     store: store, title: "Starred messages", narrow: .starred,
                     selection: $selection)
                     .id(Destination.starred)
+            case .search(let query):
+                NarrowFeedView(
+                    store: store, title: "Search: \(query.displayDescription)",
+                    narrow: .custom(query.narrowElements), selection: $selection)
+                    .id(query)
             case nil:
                 ContentUnavailableView(
                     "No Conversation Selected",

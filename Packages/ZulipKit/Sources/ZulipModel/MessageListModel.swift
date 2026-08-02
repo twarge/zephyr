@@ -28,6 +28,8 @@ extension Narrow {
             ])
         case .starred:
             return (message.flags ?? []).contains("starred")
+        case .custom:
+            return false
         }
     }
 }

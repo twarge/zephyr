@@ -18,8 +18,8 @@ public enum MessageAnchor: Sendable, Equatable {
 
 /// One element of a narrow: `{"operator": …, "operand": …}`. Modern operator
 /// names only (`channel`, `dm`, …) — all predate our feature-level floor.
-public struct NarrowElement: Encodable, Sendable, Equatable {
-    public enum Operand: Encodable, Sendable, Equatable {
+public struct NarrowElement: Encodable, Sendable, Hashable {
+    public enum Operand: Encodable, Sendable, Hashable {
         case string(String)
         case int(Int)
         case intList([Int])

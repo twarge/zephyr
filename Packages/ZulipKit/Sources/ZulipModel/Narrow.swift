@@ -11,6 +11,10 @@ public enum Narrow: Sendable, Hashable {
     case dm(userIds: [Int])
     case mentions
     case starred
+    /// An arbitrary operator combination (search queries). Message lists with
+    /// a custom narrow never live-append — server-side matching (full-text
+    /// search especially) can't be replicated client-side.
+    case custom([NarrowElement])
 
     public var apiElements: [NarrowElement] {
         switch self {
@@ -26,6 +30,8 @@ public enum Narrow: Sendable, Hashable {
             [NarrowElement("is", .string("mentioned"))]
         case .starred:
             [NarrowElement("is", .string("starred"))]
+        case .custom(let elements):
+            elements
         }
     }
 }
