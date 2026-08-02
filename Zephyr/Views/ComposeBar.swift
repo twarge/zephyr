@@ -62,6 +62,8 @@ struct ComposeBar: View {
     @State private var suggestions: [ComposeSuggestion] = []
     @State private var selectedSuggestion = 0
     @State private var tokenTriggerIndex: String.Index?
+    @State private var uploadingFilenames: [String] = []
+    @State private var showFileImporter = false
     @FocusState private var messageFocused: Bool
 
     private var destination: SendDestination? {
@@ -102,7 +104,25 @@ struct ComposeBar: View {
                     .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
                     .frame(maxWidth: 260)
             }
+            if !uploadingFilenames.isEmpty {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text("Uploading \(uploadingFilenames.joined(separator: ", "))…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             HStack(alignment: .bottom, spacing: 8) {
+                Button {
+                    showFileImporter = true
+                } label: {
+                    Image(systemName: "paperclip")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 6)
+                .help("Attach a file (or drop one on the message field)")
                 TextField(placeholder, text: $text, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...10)
@@ -134,6 +154,23 @@ struct ComposeBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.bar)
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            for url in (try? result.get()) ?? [] {
+                upload(fileURL: url, securityScoped: true)
+            }
+        }
+        .dropDestination(for: URL.self) { urls, _ in
+            let fileURLs = urls.filter(\.isFileURL)
+            guard !fileURLs.isEmpty else { return false }
+            for url in fileURLs {
+                upload(fileURL: url, securityScoped: false)
+            }
+            return true
+        }
         .onAppear {
             if case .fixed(let destination, _) = mode {
                 text = DraftStore.shared.draft(for: destination)
@@ -276,6 +313,31 @@ struct ComposeBar: View {
         suggestions = []
         tokenTriggerIndex = nil
         messageFocused = true
+    }
+
+    // MARK: Uploads
+
+    /// Uploads a file and appends its `[filename](url)` reference to the
+    /// draft.
+    private func upload(fileURL: URL, securityScoped: Bool) {
+        let filename = fileURL.lastPathComponent
+        let scoped = securityScoped ? fileURL.startAccessingSecurityScopedResource() : false
+        guard let data = try? Data(contentsOf: fileURL) else {
+            if scoped { fileURL.stopAccessingSecurityScopedResource() }
+            return
+        }
+        if scoped { fileURL.stopAccessingSecurityScopedResource() }
+
+        uploadingFilenames.append(filename)
+        let connection = store.connection
+        Task {
+            defer { uploadingFilenames.removeAll { $0 == filename } }
+            guard let path = try? await connection.uploadFile(data, filename: filename) else {
+                return
+            }
+            let reference = "[\(filename)](\(path))"
+            text = text.isEmpty ? reference : "\(text)\n\(reference)"
+        }
     }
 
     // MARK: Send

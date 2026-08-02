@@ -17,6 +17,8 @@ public struct InitialSnapshot: Decodable, Sendable {
     public var serverTypingStartedWaitPeriodMilliseconds: Int?
     public var serverTypingStoppedWaitPeriodMilliseconds: Int?
     public var serverTypingStartedExpiryPeriodMilliseconds: Int?
+    public var serverPresencePingIntervalSeconds: Int?
+    public var serverPresenceOfflineThresholdSeconds: Int?
 
     public var realmUsers: [User]?
     public var realmNonActiveUsers: [User]?

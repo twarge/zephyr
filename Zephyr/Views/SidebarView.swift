@@ -311,9 +311,7 @@ private struct DirectMessageRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Circle()
-                .strokeBorder(.tertiary, lineWidth: 1.5)
-                .frame(width: 8, height: 8)
+            PresenceDot(state: store.presenceState(of: participantIds.first ?? 0))
             Text(conversation.key.displayTitle(in: store))
                 .font(.body.weight(unreadCount > 0 ? .semibold : .regular))
                 .lineLimit(1)

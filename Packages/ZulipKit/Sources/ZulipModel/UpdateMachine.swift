@@ -28,26 +28,48 @@ public final class UpdateMachine {
 
     private let sleep: SleepFunction
     private var pollTask: Task<Void, Never>?
+    private var presenceTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "com.twarge.zephyr", category: "sync")
+
+    private let enablePresence: Bool
 
     public init(
         store: PerAccountStore,
         delegate: (any UpdateMachineDelegate)? = nil,
+        enablePresence: Bool = true,
         sleep: @escaping SleepFunction = { try await Task.sleep(for: $0) }
     ) {
         self.store = store
         self.delegate = delegate
+        self.enablePresence = enablePresence
         self.sleep = sleep
     }
 
     public func start() {
         guard pollTask == nil else { return }
         pollTask = Task { await poll() }
+        if enablePresence {
+            presenceTask = Task { await presenceLoop() }
+        }
     }
 
     public func stop() {
         pollTask?.cancel()
         pollTask = nil
+        presenceTask?.cancel()
+        presenceTask = nil
+    }
+
+    private func presenceLoop() async {
+        let interval = Duration.seconds(store.presencePingIntervalSeconds)
+        while !Task.isCancelled {
+            await store.pingPresence()
+            do {
+                try await sleep(interval)
+            } catch {
+                return
+            }
+        }
     }
 
     private func poll() async {

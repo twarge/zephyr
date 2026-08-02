@@ -117,6 +117,34 @@ struct AvatarView: View {
     }
 }
 
+/// Presence indicator: green = active, orange = idle, hollow = offline.
+struct PresenceDot: View {
+    let state: PresenceState
+
+    var body: some View {
+        Group {
+            switch state {
+            case .active:
+                Circle().fill(.green)
+            case .idle:
+                Circle().fill(.orange)
+            case .offline:
+                Circle().strokeBorder(.tertiary, lineWidth: 1.5)
+            }
+        }
+        .frame(width: 8, height: 8)
+        .help(helpText)
+    }
+
+    private var helpText: String {
+        switch state {
+        case .active: "Active"
+        case .idle: "Idle"
+        case .offline: "Offline"
+        }
+    }
+}
+
 struct InitialsAvatar: View {
     let name: String
     let seed: Int

@@ -279,6 +279,8 @@ struct MessageRow: View {
 
     @State private var hovering = false
     @State private var showReactionPicker = false
+    @State private var editing = false
+    @State private var editText = ""
 
     private var content: MessageContent {
         if useMatchHighlights, let match = message.matchContent {
@@ -314,7 +316,31 @@ struct MessageRow: View {
                     }
                     .padding(.top, 10)
                 }
-                if let widget = MessageWidget.parse(message) {
+                if editing {
+                    VStack(alignment: .leading, spacing: 6) {
+                        TextField("Message", text: $editText, axis: .vertical)
+                            .textFieldStyle(.plain)
+                            .lineLimit(1...12)
+                            .padding(6)
+                            .background(
+                                .quaternary.opacity(0.4),
+                                in: RoundedRectangle(cornerRadius: 8))
+                        HStack {
+                            Button("Cancel") { editing = false }
+                                .keyboardShortcut(.cancelAction)
+                            Button("Save") {
+                                let content = editText.trimmingCharacters(
+                                    in: .whitespacesAndNewlines)
+                                if !content.isEmpty {
+                                    store.editMessage(message.id, content: content)
+                                }
+                                editing = false
+                            }
+                            .keyboardShortcut(.defaultAction)
+                        }
+                        .controlSize(.small)
+                    }
+                } else if let widget = MessageWidget.parse(message) {
                     MessageWidgetView(widget: widget, store: store)
                 } else {
                     MessageContentView(
@@ -362,6 +388,14 @@ struct MessageRow: View {
             }
             if message.senderId == store.selfUserId {
                 Divider()
+                Button("Edit Message", systemImage: "pencil") {
+                    Task {
+                        editText = await store.fetchRawContent(message.id) ?? ""
+                        if !editText.isEmpty {
+                            editing = true
+                        }
+                    }
+                }
                 Button("Delete Message", systemImage: "trash", role: .destructive) {
                     store.deleteMessage(message.id)
                 }

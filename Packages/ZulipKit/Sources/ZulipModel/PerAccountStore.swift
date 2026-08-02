@@ -44,6 +44,10 @@ public final class PerAccountStore {
     public private(set) var outbox: [OutboxMessage] = []
     /// Who's typing where (from typing events).
     public let typing = TypingStatus()
+    /// User presence (maintained by the ping loop).
+    public let presence = Presence()
+    public let presencePingIntervalSeconds: Int
+    private let presenceOfflineThresholdSeconds: Int
     /// Unicode emoji (from server_emoji_data_url) + realm custom emoji, for
     /// pickers and :shortcode: autocomplete. Loaded lazily.
     public private(set) var emojiEntries: [EmojiEntry] = []
@@ -75,6 +79,8 @@ public final class PerAccountStore {
         typingStartedWaitMs = snapshot.serverTypingStartedWaitPeriodMilliseconds ?? 10000
         typingStoppedWaitMs = snapshot.serverTypingStoppedWaitPeriodMilliseconds ?? 5000
         typingStartedExpiryMs = snapshot.serverTypingStartedExpiryPeriodMilliseconds ?? 15000
+        presencePingIntervalSeconds = snapshot.serverPresencePingIntervalSeconds ?? 60
+        presenceOfflineThresholdSeconds = snapshot.serverPresenceOfflineThresholdSeconds ?? 140
 
         let allUsers = (snapshot.realmUsers ?? [])
             + (snapshot.realmNonActiveUsers ?? [])
@@ -268,6 +274,19 @@ public final class PerAccountStore {
         }
     }
 
+    /// Presence dot state for a user, using the server's offline threshold.
+    public func presenceState(of userId: Int) -> PresenceState {
+        presence.state(of: userId, offlineThresholdSeconds: presenceOfflineThresholdSeconds)
+    }
+
+    /// One presence ping: reports us active and merges everyone's deltas.
+    func pingPresence() async {
+        guard let result = try? await connection.updatePresence(
+            status: "active", lastUpdateId: presence.lastUpdateId, newUserInput: false)
+        else { return }
+        presence.apply(result)
+    }
+
     // MARK: Message actions
 
     public func toggleReaction(message: Message, emojiName: String, emojiCode: String, reactionType: String) {
@@ -297,6 +316,18 @@ public final class PerAccountStore {
         Task {
             try? await connection.deleteMessage(messageId: messageId)
         }
+    }
+
+    public func editMessage(_ messageId: Int, content: String) {
+        let connection = connection
+        Task {
+            try? await connection.editMessage(messageId: messageId, content: content)
+        }
+    }
+
+    /// The raw Zulip markdown of a message (to prefill an edit).
+    public func fetchRawContent(_ messageId: Int) async -> String? {
+        try? await connection.getRawMessageContent(messageId: messageId)
     }
 
     /// Adds fetched messages to the canonical map, applying zulip-flutter's

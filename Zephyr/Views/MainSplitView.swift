@@ -19,6 +19,7 @@ struct MainSplitView: View {
     let store: PerAccountStore
     @State private var selection: Destination?
     @State private var search: SidebarSearchModel
+    @State private var showNewConversation = false
 
     init(store: PerAccountStore) {
         self.store = store
@@ -48,6 +49,15 @@ struct MainSplitView: View {
             })
         .toolbar {
             ToolbarItem(placement: .automatic) {
+                Button {
+                    showNewConversation = true
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                .help("New conversation (⌘N)")
+            }
+            ToolbarItem(placement: .automatic) {
                 Menu {
                     Text(model.global.accounts.first?.email ?? "")
                     Divider()
@@ -58,6 +68,9 @@ struct MainSplitView: View {
                     Image(systemName: "person.crop.circle")
                 }
             }
+        }
+        .sheet(isPresented: $showNewConversation) {
+            NewConversationSheet(store: store, selection: $selection)
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             if store.isRecoveringEventStream {

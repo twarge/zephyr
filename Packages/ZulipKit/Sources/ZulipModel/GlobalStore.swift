@@ -26,15 +26,19 @@ public final class GlobalStore: UpdateMachineDelegate {
     private let sleep: UpdateMachine.SleepFunction
     private let logger = Logger(subsystem: "com.twarge.zephyr", category: "store")
 
+    private let enablePresencePings: Bool
+
     public init(
         accountsStore: any AccountsStore,
         credentials: any CredentialStore,
         transport: any ApiTransport = URLSessionTransport.shared,
+        enablePresencePings: Bool = true,
         sleep: @escaping UpdateMachine.SleepFunction = { try await Task.sleep(for: $0) }
     ) throws {
         self.accountsStore = accountsStore
         self.credentials = credentials
         self.transport = transport
+        self.enablePresencePings = enablePresencePings
         self.sleep = sleep
         accounts = try accountsStore.load()
     }
@@ -109,7 +113,8 @@ public final class GlobalStore: UpdateMachineDelegate {
     private func installStore(_ store: PerAccountStore, for accountId: Account.ID) {
         machines[accountId]?.stop()
         stores[accountId] = store
-        let machine = UpdateMachine(store: store, delegate: self, sleep: sleep)
+        let machine = UpdateMachine(
+            store: store, delegate: self, enablePresence: enablePresencePings, sleep: sleep)
         machine.eventObserver = { [weak self] event in
             self?.eventObserver?(accountId, event)
         }

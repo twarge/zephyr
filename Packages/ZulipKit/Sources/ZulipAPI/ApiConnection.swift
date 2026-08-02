@@ -154,6 +154,10 @@ public final class ApiConnection: Sendable {
     public func send(_ request: ApiRequest) async throws -> Data {
         let urlRequest = try makeURLRequest(request)
         let (data, response) = try await transport.perform(urlRequest)
+        return try processResponse(data, response)
+    }
+
+    private func processResponse(_ data: Data, _ response: HTTPURLResponse) throws -> Data {
         if (200..<300).contains(response.statusCode) {
             return data
         }
@@ -167,6 +171,56 @@ public final class ApiConnection: Sendable {
         }
         let bodyPreview = String(data: data.prefix(500), encoding: .utf8) ?? ""
         throw ApiError(httpStatus: response.statusCode, code: "HTTP_ERROR", message: bodyPreview)
+    }
+
+    /// POST /user_uploads (multipart) — returns the upload's realm-relative
+    /// URL, for `[filename](url)` message references.
+    public func uploadFile(
+        _ fileData: Data, filename: String, mimeType: String = "application/octet-stream"
+    ) async throws -> String {
+        guard var components = URLComponents(url: realmURL, resolvingAgainstBaseURL: false) else {
+            throw ApiError(httpStatus: 0, code: "BAD_REALM_URL", message: realmURL.absoluteString)
+        }
+        components.path = "/api/v1/user_uploads"
+        guard let url = components.url else {
+            throw ApiError(httpStatus: 0, code: "BAD_REALM_URL", message: realmURL.absoluteString)
+        }
+
+        let boundary = "zephyr-\(UUID().uuidString)"
+        var body = Data()
+        body.append(Data("--\(boundary)\r\n".utf8))
+        body.append(
+            Data(
+                "Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n"
+                    .utf8))
+        body.append(Data("Content-Type: \(mimeType)\r\n\r\n".utf8))
+        body.append(fileData)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.httpBody = body
+        urlRequest.timeoutInterval = 300
+        urlRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        urlRequest.setValue(
+            "multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        if let authHeader {
+            urlRequest.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        }
+
+        struct UploadResult: Decodable {
+            var url: String?
+            var uri: String?
+        }
+        let (data, response) = try await transport.perform(urlRequest)
+        let processed = try processResponse(data, response)
+        let result = try ZulipJSON.decoder.decode(UploadResult.self, from: processed)
+        guard let path = result.url ?? result.uri else {
+            throw ApiError(
+                httpStatus: 200, code: ApiError.malformedResponseCode,
+                message: "upload response missing url")
+        }
+        return path
     }
 
     /// Sends a request and decodes the success response strictly; a decode

@@ -137,6 +137,30 @@ extension ApiConnection {
         _ = try await send(
             ApiRequest(method: .delete, path: "/api/v1/messages/\(messageId)"))
     }
+
+    /// PATCH /messages/{id} — content edit (topic/channel moves are separate).
+    public func editMessage(messageId: Int, content: String) async throws {
+        _ = try await send(
+            ApiRequest(
+                method: .patch, path: "/api/v1/messages/\(messageId)",
+                params: [Param("content", content)]))
+    }
+
+    /// GET /messages/{id} with apply_markdown=false — the raw Zulip markdown
+    /// (needed to prefill an edit).
+    public func getRawMessageContent(messageId: Int) async throws -> String {
+        struct SingleMessageResult: Decodable {
+            struct Inner: Decodable {
+                var content: String
+            }
+            var message: Inner
+        }
+        let result: SingleMessageResult = try await request(
+            ApiRequest(
+                method: .get, path: "/api/v1/messages/\(messageId)",
+                params: [Param("apply_markdown", "false")]))
+        return result.message.content
+    }
 }
 
 extension ApiConnection {
