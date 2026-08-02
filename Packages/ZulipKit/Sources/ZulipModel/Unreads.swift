@@ -30,6 +30,16 @@ public final class Unreads {
         unreadIds.values.reduce(0) { $0 + $1.count }
     }
 
+    /// Unread direct messages (for badge policies).
+    public var dmCount: Int {
+        unreadIds.reduce(0) { total, entry in
+            if case .dm = entry.key {
+                return total + entry.value.count
+            }
+            return total
+        }
+    }
+
     public func unreadCount(inChannel streamId: Int) -> Int {
         unreadIds.reduce(0) { total, entry in
             if case .topic(let id, _) = entry.key, id == streamId {

@@ -10,6 +10,10 @@ struct ZephyrApp: App {
             RootView()
                 .environment(model)
         }
+        Settings {
+            SettingsView()
+                .environment(model)
+        }
     }
 }
 
@@ -47,7 +51,7 @@ struct RootView: View {
                         }
                         .keyboardShortcut(.defaultAction)
                         Button("Sign Out") {
-                            Task { await model.signOut() }
+                            Task { await model.signOutCurrent() }
                         }
                     }
                 }

@@ -20,6 +20,9 @@ public final class GlobalStore: UpdateMachineDelegate {
 
     private var machines: [Account.ID: UpdateMachine] = [:]
     private var loadTasks: [Account.ID: Task<PerAccountStore, any Error>] = [:]
+    /// Stores built from the on-disk snapshot cache: rendered while the live
+    /// register runs, never polled (their queue is stale), always replaced.
+    private var provisionalStores: Set<Account.ID> = []
     private let accountsStore: any AccountsStore
     private let credentials: any CredentialStore
     private let transport: any ApiTransport
@@ -67,6 +70,10 @@ public final class GlobalStore: UpdateMachineDelegate {
         if let account = accounts.first(where: { $0.id == accountId }) {
             try? credentials.setAPIKey(nil, realmURL: account.realmURL, email: account.email)
         }
+        if let cacheURL = snapshotCacheURL(for: accountId) {
+            try? FileManager.default.removeItem(at: cacheURL)
+        }
+        provisionalStores.remove(accountId)
         accounts.removeAll { $0.id == accountId }
         try accountsStore.save(accounts)
         storeGeneration += 1
@@ -74,15 +81,60 @@ public final class GlobalStore: UpdateMachineDelegate {
 
     // MARK: Store lifecycle
 
+    public func hasLiveStore(_ accountId: Account.ID) -> Bool {
+        stores[accountId] != nil && !provisionalStores.contains(accountId)
+    }
+
     /// Returns the live store for an account, loading (register + machine
     /// start) on first use. Concurrent calls are deduplicated.
     public func perAccountStore(for accountId: Account.ID) async throws -> PerAccountStore {
-        if let store = stores[accountId] { return store }
+        if let store = stores[accountId], !provisionalStores.contains(accountId) {
+            return store
+        }
         if let task = loadTasks[accountId] { return try await task.value }
         let task = Task { try await self.loadStore(accountId: accountId) }
         loadTasks[accountId] = task
         defer { loadTasks[accountId] = nil }
         return try await task.value
+    }
+
+    // MARK: Warm-launch snapshot cache
+
+    private func snapshotCacheURL(for accountId: Account.ID) -> URL? {
+        guard let base = try? FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true)
+        else { return nil }
+        let directory = base
+            .appendingPathComponent("com.twarge.zephyr", isDirectory: true)
+            .appendingPathComponent("snapshots", isDirectory: true)
+        try? FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent("\(accountId.uuidString).json")
+    }
+
+    /// Builds a provisional store from the last register's cached snapshot,
+    /// so launch renders instantly ("stale → live", zulip-mobile
+    /// realtime.md). Returns false when there's nothing cached.
+    public func installCachedStore(for accountId: Account.ID) -> Bool {
+        guard stores[accountId] == nil,
+              let account = accounts.first(where: { $0.id == accountId }),
+              let apiKey = try? credentials.apiKey(
+                realmURL: account.realmURL, email: account.email),
+              let url = snapshotCacheURL(for: accountId),
+              let data = try? Data(contentsOf: url),
+              let snapshot = try? ZulipJSON.decoder.decode(InitialSnapshot.self, from: data)
+        else { return false }
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: apiKey,
+            transport: transport)
+        connection.featureLevel = snapshot.zulipFeatureLevel
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+        store.isRecoveringEventStream = true
+        stores[accountId] = store
+        provisionalStores.insert(accountId)
+        storeGeneration += 1
+        return true
     }
 
     private func loadStore(accountId: Account.ID) async throws -> PerAccountStore {
@@ -103,8 +155,12 @@ public final class GlobalStore: UpdateMachineDelegate {
         connection.featureLevel = featureLevel
         // Desktop clients poll persistently; a long idle timeout (12h, like
         // the mobile apps) makes expiry rare. Expiry is still handled.
-        let snapshot = try await connection.registerQueue(idleQueueTimeoutSeconds: 12 * 60 * 60)
+        let result = try await connection.registerQueue(idleQueueTimeoutSeconds: 12 * 60 * 60)
+        let snapshot = result.snapshot
         connection.featureLevel = snapshot.zulipFeatureLevel
+        if let cacheURL = snapshotCacheURL(for: accountId) {
+            try? result.rawData.write(to: cacheURL, options: .atomic)
+        }
         let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
         installStore(store, for: accountId)
         return store
@@ -112,6 +168,7 @@ public final class GlobalStore: UpdateMachineDelegate {
 
     private func installStore(_ store: PerAccountStore, for accountId: Account.ID) {
         machines[accountId]?.stop()
+        provisionalStores.remove(accountId)
         stores[accountId] = store
         let machine = UpdateMachine(
             store: store, delegate: self, enablePresence: enablePresencePings, sleep: sleep)

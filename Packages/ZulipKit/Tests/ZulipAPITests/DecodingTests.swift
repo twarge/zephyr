@@ -125,8 +125,8 @@ struct RouteRequestTests {
         let connection = ApiConnection(
             realmURL: URL(string: "https://test.example")!,
             email: "self@example.com", apiKey: "key", transport: transport)
-        let snapshot = try await connection.registerQueue(idleQueueTimeoutSeconds: 3600)
-        #expect(snapshot.queueId == "q9")
+        let result = try await connection.registerQueue(idleQueueTimeoutSeconds: 3600)
+        #expect(result.snapshot.queueId == "q9")
 
         let request = try #require(transport.requests.first)
         #expect(request.method == "POST")

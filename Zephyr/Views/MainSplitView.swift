@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import ZulipModel
 
@@ -59,10 +60,23 @@ struct MainSplitView: View {
             }
             ToolbarItem(placement: .automatic) {
                 Menu {
-                    Text(model.global.accounts.first?.email ?? "")
+                    ForEach(model.global.accounts) { account in
+                        Button {
+                            Task { await model.switchAccount(account.id) }
+                        } label: {
+                            if account.id == model.activeAccountId {
+                                Label(accountLabel(account), systemImage: "checkmark")
+                            } else {
+                                Text(accountLabel(account))
+                            }
+                        }
+                    }
                     Divider()
+                    SettingsLink {
+                        Text("Accounts & Settings…")
+                    }
                     Button("Sign Out…") {
-                        Task { await model.signOut() }
+                        Task { await model.signOutCurrent() }
                     }
                 } label: {
                     Image(systemName: "person.crop.circle")
@@ -71,6 +85,22 @@ struct MainSplitView: View {
         }
         .sheet(isPresented: $showNewConversation) {
             NewConversationSheet(store: store, selection: $selection)
+        }
+        .onChange(of: selection) {
+            if case .conversation(let key) = selection {
+                model.activeConversation = key
+            } else {
+                model.activeConversation = nil
+            }
+        }
+        .onChange(of: model.pendingDestination) {
+            if let destination = model.pendingDestination {
+                selection = destination
+                model.pendingDestination = nil
+            }
+        }
+        .onChange(of: badgeCount, initial: true) {
+            NSApp.dockTile.badgeLabel = badgeCount > 0 ? "\(badgeCount)" : ""
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             if store.isRecoveringEventStream {
@@ -81,6 +111,23 @@ struct MainSplitView: View {
                     .background(.yellow.opacity(0.2), in: .rect)
             }
         }
+    }
+
+    @AppStorage("badgePolicy") private var badgePolicy = BadgePolicy.dmsAndMentions.rawValue
+
+    private var badgeCount: Int {
+        switch BadgePolicy(rawValue: badgePolicy) ?? .dmsAndMentions {
+        case .dmsAndMentions:
+            store.unreads.dmCount + store.unreads.mentionIds.count
+        case .allUnreads:
+            store.unreads.totalCount
+        case .none:
+            0
+        }
+    }
+
+    private func accountLabel(_ account: Account) -> String {
+        "\(account.realmName ?? account.realmURL.host() ?? "?") — \(account.email)"
     }
 
     @ViewBuilder

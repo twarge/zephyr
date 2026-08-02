@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import ZulipAPI
 import ZulipModel
@@ -350,6 +351,9 @@ struct ComposeBar: View {
         store.typingStopped(in: destination)
         text = ""
         DraftStore.shared.setDraft("", for: destination)
+        if UserDefaults.standard.object(forKey: "playSendSound") as? Bool ?? true {
+            NSSound(named: "Pop")?.play()
+        }
     }
 }
 

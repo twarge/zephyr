@@ -37,8 +37,11 @@ extension ApiConnection {
     /// POST /register — creates the event queue and returns the initial
     /// snapshot. `apply_markdown: true` (content arrives as rendered HTML).
     /// The response can be tens of megabytes on large realms even filtered,
-    /// hence the long timeout.
-    public func registerQueue(idleQueueTimeoutSeconds: Int? = nil) async throws -> InitialSnapshot {
+    /// hence the long timeout. The raw bytes ride along for the warm-launch
+    /// snapshot cache.
+    public func registerQueue(
+        idleQueueTimeoutSeconds: Int? = nil
+    ) async throws -> (snapshot: InitialSnapshot, rawData: Data) {
         var params: [Param] = [
             Param("apply_markdown", "true"),
             Param("client_gravatar", "false"),
@@ -49,8 +52,15 @@ extension ApiConnection {
         if let idleQueueTimeoutSeconds, (featureLevel ?? 0) >= 481 {
             params.append(Param("idle_queue_timeout", String(idleQueueTimeoutSeconds)))
         }
-        return try await request(
+        let data = try await send(
             ApiRequest(method: .post, path: "/api/v1/register", params: params, timeout: 300))
+        do {
+            return (try ZulipJSON.decoder.decode(InitialSnapshot.self, from: data), data)
+        } catch {
+            throw ApiError(
+                httpStatus: 200, code: ApiError.malformedResponseCode,
+                message: "decoding InitialSnapshot from /api/v1/register: \(error)")
+        }
     }
 
     /// GET /events — the long poll. `timeoutSeconds` should exceed the
