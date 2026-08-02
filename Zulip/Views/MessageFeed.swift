@@ -135,11 +135,32 @@ struct MessageFeedList: View {
     }
 }
 
+/// A recipient bar in the web app's style: full-width, tinted with the
+/// channel's color, leading colored channel glyph.
 private struct ConversationHeaderRow: View {
     let store: PerAccountStore
     let conversationKey: ConversationKey
     let includeChannel: Bool
     let onTap: ((ConversationKey) -> Void)?
+
+    private var streamId: Int? {
+        if case .topic(let id, _) = conversationKey { return id }
+        return nil
+    }
+
+    private var channelColor: Color {
+        guard let streamId else { return .gray }
+        return store.subscriptions[streamId]?.color.flatMap(Color.init(zulipHex:))
+            ?? .stableColor(for: streamId)
+    }
+
+    private var glyph: String {
+        guard let streamId else { return "person.fill" }
+        let stream = store.channels[streamId]
+        if stream?.inviteOnly == true { return "lock.fill" }
+        if stream?.isWebPublic == true { return "globe" }
+        return "number"
+    }
 
     private var isResolved: Bool {
         if case .topic(_, let topic) = conversationKey {
@@ -156,7 +177,7 @@ private struct ConversationHeaderRow: View {
             guard includeChannel else { return display }
             let channel = store.channels[streamId]?.name
                 ?? store.subscriptions[streamId]?.name ?? "?"
-            return "#\(channel) › \(display)"
+            return "\(channel) › \(display)"
         case .dm:
             return conversationKey.displayTitle(in: store)
         }
@@ -166,12 +187,10 @@ private struct ConversationHeaderRow: View {
         Button {
             onTap?(conversationKey)
         } label: {
-            HStack(spacing: 6) {
-                if case .dm = conversationKey {
-                    Image(systemName: "person.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            HStack(spacing: 7) {
+                Image(systemName: glyph)
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(streamId == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(channelColor))
                 if isResolved {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
@@ -185,9 +204,14 @@ private struct ConversationHeaderRow: View {
                     .foregroundStyle(.tertiary)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                streamId == nil
+                    ? AnyShapeStyle(.quaternary.opacity(0.45))
+                    : AnyShapeStyle(channelColor.opacity(0.16)),
+                in: RoundedRectangle(cornerRadius: 6))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
