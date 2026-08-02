@@ -5,23 +5,24 @@ import ZulipModel
 
 /// The sidebar, modeled on the Zulip web app's: a Views section (smart
 /// lists), compact Direct Messages, then channels grouped by folder with
-/// unread count badges — with a filter field on top.
+/// unread count badges — topped by the dual-role filter/search field
+/// (state shared with the suggestions panel via SidebarSearchModel).
 struct SidebarView: View {
     let store: PerAccountStore
+    @Bindable var search: SidebarSearchModel
     @Binding var selection: Destination?
 
-    @State private var filterText = ""
-    @State private var searchTokens: [SearchToken] = []
     @State private var collapsedSections: Set<String> = []
     @State private var expandedChannels: Set<Int> = []
-    @State private var channelTopics: [Int: [ChannelTopic]] = [:]
-    @State private var allTopicsLoaded = false
-    @State private var loadingAllTopics = false
 
     private static let maxInlineTopics = 10
 
     private var isFiltering: Bool {
-        !filterText.trimmingCharacters(in: .whitespaces).isEmpty
+        search.isFiltering
+    }
+
+    private var filterText: String {
+        search.filterText
     }
 
     private func matchesFilter(_ name: String) -> Bool {
@@ -67,39 +68,13 @@ struct SidebarView: View {
     private func visibleChannels(_ channels: [Subscription]) -> [(Subscription, [ChannelTopic])] {
         channels.compactMap { subscription in
             guard isFiltering else { return (subscription, []) }
-            let topicMatches = (channelTopics[subscription.streamId] ?? []).filter { topic in
+            let topicMatches = (search.channelTopics[subscription.streamId] ?? []).filter { topic in
                 TopicName.displayName(topic.name).localizedCaseInsensitiveContains(filterText)
             }
             if subscription.name.localizedCaseInsensitiveContains(filterText) || !topicMatches.isEmpty {
                 return (subscription, topicMatches)
             }
             return nil
-        }
-    }
-
-    /// The filter matches against topics of every subscribed channel, so the
-    /// first filter use fetches them all (bounded concurrency, cached for
-    /// the session; per-channel expands keep their own lists fresher).
-    private func loadAllTopicsIfNeeded() {
-        guard isFiltering, !allTopicsLoaded, !loadingAllTopics else { return }
-        loadingAllTopics = true
-        let connection = store.connection
-        let ids = store.subscriptions.keys.filter { channelTopics[$0] == nil }
-        Task {
-            for chunk in ids.chunks(of: 5) {
-                await withTaskGroup(of: (Int, [ChannelTopic]).self) { group in
-                    for streamId in chunk {
-                        group.addTask {
-                            (streamId, (try? await connection.getTopics(streamId: streamId)) ?? [])
-                        }
-                    }
-                    for await (streamId, topics) in group {
-                        channelTopics[streamId] = topics
-                    }
-                }
-            }
-            allTopicsLoaded = true
-            loadingAllTopics = false
         }
     }
 
@@ -137,87 +112,39 @@ struct SidebarView: View {
                     title: "Other channels", id: "folder-none",
                     channels: channels(inFolder: nil))
             }
-            if isFiltering && loadingAllTopics {
+            if isFiltering && search.loadingAllTopics {
                 Label("Searching topics…", systemImage: "ellipsis")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
         }
         .listStyle(.sidebar)
-        // One field, two roles: typing filters the sidebar live; suggestions
-        // commit to token bubbles (which search immediately); Return searches
-        // the free text server-side, results in the main view.
+        // One field, two roles: typing filters the sidebar live (suggestions
+        // float beside the sidebar — see SearchSuggestionsPanel); committed
+        // tokens search immediately; Return searches the free text.
         .searchable(
-            text: $filterText, tokens: $searchTokens,
+            text: $search.filterText, tokens: $search.tokens,
             placement: .sidebar, prompt: "Filter or search"
         ) { token in
             Text(token.bubbleText)
         }
-        .searchSuggestions {
-            ForEach(tokenSuggestions) { token in
-                Label(token.suggestionTitle, systemImage: token.suggestionIcon)
-                    .searchCompletion(token)
-            }
-        }
         .onSubmit(of: .search) {
             runSearch()
         }
-        .onChange(of: searchTokens) {
-            if !searchTokens.isEmpty {
+        .onChange(of: search.tokens) {
+            if !search.tokens.isEmpty {
                 runSearch()
             }
         }
-        .onChange(of: filterText) {
-            loadAllTopicsIfNeeded()
+        .onChange(of: search.filterText) {
+            search.loadAllTopicsIfNeeded()
         }
     }
 
     private func runSearch() {
-        let query = SearchQuery(tokens: searchTokens, text: filterText)
+        let query = SearchQuery(tokens: search.tokens, text: search.filterText)
         guard !query.isEmpty else { return }
         selection = .search(query)
-    }
-
-    /// Typeahead: channels, topics (from the loaded cache), people, and flag
-    /// filters matching the typed text — excluding already-committed tokens.
-    private var tokenSuggestions: [SearchToken] {
-        let text = filterText.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return [] }
-        var result: [SearchToken] = []
-
-        result += sortedSubscriptions.lazy
-            .filter { $0.name.localizedCaseInsensitiveContains(text) }
-            .prefix(4)
-            .map { SearchToken.channel(streamId: $0.streamId, name: $0.name) }
-
-        var seenTopics = Set<String>()
-        var topicTokens: [SearchToken] = []
-        outer: for topics in channelTopics.values {
-            for topic in topics
-            where TopicName.displayName(topic.name).localizedCaseInsensitiveContains(text) {
-                if seenTopics.insert(topic.name.lowercased()).inserted {
-                    topicTokens.append(.topic(topic.name))
-                    if topicTokens.count >= 4 { break outer }
-                }
-            }
-        }
-        result += topicTokens
-
-        let people = Array(
-            store.users.values.lazy
-                .filter { $0.isActive != false && $0.fullName.localizedCaseInsensitiveContains(text) }
-                .prefix(3))
-        result += people.map { SearchToken.sender(userId: $0.userId, name: $0.fullName) }
-        result += people.lazy.filter { !$0.isBot }.prefix(2)
-            .map { SearchToken.dm(userId: $0.userId, name: $0.fullName) }
-
-        if text.count >= 3, "starred".localizedCaseInsensitiveContains(text) {
-            result.append(.starred)
-        }
-        if text.count >= 3, "mentions".localizedCaseInsensitiveContains(text) {
-            result.append(.mentioned)
-        }
-        return result.filter { !searchTokens.contains($0) }
     }
 
     @ViewBuilder
@@ -248,7 +175,7 @@ struct SidebarView: View {
 
     @ViewBuilder
     private func topicRows(for streamId: Int) -> some View {
-        if let topics = channelTopics[streamId] {
+        if let topics = search.channelTopics[streamId] {
             ForEach(topics.prefix(Self.maxInlineTopics), id: \.name) { topic in
                 SidebarTopicRow(store: store, streamId: streamId, topic: topic)
                     .tag(Destination.conversation(
@@ -278,11 +205,7 @@ struct SidebarView: View {
         }
         // Refresh on every expand — topics move fast on active channels.
         if expandedChannels.contains(streamId) {
-            Task {
-                if let topics = try? await store.connection.getTopics(streamId: streamId) {
-                    channelTopics[streamId] = topics
-                }
-            }
+            search.refreshTopics(streamId)
         }
     }
 
@@ -490,14 +413,6 @@ struct ChannelBadge: View {
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(color.gradient, in: .circle)
-    }
-}
-
-extension Array {
-    fileprivate func chunks(of size: Int) -> [[Element]] {
-        stride(from: 0, to: count, by: size).map {
-            Array(self[$0..<Swift.min($0 + size, count)])
-        }
     }
 }
 

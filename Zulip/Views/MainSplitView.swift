@@ -18,47 +18,24 @@ struct MainSplitView: View {
     @Environment(AppModel.self) private var model
     let store: PerAccountStore
     @State private var selection: Destination?
+    @State private var search: SidebarSearchModel
+
+    init(store: PerAccountStore) {
+        self.store = store
+        _search = State(initialValue: SidebarSearchModel(store: store))
+    }
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(store: store, selection: $selection)
+            SidebarView(store: store, search: search, selection: $selection)
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 400)
         } detail: {
-            switch selection {
-            case .conversation(let key):
-                TranscriptView(store: store, conversation: key, selection: $selection)
-                    .id(key)
-            case .channel(let streamId):
-                ChannelFeedView(store: store, streamId: streamId, selection: $selection)
-                    .id(streamId)
-            case .channelTopics(let streamId):
-                ChannelTopicsView(store: store, streamId: streamId, selection: $selection)
-                    .id(streamId)
-            case .combinedFeed:
-                NarrowFeedView(
-                    store: store, title: "Combined feed", narrow: .combinedFeed,
-                    selection: $selection)
-                    .id(Destination.combinedFeed)
-            case .mentions:
-                NarrowFeedView(
-                    store: store, title: "Mentions", narrow: .mentions, selection: $selection)
-                    .id(Destination.mentions)
-            case .starred:
-                NarrowFeedView(
-                    store: store, title: "Starred messages", narrow: .starred,
-                    selection: $selection)
-                    .id(Destination.starred)
-            case .search(let query):
-                NarrowFeedView(
-                    store: store, title: "Search: \(query.displayDescription)",
-                    narrow: .custom(query.narrowElements), selection: $selection)
-                    .id(query)
-            case nil:
-                ContentUnavailableView(
-                    "No Conversation Selected",
-                    systemImage: "bubble.left.and.bubble.right",
-                    description: Text("Choose a conversation from the sidebar."))
-            }
+            detailContent
+                // Suggestions float beside the sidebar rather than covering
+                // its filtered rows.
+                .overlay(alignment: .topLeading) {
+                    SearchSuggestionsPanel(search: search)
+                }
         }
         .navigationTitle(store.realmName ?? "Zulip")
         // Channel/topic/message links inside message content navigate in-app.
@@ -94,6 +71,47 @@ struct MainSplitView: View {
                     .padding(.vertical, 4)
                     .frame(maxWidth: .infinity)
                     .background(.yellow.opacity(0.2), in: .rect)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var detailContent: some View {
+        Group {
+            switch selection {
+            case .conversation(let key):
+                TranscriptView(store: store, conversation: key, selection: $selection)
+                    .id(key)
+            case .channel(let streamId):
+                ChannelFeedView(store: store, streamId: streamId, selection: $selection)
+                    .id(streamId)
+            case .channelTopics(let streamId):
+                ChannelTopicsView(store: store, streamId: streamId, selection: $selection)
+                    .id(streamId)
+            case .combinedFeed:
+                NarrowFeedView(
+                    store: store, title: "Combined feed", narrow: .combinedFeed,
+                    selection: $selection)
+                    .id(Destination.combinedFeed)
+            case .mentions:
+                NarrowFeedView(
+                    store: store, title: "Mentions", narrow: .mentions, selection: $selection)
+                    .id(Destination.mentions)
+            case .starred:
+                NarrowFeedView(
+                    store: store, title: "Starred messages", narrow: .starred,
+                    selection: $selection)
+                    .id(Destination.starred)
+            case .search(let query):
+                NarrowFeedView(
+                    store: store, title: "Search: \(query.displayDescription)",
+                    narrow: .custom(query.narrowElements), selection: $selection)
+                    .id(query)
+            case nil:
+                ContentUnavailableView(
+                    "No Conversation Selected",
+                    systemImage: "bubble.left.and.bubble.right",
+                    description: Text("Choose a conversation from the sidebar."))
             }
         }
     }
