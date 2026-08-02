@@ -8,6 +8,7 @@ import ZulipModel
 struct TranscriptView: View {
     let store: PerAccountStore
     let conversation: ConversationKey
+    @Binding var selection: Destination?
 
     @State private var model: MessageListModel?
     @State private var cache = MessageContentCache()
@@ -22,6 +23,23 @@ struct TranscriptView: View {
             }
         }
         .navigationTitle(conversation.displayTitle(in: store))
+        .toolbar {
+            if case .topic(let streamId, let topic) = conversation {
+                ToolbarItemGroup(placement: .automatic) {
+                    if TopicName.isResolved(topic) {
+                        Label("Resolved", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .labelStyle(.titleAndIcon)
+                    }
+                    Button {
+                        selection = .channel(streamId: streamId)
+                    } label: {
+                        Text("#\(store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel")")
+                    }
+                    .help("Show all topics in this channel")
+                }
+            }
+        }
         .task {
             guard model == nil else { return }
             let list = MessageListModel(store: store, narrow: conversation.narrow)
@@ -37,6 +55,13 @@ private struct TranscriptList: View {
     let model: MessageListModel
     let cache: MessageContentCache
     let conversation: ConversationKey
+
+    /// The scroll anchor: tracks the bottom-most visible row, which keeps the
+    /// viewport stable when history is prepended (the anchored row stays
+    /// put), and is advanced manually to stick to new messages when the user
+    /// is already at the bottom.
+    @State private var anchorId: String?
+    @State private var nearBottom = true
 
     private enum Item: Identifiable {
         case daySeparator(String)
@@ -61,7 +86,7 @@ private struct TranscriptList: View {
             let date = Date(timeIntervalSince1970: TimeInterval(message.timestamp))
             let day = Calendar.current.dateComponents([.year, .month, .day], from: date)
             if day != lastDay {
-                out.append(.daySeparator(date.formatted(date: .abbreviated, time: .omitted)))
+                out.append(.daySeparator(daySeparatorLabel(for: date)))
                 lastDay = day
                 lastSender = nil
             }
@@ -104,11 +129,25 @@ private struct TranscriptList: View {
                         .padding(.top, 60)
                 }
             }
+            .scrollTargetLayout()
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
         }
         .defaultScrollAnchor(.bottom)
-        .onChange(of: model.messages.count) {
+        .scrollPosition(id: $anchorId, anchor: .bottom)
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentSize.height - geometry.visibleRect.maxY < 60
+        } action: { _, isNear in
+            nearBottom = isNear
+        }
+        .onAppear {
+            anchorId = items.last?.id
+        }
+        .onChange(of: model.messages.last?.id) { _, newLastId in
+            guard let newLastId else { return }
+            if nearBottom {
+                anchorId = "msg-\(newLastId)"
+            }
             // New arrivals while the conversation is open are read.
             store.markConversationRead(conversation)
         }
@@ -124,8 +163,7 @@ private struct MessageRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             if showHeader {
-                InitialsAvatar(
-                    name: message.senderFullName, seed: message.senderId, size: 32)
+                AvatarView(store: store, userId: message.senderId, size: 32)
                     .padding(.top, 10)
             } else {
                 Color.clear.frame(width: 32, height: 1)

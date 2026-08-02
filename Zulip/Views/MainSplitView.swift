@@ -1,21 +1,32 @@
 import SwiftUI
 import ZulipModel
 
+/// What the detail column shows: a conversation transcript, or a channel's
+/// topic list.
+enum Destination: Hashable {
+    case conversation(ConversationKey)
+    case channel(streamId: Int)
+}
+
 /// The Messages-style main window: unified conversation sidebar + transcript.
 struct MainSplitView: View {
     @Environment(AppModel.self) private var model
     let store: PerAccountStore
-    @State private var selection: ConversationKey?
+    @State private var selection: Destination?
 
     var body: some View {
         NavigationSplitView {
             SidebarView(store: store, selection: $selection)
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 400)
         } detail: {
-            if let selection {
-                TranscriptView(store: store, conversation: selection)
-                    .id(selection)
-            } else {
+            switch selection {
+            case .conversation(let key):
+                TranscriptView(store: store, conversation: key, selection: $selection)
+                    .id(key)
+            case .channel(let streamId):
+                ChannelTopicsView(store: store, streamId: streamId, selection: $selection)
+                    .id(streamId)
+            case nil:
                 ContentUnavailableView(
                     "No Conversation Selected",
                     systemImage: "bubble.left.and.bubble.right",
@@ -23,6 +34,19 @@ struct MainSplitView: View {
             }
         }
         .navigationTitle(store.realmName ?? "Zulip")
+        // Channel/topic/message links inside message content navigate in-app.
+        .environment(
+            \.openURL,
+            OpenURLAction { url in
+                guard let link = InternalLink(appURL: url) else { return .systemAction }
+                switch link {
+                case .channel(let streamId):
+                    selection = .channel(streamId: streamId)
+                case .topic(let streamId, let topic, _):
+                    selection = .conversation(.topic(streamId: streamId, topic: topic))
+                }
+                return .handled
+            })
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Menu {

@@ -196,6 +196,35 @@ public final class ApiConnection: Sendable {
         }
     }
 
+    /// An authenticated URLRequest for fetching media (avatars, uploads) with
+    /// `mediaSession`. Not for API endpoints — use `request(_:)`.
+    public func authorizedURLRequest(path: String, timeout: Double = 60) throws -> URLRequest {
+        try makeURLRequest(ApiRequest(method: .get, path: path, timeout: timeout))
+    }
+
+    /// Session for media fetches: follows redirects but strips the
+    /// Authorization header when redirected — Zulip Cloud redirects
+    /// `/user_uploads/…` and `/avatar/…` to S3-backed CDNs, which reject
+    /// requests that still carry basic auth.
+    public static let mediaSession: URLSession = URLSession(
+        configuration: .ephemeral,
+        delegate: AuthRedirectStripper(),
+        delegateQueue: nil)
+
+    private final class AuthRedirectStripper: NSObject, URLSessionTaskDelegate {
+        func urlSession(
+            _ session: URLSession,
+            task: URLSessionTask,
+            willPerformHTTPRedirection response: HTTPURLResponse,
+            newRequest request: URLRequest,
+            completionHandler: @escaping (URLRequest?) -> Void
+        ) {
+            var stripped = request
+            stripped.setValue(nil, forHTTPHeaderField: "Authorization")
+            completionHandler(stripped)
+        }
+    }
+
     private func makeURLRequest(_ request: ApiRequest) throws -> URLRequest {
         guard var components = URLComponents(url: realmURL, resolvingAgainstBaseURL: false) else {
             throw ApiError(httpStatus: 0, code: "BAD_REALM_URL", message: realmURL.absoluteString)

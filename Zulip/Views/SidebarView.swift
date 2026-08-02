@@ -14,7 +14,7 @@ struct SidebarView: View {
     }
 
     let store: PerAccountStore
-    @Binding var selection: ConversationKey?
+    @Binding var selection: Destination?
     @State private var scope = Scope.all
 
     private var rows: [ConversationList.Conversation] {
@@ -41,7 +41,7 @@ struct SidebarView: View {
         List(selection: $selection) {
             ForEach(rows) { conversation in
                 ConversationRow(store: store, conversation: conversation)
-                    .tag(conversation.key)
+                    .tag(Destination.conversation(conversation.key))
             }
         }
         .listStyle(.sidebar)
@@ -88,8 +88,16 @@ struct ConversationRow: View {
             return names.joined(separator: ", ")
         case .topic(let streamId, let topic):
             let channel = store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name
-            return topic.isEmpty ? (channel.map { "#\($0)" } ?? "topic") : topic
+            let display = TopicName.displayName(topic)
+            return display.isEmpty ? (channel.map { "#\($0)" } ?? "topic") : display
         }
+    }
+
+    private var isResolved: Bool {
+        if case .topic(_, let topic) = conversation.key {
+            return TopicName.isResolved(topic)
+        }
+        return false
     }
 
     private var subtitleChannel: String? {
@@ -112,6 +120,11 @@ struct ConversationRow: View {
             ConversationAvatar(store: store, key: conversation.key)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
+                    if isResolved {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .font(.caption)
+                    }
                     Text(title)
                         .font(.body.weight(unreadCount > 0 ? .semibold : .regular))
                         .lineLimit(1)
@@ -180,20 +193,8 @@ struct ConversationAvatar: View {
                 .background(color.gradient, in: .circle)
         case .dm(let joined):
             let ids = joined.split(separator: ",").compactMap { Int($0) }
-            let name = ids.first.flatMap { store.users[$0]?.fullName } ?? "?"
-            Text(Self.initials(name))
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 34, height: 34)
-                .background(Color.stableColor(for: ids.first ?? 0).gradient, in: .circle)
+            AvatarView(store: store, userId: ids.first ?? store.selfUserId, size: 34)
         }
-    }
-
-    private static func initials(_ name: String) -> String {
-        let parts = name.split(separator: " ")
-        let first = parts.first?.first.map(String.init) ?? "?"
-        let last = parts.dropFirst().first?.first.map(String.init) ?? ""
-        return (first + last).uppercased()
     }
 }
 

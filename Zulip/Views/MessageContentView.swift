@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import ZulipAPI
 import ZulipContent
+import ZulipModel
 
 /// Renders a parsed message AST natively: one view per block node, inline
 /// runs as a single AttributedString per paragraph (ARCHITECTURE §5).
@@ -190,16 +191,19 @@ private struct MessageImageView: View {
     }
 
     private func load() async {
+        // mediaSession strips the auth header when the server redirects to a
+        // CDN (Zulip Cloud serves uploads from S3, which rejects basic auth).
         let src = node.src
+        let request: URLRequest?
         if src.hasPrefix("http") {
-            guard let url = URL(string: src),
-                  let (data, _) = try? await URLSession.shared.data(from: url) else { return }
-            image = NSImage(data: data)
+            request = URL(string: src).map { URLRequest(url: $0) }
         } else {
-            guard let data = try? await connection.send(ApiRequest(method: .get, path: src))
-            else { return }
-            image = NSImage(data: data)
+            request = try? connection.authorizedURLRequest(path: src)
         }
+        guard let request,
+              let (data, _) = try? await ApiConnection.mediaSession.data(for: request)
+        else { return }
+        image = NSImage(data: data)
     }
 }
 
@@ -247,7 +251,15 @@ enum InlineRenderer {
                 out += styled(code, nested)
             case .link(let link):
                 var nested = style
-                nested.link = URL(string: link.href, relativeTo: realmURL)?.absoluteURL
+                // Channel/topic/message links navigate in-app when parseable
+                // (MainSplitView's OpenURLAction decodes the custom scheme).
+                if link.kind != .plain,
+                   let internalLink = InternalLink.parse(href: link.href, realmURL: realmURL),
+                   let appURL = internalLink.appURL {
+                    nested.link = appURL
+                } else {
+                    nested.link = URL(string: link.href, relativeTo: realmURL)?.absoluteURL
+                }
                 append(link.text, style: nested, realmURL: realmURL, into: &out)
             case .mention(let mention):
                 var nested = style
