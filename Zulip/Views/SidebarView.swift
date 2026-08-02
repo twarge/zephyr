@@ -14,6 +14,8 @@ struct SidebarView: View {
     @State private var collapsedSections: Set<String> = []
     @State private var expandedChannels: Set<Int> = []
     @State private var channelTopics: [Int: [ChannelTopic]] = [:]
+    @State private var allTopicsLoaded = false
+    @State private var loadingAllTopics = false
 
     private static let maxInlineTopics = 10
 
@@ -46,7 +48,6 @@ struct SidebarView: View {
 
     private var sortedSubscriptions: [Subscription] {
         store.subscriptions.values
-            .filter { matchesFilter($0.name) }
             .sorted { a, b in
                 let aPinned = a.pinToTop ?? false
                 let bPinned = b.pinToTop ?? false
@@ -58,6 +59,47 @@ struct SidebarView: View {
 
     private func channels(inFolder folderId: Int?) -> [Subscription] {
         sortedSubscriptions.filter { store.channels[$0.streamId]?.folderId == folderId }
+    }
+
+    /// The channels to show (with, while filtering, their matching topics):
+    /// a channel is visible when its name matches or any of its topics do.
+    private func visibleChannels(_ channels: [Subscription]) -> [(Subscription, [ChannelTopic])] {
+        channels.compactMap { subscription in
+            guard isFiltering else { return (subscription, []) }
+            let topicMatches = (channelTopics[subscription.streamId] ?? []).filter { topic in
+                TopicName.displayName(topic.name).localizedCaseInsensitiveContains(filterText)
+            }
+            if subscription.name.localizedCaseInsensitiveContains(filterText) || !topicMatches.isEmpty {
+                return (subscription, topicMatches)
+            }
+            return nil
+        }
+    }
+
+    /// The filter matches against topics of every subscribed channel, so the
+    /// first filter use fetches them all (bounded concurrency, cached for
+    /// the session; per-channel expands keep their own lists fresher).
+    private func loadAllTopicsIfNeeded() {
+        guard isFiltering, !allTopicsLoaded, !loadingAllTopics else { return }
+        loadingAllTopics = true
+        let connection = store.connection
+        let ids = store.subscriptions.keys.filter { channelTopics[$0] == nil }
+        Task {
+            for chunk in ids.chunks(of: 5) {
+                await withTaskGroup(of: (Int, [ChannelTopic]).self) { group in
+                    for streamId in chunk {
+                        group.addTask {
+                            (streamId, (try? await connection.getTopics(streamId: streamId)) ?? [])
+                        }
+                    }
+                    for await (streamId, topics) in group {
+                        channelTopics[streamId] = topics
+                    }
+                }
+            }
+            allTopicsLoaded = true
+            loadingAllTopics = false
+        }
     }
 
     var body: some View {
@@ -94,23 +136,38 @@ struct SidebarView: View {
                     title: "Other channels", id: "folder-none",
                     channels: channels(inFolder: nil))
             }
+            if isFiltering && loadingAllTopics {
+                Label("Searching topics…", systemImage: "ellipsis")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
         }
         .listStyle(.sidebar)
         .searchable(text: $filterText, placement: .sidebar, prompt: "Filter")
+        .onChange(of: filterText) {
+            loadAllTopicsIfNeeded()
+        }
     }
 
     @ViewBuilder
     private func channelSection(title: String, id: String, channels: [Subscription]) -> some View {
-        if !channels.isEmpty {
+        let visible = visibleChannels(channels)
+        if !visible.isEmpty {
             Section(title, isExpanded: expansion(id)) {
-                ForEach(channels) { subscription in
+                ForEach(visible, id: \.0.id) { subscription, topicMatches in
                     let streamId = subscription.streamId
                     ChannelRow(
                         store: store, subscription: subscription,
                         isExpanded: expandedChannels.contains(streamId),
                         onToggle: isFiltering ? nil : { toggleChannel(streamId) })
                         .tag(Destination.channel(streamId: streamId))
-                    if !isFiltering, expandedChannels.contains(streamId) {
+                    if isFiltering {
+                        ForEach(topicMatches.prefix(8), id: \.name) { topic in
+                            SidebarTopicRow(store: store, streamId: streamId, topic: topic)
+                                .tag(Destination.conversation(
+                                    .topic(streamId: streamId, topic: topic.name)))
+                        }
+                    } else if expandedChannels.contains(streamId) {
                         topicRows(for: streamId)
                     }
                 }
@@ -362,6 +419,14 @@ struct ChannelBadge: View {
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(color.gradient, in: .circle)
+    }
+}
+
+extension Array {
+    fileprivate func chunks(of size: Int) -> [[Element]] {
+        stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
+        }
     }
 }
 
