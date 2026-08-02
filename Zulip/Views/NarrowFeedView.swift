@@ -8,6 +8,7 @@ struct NarrowFeedView: View {
     let store: PerAccountStore
     let title: String
     let narrow: Narrow
+    var useMatchHighlights = false
     @Binding var selection: Destination?
 
     @State private var model: MessageListModel?
@@ -25,6 +26,7 @@ struct NarrowFeedView: View {
                     MessageFeedList(
                         store: store, model: model, cache: cache,
                         headerMode: .channelAndTopic,
+                        useMatchHighlights: useMatchHighlights,
                         onHeaderTap: { key in
                             selection = .conversation(key)
                         })

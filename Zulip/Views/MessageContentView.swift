@@ -216,6 +216,7 @@ enum InlineRenderer {
         var link: URL?
         var isMention = false
         var isSecondary = false
+        var isHighlight = false
     }
 
     static func attributed(_ inlines: [InlineNode], realmURL: URL) -> AttributedString {
@@ -273,6 +274,10 @@ enum InlineRenderer {
                 var nested = style
                 nested.intents.insert(.code)
                 out += styled(tex, nested)
+            case .highlight(let children):
+                var nested = style
+                nested.isHighlight = true
+                append(children, style: nested, realmURL: realmURL, into: &out)
             case .globalTime(let datetime):
                 let display = ISO8601DateFormatter().date(from: datetime)
                     .map { $0.formatted(date: .abbreviated, time: .shortened) } ?? datetime
@@ -301,6 +306,9 @@ enum InlineRenderer {
         }
         if style.isSecondary {
             attributed.foregroundColor = .secondary
+        }
+        if style.isHighlight {
+            attributed.backgroundColor = Color.yellow.opacity(0.4)
         }
         return attributed
     }

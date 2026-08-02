@@ -100,7 +100,8 @@ struct MainSplitView: View {
             case .search(let query):
                 NarrowFeedView(
                     store: store, title: "Search: \(query.displayDescription)",
-                    narrow: .custom(query.narrowElements), selection: $selection)
+                    narrow: .custom(query.narrowElements),
+                    useMatchHighlights: true, selection: $selection)
                     .id(query)
             case nil:
                 ContentUnavailableView(

@@ -56,6 +56,10 @@ public struct Message: Decodable, Sendable, Identifiable {
     /// carries flags at its top level).
     public var flags: [String]?
     public var lastEditTimestamp: Int?
+    /// For `search` narrows only: the content/topic with matched terms
+    /// wrapped in `<span class="highlight">`.
+    public var matchContent: String?
+    public var matchSubject: String?
 
     public var topic: String { subject }
 }

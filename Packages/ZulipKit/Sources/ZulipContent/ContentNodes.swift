@@ -42,6 +42,8 @@ public indirect enum InlineNode: Sendable, Equatable {
     case inlineMath(tex: String)
     /// `<time datetime="…">` — rendered as a localized time chip.
     case globalTime(datetime: String)
+    /// A search-match run (`span.highlight` in `match_content`).
+    case highlight([InlineNode])
     case unimplemented(html: String)
 }
 
@@ -125,7 +127,8 @@ extension InlineNode {
         switch self {
         case .text(let text): text
         case .lineBreak: " "
-        case .strong(let children), .emphasis(let children), .strikethrough(let children):
+        case .strong(let children), .emphasis(let children), .strikethrough(let children),
+             .highlight(let children):
             children.map(\.plainText).joined()
         case .inlineCode(let code): code
         case .link(let link): link.text.map(\.plainText).joined()

@@ -192,6 +192,19 @@ struct ContentParserTests {
         }
     }
 
+    @Test func searchMatchHighlight() {
+        let content = ContentParser.parse(
+            html: #"<p>I tested this on <span class="highlight">Android</span> today</p>"#)
+        #expect(content.blocks == [
+            .paragraph([
+                .text("I tested this on "),
+                .highlight([.text("Android")]),
+                .text(" today"),
+            ])
+        ])
+        #expect(content.plainText == "I tested this on Android today")
+    }
+
     @Test func plainTextFlattening() {
         let content = ContentParser.parse(
             html: #"<p>look <strong>at</strong> <span class="emoji emoji-263a" title="s">:s:</span></p><div class="codehilite"><pre><code>x = 1</code></pre></div>"#)

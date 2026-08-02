@@ -253,6 +253,9 @@ public enum ContentParser {
             let name = element.ownTextTrimmed.trimmingCharacters(in: CharacterSet(charactersIn: ":"))
             return .emoji(.unicode(character, name: name))
 
+        case "span" where classes.contains("highlight"):
+            return .highlight(parseInlines(element.getChildNodes()))
+
         case "span" where classes.contains("katex"):
             guard let tex = katexSource(element) else {
                 return .unimplemented(html: outerHTML(element))

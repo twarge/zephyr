@@ -1,5 +1,6 @@
 import SwiftUI
 import ZulipAPI
+import ZulipContent
 import ZulipModel
 
 /// The scrolling message feed shared by topic/DM transcripts and the channel
@@ -23,6 +24,9 @@ struct MessageFeedList: View {
     let model: MessageListModel
     let cache: MessageContentCache
     var headerMode = HeaderMode.hidden
+    /// Search results: render `match_content` (server-marked term highlights)
+    /// instead of the plain content.
+    var useMatchHighlights = false
     var onHeaderTap: ((ConversationKey) -> Void)?
     var onNewMessages: (() -> Void)?
 
@@ -103,7 +107,8 @@ struct MessageFeedList: View {
                     case .message(let message, let showHeader):
                         MessageRow(
                             store: store, message: message,
-                            showHeader: showHeader, cache: cache)
+                            showHeader: showHeader, cache: cache,
+                            useMatchHighlights: useMatchHighlights)
                     }
                 }
                 if model.messages.isEmpty {
@@ -225,6 +230,15 @@ struct MessageRow: View {
     let message: Message
     let showHeader: Bool
     let cache: MessageContentCache
+    var useMatchHighlights = false
+
+    private var content: MessageContent {
+        if useMatchHighlights, let match = message.matchContent {
+            // Uncached: search results are one-shot lists.
+            return ContentParser.parse(html: match)
+        }
+        return cache.content(for: message)
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -253,7 +267,7 @@ struct MessageRow: View {
                     .padding(.top, 10)
                 }
                 MessageContentView(
-                    content: cache.content(for: message), connection: store.connection)
+                    content: content, connection: store.connection)
                 if !message.reactions.isEmpty {
                     ReactionsRow(reactions: message.reactions, selfUserId: store.selfUserId)
                 }
