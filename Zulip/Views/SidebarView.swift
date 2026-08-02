@@ -80,6 +80,23 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: $selection) {
+            if !isFiltering, !search.recentSearches.isEmpty {
+                Section("Recent Searches", isExpanded: expansion("recents")) {
+                    ForEach(search.recentSearches, id: \.self) { query in
+                        Label(query.displayDescription, systemImage: "magnifyingglass")
+                            .lineLimit(1)
+                            .tag(Destination.search(query))
+                            .contextMenu {
+                                Button("Remove") {
+                                    search.removeRecentSearch(query)
+                                }
+                                Button("Clear Recent Searches") {
+                                    search.clearRecentSearches()
+                                }
+                            }
+                    }
+                }
+            }
             if !isFiltering {
                 Section("Views", isExpanded: expansion("views")) {
                     viewRow("Combined feed", icon: "line.3.horizontal", tag: .combinedFeed, badge: 0)
@@ -118,10 +135,15 @@ struct SidebarView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        // The suggestions popover's anchor sits directly under the search
+        // field; inside the searchable subtree so it sees `isSearching`.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            SearchSuggestionsAnchor(search: search)
+        }
         .listStyle(.sidebar)
         // One field, two roles: typing filters the sidebar live (suggestions
-        // float beside the sidebar — see SearchSuggestionsPanel); committed
-        // tokens search immediately; Return searches the free text.
+        // pop over beside the field); committed tokens search immediately;
+        // Return searches the free text and records it in Recent Searches.
         .searchable(
             text: $search.filterText, tokens: $search.tokens,
             placement: .sidebar, prompt: "Filter or search"
@@ -129,11 +151,11 @@ struct SidebarView: View {
             Text(token.bubbleText)
         }
         .onSubmit(of: .search) {
-            runSearch()
+            runSearch(recordInRecents: true)
         }
         .onChange(of: search.tokens) {
             if !search.tokens.isEmpty {
-                runSearch()
+                runSearch(recordInRecents: false)
             }
         }
         .onChange(of: search.filterText) {
@@ -141,9 +163,15 @@ struct SidebarView: View {
         }
     }
 
-    private func runSearch() {
+    /// Runs the current query. Return records it in Recent Searches (and the
+    /// new row, tagged with the same query, highlights as the selection);
+    /// intermediate token-commit searches don't clutter the recents.
+    private func runSearch(recordInRecents: Bool) {
         let query = SearchQuery(tokens: search.tokens, text: search.filterText)
         guard !query.isEmpty else { return }
+        if recordInRecents {
+            search.recordSearch(query)
+        }
         selection = .search(query)
     }
 

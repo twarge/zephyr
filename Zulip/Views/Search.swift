@@ -4,7 +4,7 @@ import ZulipModel
 
 /// A committed search filter — rendered as a token bubble in the sidebar
 /// search field (the native analog of the web app's search pills).
-enum SearchToken: Identifiable, Hashable {
+enum SearchToken: Identifiable, Hashable, Codable {
     case channel(streamId: Int, name: String)
     case topic(String)
     case sender(userId: Int, name: String)
@@ -81,9 +81,45 @@ final class SidebarSearchModel {
     private(set) var channelTopics: [Int: [ChannelTopic]] = [:]
     private(set) var loadingAllTopics = false
     private var allTopicsLoaded = false
+    private(set) var recentSearches: [SearchQuery] = []
+
+    private static let recentSearchesKey = "recentSearches"
+    private static let maxRecentSearches = 5
 
     init(store: PerAccountStore) {
         self.store = store
+        if let data = UserDefaults.standard.data(forKey: Self.recentSearchesKey),
+           let saved = try? JSONDecoder().decode([SearchQuery].self, from: data) {
+            recentSearches = saved
+        }
+    }
+
+    // MARK: Recent searches
+
+    func recordSearch(_ query: SearchQuery) {
+        guard !query.isEmpty else { return }
+        recentSearches.removeAll { $0 == query }
+        recentSearches.insert(query, at: 0)
+        if recentSearches.count > Self.maxRecentSearches {
+            recentSearches.removeLast(recentSearches.count - Self.maxRecentSearches)
+        }
+        persistRecents()
+    }
+
+    func removeRecentSearch(_ query: SearchQuery) {
+        recentSearches.removeAll { $0 == query }
+        persistRecents()
+    }
+
+    func clearRecentSearches() {
+        recentSearches = []
+        persistRecents()
+    }
+
+    private func persistRecents() {
+        if let data = try? JSONEncoder().encode(recentSearches) {
+            UserDefaults.standard.set(data, forKey: Self.recentSearchesKey)
+        }
     }
 
     var isFiltering: Bool {
@@ -177,54 +213,70 @@ final class SidebarSearchModel {
     }
 }
 
-/// The suggestions popup, floating at the top-leading edge of the detail
-/// column — beside the sidebar, so filtered sidebar rows stay visible.
-struct SearchSuggestionsPanel: View {
+/// A hidden anchor placed directly beneath the sidebar search field: it
+/// tracks the search session (`isSearching`) and presents the suggestions as
+/// a native popover pointing at the field — shown only while the field is
+/// active and suggestions exist.
+struct SearchSuggestionsAnchor: View {
+    let search: SidebarSearchModel
+    @Environment(\.isSearching) private var isSearching
+    @State private var showPopover = false
+
+    var body: some View {
+        Color.clear
+            .frame(height: 1)
+            .popover(
+                isPresented: $showPopover,
+                attachmentAnchor: .rect(.bounds),
+                arrowEdge: .trailing
+            ) {
+                SearchSuggestionsList(search: search)
+            }
+            .onChange(of: isSearching) { sync() }
+            .onChange(of: search.filterText) { sync() }
+            .onChange(of: search.tokens) { sync() }
+            .onAppear { sync() }
+    }
+
+    private func sync() {
+        showPopover = isSearching && !search.suggestions.isEmpty
+    }
+}
+
+/// The popover's content: suggestion rows that commit to token bubbles.
+private struct SearchSuggestionsList: View {
     let search: SidebarSearchModel
     @State private var hovered: SearchToken?
 
     var body: some View {
-        let suggestions = search.suggestions
-        if !suggestions.isEmpty {
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Search")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.top, 6)
-                    .padding(.bottom, 2)
-                ForEach(suggestions) { token in
-                    Button {
-                        search.commit(token)
-                    } label: {
-                        Label(token.suggestionTitle, systemImage: token.suggestionIcon)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                hovered == token
-                                    ? AnyShapeStyle(.quaternary)
-                                    : AnyShapeStyle(.clear),
-                                in: RoundedRectangle(cornerRadius: 5))
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .onHover { isHovering in
-                        if isHovering {
-                            hovered = token
-                        } else if hovered == token {
-                            hovered = nil
-                        }
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(search.suggestions) { token in
+                Button {
+                    search.commit(token)
+                } label: {
+                    Label(token.suggestionTitle, systemImage: token.suggestionIcon)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            hovered == token
+                                ? AnyShapeStyle(.quaternary)
+                                : AnyShapeStyle(.clear),
+                            in: RoundedRectangle(cornerRadius: 5))
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .onHover { isHovering in
+                    if isHovering {
+                        hovered = token
+                    } else if hovered == token {
+                        hovered = nil
                     }
                 }
             }
-            .padding(6)
-            .frame(width: 300)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary, lineWidth: 1))
-            .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
-            .padding(12)
         }
+        .padding(8)
+        .frame(width: 300)
     }
 }
 
@@ -238,7 +290,7 @@ extension Array {
 
 /// A full search: token filters plus free text (the server's full-text
 /// `search` operator).
-struct SearchQuery: Hashable {
+struct SearchQuery: Hashable, Codable {
     var tokens: [SearchToken]
     var text: String
 

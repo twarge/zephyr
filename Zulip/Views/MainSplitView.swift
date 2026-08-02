@@ -31,11 +31,6 @@ struct MainSplitView: View {
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 400)
         } detail: {
             detailContent
-                // Suggestions float beside the sidebar rather than covering
-                // its filtered rows.
-                .overlay(alignment: .topLeading) {
-                    SearchSuggestionsPanel(search: search)
-                }
         }
         .navigationTitle(store.realmName ?? "Zulip")
         // Channel/topic/message links inside message content navigate in-app.
