@@ -198,6 +198,8 @@ public final class PerAccountStore {
             return
         }
         Task {
+            let endActivity = BackgroundActivity.begin("action")
+            defer { endActivity() }
             do {
                 try await perform(action)
             } catch where isTransientNetworkError(error) {
@@ -229,6 +231,8 @@ public final class PerAccountStore {
         guard !isFlushing else { return }
         isFlushing = true
         Task {
+            let endActivity = BackgroundActivity.begin("offline-flush")
+            defer { endActivity() }
             defer { isFlushing = false }
             for entry in outbox where entry.state == .queued {
                 if let index = outbox.firstIndex(where: { $0.id == entry.id }) {
@@ -315,6 +319,8 @@ public final class PerAccountStore {
 
     private func performSend(localId: String) async {
         guard let message = outbox.first(where: { $0.id == localId }) else { return }
+        let endActivity = BackgroundActivity.begin("send")
+        defer { endActivity() }
         do {
             switch message.destination {
             case .topic(let streamId, let topic):

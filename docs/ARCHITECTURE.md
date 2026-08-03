@@ -282,6 +282,13 @@ out) so Plans A/B swap without touching the model.
   - Flush triggers: the event poll's first success and every failure→success
     recovery (`UpdateMachine`), plus the app's `NWPathMonitor` the moment the
     network path returns (which also short-circuits the 15s register-retry loop).
+  - On iOS, sends, queued actions, and flushes run under a `beginBackgroundTask`
+    assertion (`BackgroundActivity`, no-op on macOS): backgrounding right after
+    Send can't suspend the app mid-request and strand the message as an
+    ambiguous `.failed`. Deliberately not adopted: background `URLSession`
+    (would fork the async API layer for a 200ms request) and `BGAppRefreshTask`
+    (deferred — system-scheduled wakes can't be tied to reconnects, and with no
+    push service the next foreground is the reliable delivery point anyway).
 - SQLite/GRDB remains the escalation path if the JSON cache outgrows itself; an App
   Group container if extensions ever need shared data (flutter does this for push
   decryption on iOS).
