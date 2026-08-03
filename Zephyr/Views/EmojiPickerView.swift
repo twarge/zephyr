@@ -45,7 +45,7 @@ struct EmojiPickerView: View {
                                 } else if let src = entry.realmSrc,
                                           let image = EmojiImageLoader.shared.image(
                                             src: src, connection: store.connection) {
-                                    Image(nsImage: image)
+                                    Image(platform: image)
                                 } else {
                                     Image(systemName: "face.smiling")
                                         .foregroundStyle(.secondary)

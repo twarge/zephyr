@@ -396,8 +396,7 @@ struct MessageRow: View {
                 store.setStarred(!isStarred, messageId: message.id)
             }
             Button("Copy Text", systemImage: "doc.on.doc") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(content.plainText, forType: .string)
+                Platform.copyToPasteboard(content.plainText)
             }
             Button("Seen By…", systemImage: "eye") {
                 showReadReceipts = true
@@ -522,7 +521,7 @@ struct ReactionsRow: View {
             Text(character)
         } else if let src = store.realmEmoji[reaction.emojiCode]?.sourceUrl,
                   let image = EmojiImageLoader.shared.image(src: src, connection: store.connection) {
-            Image(nsImage: image)
+            Image(platform: image)
         } else {
             Text(":\(reaction.emojiName):")
         }

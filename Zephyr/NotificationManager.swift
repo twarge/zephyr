@@ -1,4 +1,6 @@
+#if canImport(AppKit)
 import AppKit
+#endif
 import UserNotifications
 import ZulipAPI
 import ZulipContent
@@ -58,7 +60,7 @@ final class NotificationManager: NSObject {
         guard let key = Unreads.conversationKey(for: message, selfUserId: store.selfUserId)
         else { return }
         // No banner for the conversation you're actively reading.
-        if NSApp.isActive, appModel?.activeConversation == key {
+        if Platform.isActive, appModel?.activeConversation == key {
             return
         }
 
@@ -143,7 +145,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             default:
                 // Clicking the banner opens the conversation.
                 appModel.pendingDestination = .conversation(key)
-                NSApp.activate()
+                Platform.activate()
             }
         }
     }

@@ -1,4 +1,6 @@
+#if canImport(AppKit)
 import AppKit
+#endif
 import SwiftUI
 import ZulipAPI
 import ZulipModel
@@ -278,11 +280,14 @@ struct SearchSuggestionsAnchor: View {
     }
 
     private func installMonitor() {
+        #if os(macOS)
         guard keyMonitor == nil else { return }
         search.onSubmit = onSubmitSearch
         keyMonitor = Self.makeReturnMonitor(search: search)
+        #endif
     }
 
+    #if os(macOS)
     /// nonisolated so the AppKit handler closure infers nonisolated (the
     /// monitor fires on the main thread; assumeIsolated hops back safely).
     private nonisolated static func makeReturnMonitor(search: SidebarSearchModel) -> Any? {
@@ -301,12 +306,15 @@ struct SearchSuggestionsAnchor: View {
             return consumed ? nil : event
         }
     }
+    #endif
 
     private func removeMonitor() {
+        #if os(macOS)
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
             self.keyMonitor = nil
         }
+        #endif
     }
 }
 

@@ -1,14 +1,26 @@
-import AppKit
 import SwiftUI
 import ZulipAPI
 import ZulipModel
 
-/// Per-conversation draft persistence (survives switching conversations;
-/// local-only for now — server draft sync is M4).
+/// Per-conversation draft persistence: survives switching conversations AND
+/// app relaunches (UserDefaults-backed; local-only — server draft sync is
+/// deliberately deferred). Drafts are inherently offline-safe: composing
+/// needs no network, and the text stays until sent or cleared.
 @MainActor
 final class DraftStore {
     static let shared = DraftStore()
-    private var drafts: [SendDestination: String] = [:]
+    private var drafts: [SendDestination: String]
+
+    private static let key = "composeDrafts"
+
+    init() {
+        if let data = UserDefaults.standard.data(forKey: Self.key),
+           let saved = try? JSONDecoder().decode([SendDestination: String].self, from: data) {
+            drafts = saved
+        } else {
+            drafts = [:]
+        }
+    }
 
     func draft(for destination: SendDestination) -> String {
         drafts[destination] ?? ""
@@ -19,6 +31,9 @@ final class DraftStore {
             drafts.removeValue(forKey: destination)
         } else {
             drafts[destination] = text
+        }
+        if let data = try? JSONEncoder().encode(drafts) {
+            UserDefaults.standard.set(data, forKey: Self.key)
         }
     }
 }
@@ -237,7 +252,7 @@ struct ComposeBar: View {
                 } else if let src = entry.realmSrc,
                           let image = EmojiImageLoader.shared.image(
                             src: src, connection: store.connection) {
-                    Image(nsImage: image)
+                    Image(platform: image)
                 } else {
                     Image(systemName: "face.smiling")
                 }
@@ -352,7 +367,7 @@ struct ComposeBar: View {
         text = ""
         DraftStore.shared.setDraft("", for: destination)
         if UserDefaults.standard.object(forKey: "playSendSound") as? Bool ?? true {
-            NSSound(named: "Pop")?.play()
+            Platform.playSendSound()
         }
     }
 }
@@ -385,10 +400,10 @@ struct OutboxRow: View {
                             .foregroundStyle(.red)
                             .lineLimit(1)
                         Button("Retry") { store.retrySend(message.id) }
-                            .buttonStyle(.link)
+                            .buttonStyle(.borderless)
                             .font(.caption)
                         Button("Discard") { store.discardSend(message.id) }
-                            .buttonStyle(.link)
+                            .buttonStyle(.borderless)
                             .font(.caption)
                     }
                 }

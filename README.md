@@ -1,8 +1,9 @@
 # Zephyr — for Zulip
 
-**Zephyr** is a truly native macOS client for [Zulip](https://zulip.com): a calm two-pane
-window in the spirit of Apple Messages, with the web app's sidebar concepts (channels,
-folders, topics, views) rendered natively. The name honors Zulip's ancestry in MIT's
+**Zephyr** is a truly native Apple-platform client for [Zulip](https://zulip.com) —
+macOS first, with iOS/iPadOS builds from the same target: a calm two-pane window in the
+spirit of Apple Messages, with the web app's sidebar concepts (channels, folders,
+topics, views) rendered natively. The name honors Zulip's ancestry in MIT's
 Zephyr messaging system — and a zephyr is a soft, fast breeze, which is the feel the app
 aims for. Zephyr is an independent project, not affiliated with the Zulip organization.
 
@@ -12,7 +13,12 @@ inline reply (DMs + mentions, while running — Zulip has no desktop push), dock
 send sounds (configurable in Settings ⌘,), multi-account with switching, a channel
 browser with subscribe/unsubscribe and muting, warm launch from a cached snapshot
 ("stale → live"), topic moves with propagation, read receipts, and an edit-history
-viewer. Remaining before public beta: an app icon, and Developer ID
+viewer. Offline: warm launch works from the cached snapshot with an automatic
+15-second reconnect loop, and compose drafts persist across launches (per
+conversation, per account). The Xcode target is now multiplatform — the same
+scheme builds and runs on iOS 18+/iPadOS (Simulator-verified); AppKit-specific
+behavior (Quick Look, popover search, Settings scene, dock badge) is gated behind
+a small `Platform` shim. Remaining before public beta: Developer ID
 signing/notarization (needs the account holder's credentials).
 
 ## Building

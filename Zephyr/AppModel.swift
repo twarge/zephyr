@@ -92,7 +92,34 @@ final class AppModel {
             AppStateStore.lastActiveAccount = accountId
             await store.seedConversations()
         } catch {
-            phase = .failed(error.localizedDescription)
+            // Offline launch: if the cached snapshot is rendering, keep it
+            // (with its "Connecting…" banner) and retry in the background
+            // instead of replacing a working UI with a failure screen.
+            if global.stores[accountId] != nil {
+                phase = .ready(accountId)
+                AppStateStore.lastActiveAccount = accountId
+                scheduleReconnect(accountId)
+            } else {
+                phase = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    private var reconnecting: Set<Account.ID> = []
+
+    private func scheduleReconnect(_ accountId: Account.ID) {
+        guard !reconnecting.contains(accountId) else { return }
+        reconnecting.insert(accountId)
+        Task { [weak self] in
+            defer { self?.reconnecting.remove(accountId) }
+            while let self, !self.global.hasLiveStore(accountId),
+                  self.global.accounts.contains(where: { $0.id == accountId }) {
+                try? await Task.sleep(for: .seconds(15))
+                if (try? await self.global.perAccountStore(for: accountId)) != nil {
+                    await self.global.stores[accountId]?.seedConversations()
+                    return
+                }
+            }
         }
     }
 

@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 import ZulipModel
 
@@ -23,6 +22,7 @@ struct MainSplitView: View {
     @State private var selection: Destination?
     @State private var search: SidebarSearchModel
     @State private var showNewConversation = false
+    @State private var showSettings = false
 
     init(store: PerAccountStore) {
         self.store = store
@@ -75,9 +75,15 @@ struct MainSplitView: View {
                         }
                     }
                     Divider()
+                    #if os(macOS)
                     SettingsLink {
                         Text("Accounts & Settings…")
                     }
+                    #else
+                    Button("Accounts & Settings…") {
+                        showSettings = true
+                    }
+                    #endif
                     Button("Sign Out…") {
                         Task { await model.signOutCurrent() }
                     }
@@ -88,6 +94,10 @@ struct MainSplitView: View {
         }
         .sheet(isPresented: $showNewConversation) {
             NewConversationSheet(store: store, selection: $selection)
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .environment(model)
         }
         .onChange(of: selection) {
             if case .conversation(let key) = selection {
@@ -104,7 +114,7 @@ struct MainSplitView: View {
             }
         }
         .onChange(of: badgeCount, initial: true) {
-            NSApp.dockTile.badgeLabel = badgeCount > 0 ? "\(badgeCount)" : ""
+            Platform.setAppBadge(badgeCount)
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             if store.isRecoveringEventStream {

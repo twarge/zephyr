@@ -1,4 +1,3 @@
-import AppKit
 import QuickLook
 import SwiftUI
 import ZulipAPI
@@ -95,7 +94,7 @@ private struct MathBlockView: View {
             tex: tex, fontSize: 18,
             color: InlineRenderer.mathColor(for: colorScheme), display: true) {
             ScrollView(.horizontal) {
-                Image(nsImage: rendered.image)
+                Image(platform: rendered.image)
                     .padding(.vertical, 4)
             }
         } else {
@@ -154,28 +153,28 @@ private struct CodeBlockView: View {
         guard let tokenClass else { return nil }
         switch tokenClass.first {
         case "k":  // keywords: k, kc, kd, kn, kp, kr, kt
-            return Color(nsColor: .systemPink)
+            return .pink
         case "s":  // strings: s, s1, s2, sb, sc, sd, si, sr, ss, …
-            return Color(nsColor: .systemRed)
+            return .red
         case "c":  // comments: c, c1, cm, cp, cs, ch
-            return Color(nsColor: .systemGray)
+            return .gray
         case "m":  // numbers: m, mi, mf, mh, mo, mb
-            return Color(nsColor: .systemBlue)
+            return .blue
         case "n":  // names — only the interesting subtypes get color
             switch tokenClass {
             case "nf", "nc", "nn":  // function/class/namespace
-                return Color(nsColor: .systemTeal)
+                return .teal
             case "nb", "nd", "nt":  // builtin/decorator/tag
-                return Color(nsColor: .systemIndigo)
+                return .indigo
             default:
                 return nil
             }
         case "o":  // operators
             return nil
         case "b":  // bp (builtin pseudo: self, True…)
-            return tokenClass == "bp" ? Color(nsColor: .systemIndigo) : nil
+            return tokenClass == "bp" ? .indigo : nil
         case "i":  // il (long int literal)
-            return tokenClass == "il" ? Color(nsColor: .systemBlue) : nil
+            return tokenClass == "il" ? .blue : nil
         default:
             return nil
         }
@@ -248,7 +247,7 @@ private struct MessageTableView: View {
 private struct LinkPreviewCard: View {
     let preview: LinkPreviewNode
     let connection: ApiConnection
-    @State private var thumbnail: NSImage?
+    @State private var thumbnail: PlatformImage?
 
     private var destination: URL? {
         URL(string: preview.url, relativeTo: connection.realmURL)?.absoluteURL
@@ -259,7 +258,7 @@ private struct LinkPreviewCard: View {
             if preview.imageSrc != nil {
                 Group {
                     if let thumbnail {
-                        Image(nsImage: thumbnail)
+                        Image(platform: thumbnail)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                     } else {
@@ -292,7 +291,7 @@ private struct LinkPreviewCard: View {
         .task(id: preview.imageSrc) {
             guard let src = preview.imageSrc else { return }
             guard let (data, _) = await fetchMedia(path: src, connection: connection) else { return }
-            thumbnail = NSImage(data: data)
+            thumbnail = PlatformImage(data: data)
         }
     }
 }
@@ -302,7 +301,7 @@ private struct LinkPreviewCard: View {
 private struct MessageVideoView: View {
     let node: VideoNode
     let connection: ApiConnection
-    @State private var preview: NSImage?
+    @State private var preview: PlatformImage?
 
     var body: some View {
         if node.isEmbed {
@@ -316,13 +315,13 @@ private struct MessageVideoView: View {
     private var embedBody: some View {
         Button {
             if let url = URL(string: node.href) {
-                NSWorkspace.shared.open(url)
+                Platform.openExternalURL(url)
             }
         } label: {
             ZStack {
                 Group {
                     if let preview {
-                        Image(nsImage: preview)
+                        Image(platform: preview)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                     } else {
@@ -343,7 +342,7 @@ private struct MessageVideoView: View {
         .task(id: node.previewImageSrc) {
             guard let src = node.previewImageSrc else { return }
             guard let (data, _) = await fetchMedia(path: src, connection: connection) else { return }
-            preview = NSImage(data: data)
+            preview = PlatformImage(data: data)
         }
     }
 }
@@ -389,8 +388,8 @@ private struct MediaAttachmentChip: View {
         .focusEffectDisabled()
         .onTapGesture(count: 2) {
             Task {
-                if let url = await download() {
-                    NSWorkspace.shared.open(url)
+                if let url = await download(), !Platform.openFile(url) {
+                    quickLookURL = url
                 }
             }
         }
@@ -522,7 +521,7 @@ private struct MessageImageView: View {
     let connection: ApiConnection
     var compact = false
 
-    @State private var image: NSImage?
+    @State private var image: PlatformImage?
     @State private var localFileURL: URL?
     @State private var quickLookURL: URL?
     @FocusState private var isSelected: Bool
@@ -543,7 +542,7 @@ private struct MessageImageView: View {
     var body: some View {
         Group {
             if let image {
-                Image(nsImage: image)
+                Image(platform: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else {
@@ -579,13 +578,13 @@ private struct MessageImageView: View {
     private func load() async {
         guard let (data, _) = await fetchMedia(path: node.src, connection: connection)
         else { return }
-        image = NSImage(data: data)
+        image = PlatformImage(data: data)
     }
 
     private func openInDefaultViewer() {
         Task {
-            if let url = await downloadOriginal() {
-                NSWorkspace.shared.open(url)
+            if let url = await downloadOriginal(), !Platform.openFile(url) {
+                quickLookURL = url
             }
         }
     }
@@ -629,21 +628,21 @@ enum InlineRenderer {
 
     /// Approximates the primary label color (math images bake their color at
     /// render time, so it's resolved per scheme and re-rendered on change).
-    static func mathColor(for scheme: ColorScheme) -> NSColor {
-        NSColor(white: scheme == .dark ? 1.0 : 0.0, alpha: 0.85)
+    static func mathColor(for scheme: ColorScheme) -> MathColor {
+        MathColor(white: scheme == .dark ? 1.0 : 0.0, alpha: 0.85)
     }
 
     /// Accumulates styled runs, flushing to `Text` segments whenever an
     /// inline math image interrupts the attributed text.
     final class Builder {
         let connection: ApiConnection
-        let mathColor: NSColor
+        let mathColor: MathColor
         private var segments: [Text] = []
         private var buffer = AttributedString()
 
         var realmURL: URL { connection.realmURL }
 
-        init(connection: ApiConnection, mathColor: NSColor) {
+        init(connection: ApiConnection, mathColor: MathColor) {
             self.connection = connection
             self.mathColor = mathColor
         }
@@ -657,7 +656,7 @@ enum InlineRenderer {
                 tex: tex, fontSize: 14, color: mathColor, display: false) {
                 flush()
                 segments.append(
-                    Text(Image(nsImage: rendered.image))
+                    Text(Image(platform: rendered.image))
                         .baselineOffset(-rendered.descent))
             } else {
                 buffer += fallback
@@ -667,7 +666,7 @@ enum InlineRenderer {
         func appendEmojiImage(src: String, fallback: AttributedString) {
             if let image = EmojiImageLoader.shared.image(src: src, connection: connection) {
                 flush()
-                segments.append(Text(Image(nsImage: image)).baselineOffset(-3))
+                segments.append(Text(Image(platform: image)).baselineOffset(-3))
             } else {
                 buffer += fallback
             }

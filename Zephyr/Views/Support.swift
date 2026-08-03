@@ -1,8 +1,10 @@
-import AppKit
 import SwiftUI
 import ZulipAPI
 import ZulipContent
 import ZulipModel
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Memoized message-HTML parsing, keyed by (id, edit timestamp) so edits
 /// re-parse exactly one message. One cache per open transcript.
@@ -28,9 +30,9 @@ final class MessageContentCache {
 @MainActor
 final class AvatarLoader {
     static let shared = AvatarLoader()
-    private let cache = NSCache<NSString, NSImage>()
+    private let cache = NSCache<NSString, PlatformImage>()
 
-    func image(for userId: Int, store: PerAccountStore) async -> NSImage? {
+    func image(for userId: Int, store: PerAccountStore) async -> PlatformImage? {
         let key = "\(store.connection.realmURL.absoluteString)|\(userId)" as NSString
         if let hit = cache.object(forKey: key) {
             return hit
@@ -44,7 +46,7 @@ final class AvatarLoader {
         }
         guard let request,
               let (data, _) = try? await ApiConnection.mediaSession.data(for: request),
-              let image = NSImage(data: data)
+              let image = PlatformImage(data: data)
         else { return nil }
         cache.setObject(image, forKey: key)
         return image
@@ -58,12 +60,12 @@ final class AvatarLoader {
 @Observable
 final class EmojiImageLoader {
     static let shared = EmojiImageLoader()
-    private(set) var images: [String: NSImage] = [:]
+    private(set) var images: [String: PlatformImage] = [:]
     @ObservationIgnored private var inflight: Set<String> = []
 
     /// Returns the cached image, kicking off a fetch on miss (nil this pass;
     /// observation re-renders callers when it lands).
-    func image(src: String, connection: ApiConnection) -> NSImage? {
+    func image(src: String, connection: ApiConnection) -> PlatformImage? {
         if let image = images[src] {
             return image
         }
@@ -78,12 +80,20 @@ final class EmojiImageLoader {
             }
             guard let request,
                   let (data, _) = try? await ApiConnection.mediaSession.data(for: request),
-                  let image = NSImage(data: data)
+                  let image = PlatformImage(data: data)
             else { return }
             let height: CGFloat = 16
             let ratio = image.size.height > 0 ? image.size.width / image.size.height : 1
-            image.size = NSSize(width: height * ratio, height: height)
+            let target = CGSize(width: height * ratio, height: height)
+            #if canImport(AppKit)
+            image.size = target
             images[src] = image
+            #else
+            // UIImage.size is immutable — redraw at the inline-emoji size.
+            images[src] = UIGraphicsImageRenderer(size: target).image { _ in
+                image.draw(in: CGRect(origin: .zero, size: target))
+            }
+            #endif
         }
         return nil
     }
@@ -96,12 +106,12 @@ struct AvatarView: View {
     let userId: Int
     var size: CGFloat = 34
 
-    @State private var image: NSImage?
+    @State private var image: PlatformImage?
 
     var body: some View {
         Group {
             if let image {
-                Image(nsImage: image)
+                Image(platform: image)
                     .resizable()
                     .scaledToFill()
                     .frame(width: size, height: size)

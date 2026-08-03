@@ -1,8 +1,8 @@
 import Foundation
 import ZulipAPI
 
-/// Where a message is being sent.
-public enum SendDestination: Hashable, Sendable {
+/// Where a message is being sent. Codable so drafts persist across launches.
+public enum SendDestination: Hashable, Sendable, Codable {
     case topic(streamId: Int, topic: String)
     case dm(userIds: [Int])
 

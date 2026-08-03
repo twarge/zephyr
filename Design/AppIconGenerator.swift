@@ -79,6 +79,49 @@ func render(pixels: Int, to url: URL) {
 let outputDir = URL(fileURLWithPath: CommandLine.arguments.count > 1
     ? CommandLine.arguments[1] : ".")
 
+/// iOS: one full-bleed 1024 square (the system applies its own mask) —
+/// gradient across the whole canvas, same centered Z.
+func drawFullBleed(into ctx: CGContext) {
+    let colors = [
+        CGColor(red: 0.16, green: 0.55, blue: 0.94, alpha: 1),
+        CGColor(red: 0.05, green: 0.16, blue: 0.45, alpha: 1),
+    ] as CFArray
+    let gradient = CGGradient(
+        colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1])!
+    ctx.drawLinearGradient(
+        gradient, start: CGPoint(x: canvas / 2, y: 0),
+        end: CGPoint(x: canvas / 2, y: canvas), options: [])
+    let z = CGMutablePath()
+    z.move(to: CGPoint(x: 332, y: 316))
+    z.addLine(to: CGPoint(x: 692, y: 316))
+    z.addLine(to: CGPoint(x: 332, y: 708))
+    z.addLine(to: CGPoint(x: 692, y: 708))
+    ctx.saveGState()
+    ctx.setShadow(
+        offset: CGSize(width: 0, height: -10), blur: 26,
+        color: CGColor(gray: 0, alpha: 0.28))
+    ctx.addPath(z)
+    ctx.setStrokeColor(CGColor(gray: 1, alpha: 1))
+    ctx.setLineWidth(128)
+    ctx.setLineCap(.round)
+    ctx.setLineJoin(.round)
+    ctx.strokePath()
+    ctx.restoreGState()
+}
+
+func renderFullBleed(to url: URL) {
+    let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: 1024, pixelsHigh: 1024,
+        bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+        colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    let ctx = NSGraphicsContext(bitmapImageRep: rep)!.cgContext
+    ctx.translateBy(x: 0, y: canvas)
+    ctx.scaleBy(x: 1, y: -1)
+    drawFullBleed(into: ctx)
+    try! rep.representation(using: .png, properties: [:])!.write(to: url)
+    print("wrote \(url.lastPathComponent) (1024px full-bleed)")
+}
+
 let specs: [(pixels: Int, filename: String)] = [
     (16, "icon_16.png"), (32, "icon_16@2x.png"),
     (32, "icon_32.png"), (64, "icon_32@2x.png"),
@@ -89,3 +132,4 @@ let specs: [(pixels: Int, filename: String)] = [
 for spec in specs {
     render(pixels: spec.pixels, to: outputDir.appendingPathComponent(spec.filename))
 }
+renderFullBleed(to: outputDir.appendingPathComponent("icon_ios_1024.png"))

@@ -1,4 +1,12 @@
+#if canImport(AppKit)
 import AppKit
+public typealias MathImage_Platform = NSImage
+public typealias MathColor = NSColor
+#else
+import UIKit
+public typealias MathImage_Platform = UIImage
+public typealias MathColor = UIColor
+#endif
 import SwiftMath
 
 /// Native math rendering from TeX source via SwiftMath (a TeX typesetter with
@@ -10,7 +18,7 @@ public enum ZulipMath {
     /// A typeset expression: a resolution-independent image plus the distance
     /// from the image bottom up to the math baseline (for inline alignment).
     public struct Rendered {
-        public let image: NSImage
+        public let image: MathImage_Platform
         public let descent: CGFloat
     }
 
@@ -32,7 +40,7 @@ public enum ZulipMath {
 
     @MainActor
     public static func render(
-        tex: String, fontSize: CGFloat, color: NSColor, display: Bool
+        tex: String, fontSize: CGFloat, color: MathColor, display: Bool
     ) -> Rendered? {
         let key = "\(fontSize)|\(display)|\(color.description)|\(tex)" as NSString
         if let hit = cache.object(forKey: key) {

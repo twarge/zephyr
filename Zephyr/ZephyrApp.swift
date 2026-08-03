@@ -11,10 +11,12 @@ struct ZephyrApp: App {
                 .environment(model)
         }
         .commands { accountCommands }
+        #if os(macOS)
         Settings {
             SettingsView()
                 .environment(model)
         }
+        #endif
     }
 }
 

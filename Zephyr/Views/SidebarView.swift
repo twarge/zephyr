@@ -162,7 +162,7 @@ struct SidebarView: View {
         // Return searches the free text and records it in Recent Searches.
         .searchable(
             text: $search.filterText, tokens: $search.tokens,
-            placement: .sidebar, prompt: "Filter or search"
+            placement: Self.searchPlacement, prompt: "Filter or search"
         ) { token in
             Text(token.bubbleText)
         }
@@ -218,6 +218,14 @@ struct SidebarView: View {
                 }
             }
         }
+    }
+
+    private static var searchPlacement: SearchFieldPlacement {
+        #if os(macOS)
+        return .sidebar
+        #else
+        return .automatic
+        #endif
     }
 
     private func serverLabel(_ account: Account) -> String {
