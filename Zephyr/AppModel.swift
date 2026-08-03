@@ -53,17 +53,30 @@ final class AppModel {
 
     func start() async {
         guard case .launching = phase else { return }
-        guard let account = global.accounts.first else {
+        let accounts = global.accounts
+        guard !accounts.isEmpty else {
             phase = .needsAccount
             return
         }
         NotificationManager.shared.setup(appModel: self)
-        await load(accountId: account.id)
+        // Restore the server that was front last time.
+        let active = accounts.first(where: { $0.id == AppStateStore.lastActiveAccount })
+            ?? accounts[0]
+        await load(accountId: active.id)
+        // Connect the other servers in the background so their notifications
+        // and badge counts stay live while not front.
+        for account in accounts where account.id != active.id {
+            Task {
+                _ = try? await global.perAccountStore(for: account.id)
+                await global.stores[account.id]?.seedConversations()
+            }
+        }
     }
 
     func load(accountId: Account.ID) async {
         if global.hasLiveStore(accountId) {
             phase = .ready(accountId)
+            AppStateStore.lastActiveAccount = accountId
             return
         }
         // Warm launch: render the cached snapshot instantly while the fresh
@@ -76,6 +89,7 @@ final class AppModel {
         do {
             let store = try await global.perAccountStore(for: accountId)
             phase = .ready(accountId)
+            AppStateStore.lastActiveAccount = accountId
             await store.seedConversations()
         } catch {
             phase = .failed(error.localizedDescription)

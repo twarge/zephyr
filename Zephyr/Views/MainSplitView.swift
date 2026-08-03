@@ -4,7 +4,8 @@ import ZulipModel
 
 /// What the detail column shows: a DM/topic transcript, a channel's
 /// interleaved message feed, a channel's topic list, or a cross-channel view.
-enum Destination: Hashable {
+/// Codable so each server's selection persists across launches.
+enum Destination: Hashable, Codable {
     case conversation(ConversationKey)
     case channel(streamId: Int)
     case channelTopics(streamId: Int)
@@ -26,6 +27,7 @@ struct MainSplitView: View {
     init(store: PerAccountStore) {
         self.store = store
         _search = State(initialValue: SidebarSearchModel(store: store))
+        _selection = State(initialValue: AppStateStore.selection(for: store.accountId))
     }
 
     var body: some View {
@@ -93,6 +95,7 @@ struct MainSplitView: View {
             } else {
                 model.activeConversation = nil
             }
+            AppStateStore.setSelection(selection, for: store.accountId)
         }
         .onChange(of: model.pendingDestination) {
             if let destination = model.pendingDestination {
@@ -116,14 +119,18 @@ struct MainSplitView: View {
 
     @AppStorage("badgePolicy") private var badgePolicy = BadgePolicy.dmsAndMentions.rawValue
 
+    /// Badge aggregates across every connected server, not just the front one.
     private var badgeCount: Int {
-        switch BadgePolicy(rawValue: badgePolicy) ?? .dmsAndMentions {
-        case .dmsAndMentions:
-            store.unreads.dmCount + store.unreads.mentionIds.count
-        case .allUnreads:
-            store.unreads.totalCount
-        case .none:
-            0
+        let policy = BadgePolicy(rawValue: badgePolicy) ?? .dmsAndMentions
+        return model.global.stores.values.reduce(0) { total, store in
+            switch policy {
+            case .dmsAndMentions:
+                total + store.unreads.dmCount + store.unreads.mentionIds.count
+            case .allUnreads:
+                total + store.unreads.totalCount
+            case .none:
+                total
+            }
         }
     }
 

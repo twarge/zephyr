@@ -10,9 +10,29 @@ struct ZephyrApp: App {
             RootView()
                 .environment(model)
         }
+        .commands { accountCommands }
         Settings {
             SettingsView()
                 .environment(model)
+        }
+    }
+}
+
+extension ZephyrApp {
+    /// ⌘1…⌘9 switch servers, in the order set in Settings → Accounts.
+    @CommandsBuilder
+    var accountCommands: some Commands {
+        CommandGroup(after: .sidebar) {
+            Divider()
+            ForEach(
+                Array(model.global.accounts.prefix(9).enumerated()), id: \.element.id
+            ) { index, account in
+                Button(account.realmName ?? account.realmURL.host() ?? "Server \(index + 1)") {
+                    Task { await model.switchAccount(account.id) }
+                }
+                .keyboardShortcut(
+                    KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+            }
         }
     }
 }
@@ -59,7 +79,10 @@ struct RootView: View {
                 .frame(minWidth: 480, minHeight: 340)
             case .ready(let accountId):
                 if let store = model.global.stores[accountId] {
+                    // Per-account view state (selection, sidebar expansion)
+                    // re-initializes from persistence on server switch.
                     MainSplitView(store: store)
+                        .id(accountId)
                 } else {
                     ProgressView()
                         .frame(minWidth: 400, minHeight: 300)

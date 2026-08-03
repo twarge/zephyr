@@ -3,7 +3,7 @@ import Observation
 import ZulipAPI
 
 /// Identifies a conversation for unread bookkeeping (and, later, the sidebar).
-public enum ConversationKey: Hashable, Sendable {
+public enum ConversationKey: Hashable, Sendable, Codable {
     /// DM thread, keyed by the sorted non-self participant ids joined with ","
     /// ("" would be a self-DM; "5" a 1:1; "5,9" a group DM).
     case dm(String)

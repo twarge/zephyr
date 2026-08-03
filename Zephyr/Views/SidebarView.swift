@@ -11,9 +11,20 @@ struct SidebarView: View {
     let store: PerAccountStore
     @Bindable var search: SidebarSearchModel
     @Binding var selection: Destination?
+    @Environment(AppModel.self) private var model
 
-    @State private var collapsedSections: Set<String> = []
-    @State private var expandedChannels: Set<Int> = []
+    @State private var collapsedSections: Set<String>
+    @State private var expandedChannels: Set<Int>
+
+    init(store: PerAccountStore, search: SidebarSearchModel, selection: Binding<Destination?>) {
+        self.store = store
+        self.search = search
+        _selection = selection
+        _collapsedSections = State(
+            initialValue: AppStateStore.collapsedSections(for: store.accountId))
+        _expandedChannels = State(
+            initialValue: AppStateStore.expandedChannels(for: store.accountId))
+    }
 
     private static let maxInlineTopics = 10
 
@@ -166,6 +177,51 @@ struct SidebarView: View {
         .onChange(of: search.filterText) {
             search.loadAllTopicsIfNeeded()
         }
+        .onChange(of: expandedChannels) {
+            AppStateStore.setExpandedChannels(expandedChannels, for: store.accountId)
+        }
+        .onChange(of: collapsedSections) {
+            AppStateStore.setCollapsedSections(collapsedSections, for: store.accountId)
+        }
+        // The server switcher lives in the sidebar's toolbar area when more
+        // than one server is signed in (⌘1…⌘9 also switch).
+        .toolbar {
+            if model.global.accounts.count > 1 {
+                ToolbarItem(placement: .automatic) {
+                    Menu {
+                        ForEach(
+                            Array(model.global.accounts.prefix(9).enumerated()),
+                            id: \.element.id
+                        ) { index, account in
+                            Button {
+                                Task { await model.switchAccount(account.id) }
+                            } label: {
+                                if account.id == store.accountId {
+                                    Label(serverLabel(account), systemImage: "checkmark")
+                                } else {
+                                    Text(serverLabel(account))
+                                }
+                            }
+                            .keyboardShortcut(
+                                KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(store.realmName
+                                ?? store.connection.realmURL.host() ?? "Server")
+                                .font(.callout.weight(.medium))
+                            Image(systemName: "chevron.down")
+                                .font(.caption2)
+                        }
+                    }
+                    .help("Switch server (⌘1–⌘\(min(model.global.accounts.count, 9)))")
+                }
+            }
+        }
+    }
+
+    private func serverLabel(_ account: Account) -> String {
+        account.realmName ?? account.realmURL.host() ?? account.email
     }
 
     /// Runs the current query. Return finalizes it: the query is recorded in

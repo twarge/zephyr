@@ -62,6 +62,19 @@ public final class GlobalStore: UpdateMachineDelegate {
         return account
     }
 
+    /// Reorders the account list (drives ⌘1…⌘9 precedence); persisted.
+    public func moveAccounts(fromOffsets: IndexSet, toOffset: Int) {
+        var moved: [Account] = []
+        for index in fromOffsets.sorted(by: >) where accounts.indices.contains(index) {
+            moved.append(accounts.remove(at: index))
+        }
+        let insertion = toOffset - fromOffsets.count(where: { $0 < toOffset })
+        accounts.insert(
+            contentsOf: moved.reversed(),
+            at: min(max(insertion, 0), accounts.count))
+        try? accountsStore.save(accounts)
+    }
+
     public func removeAccount(_ accountId: Account.ID) async throws {
         machines.removeValue(forKey: accountId)?.stop()
         if let store = stores.removeValue(forKey: accountId) {
