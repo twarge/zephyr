@@ -81,6 +81,7 @@ struct ComposeBar: View {
     @State private var uploadingFilenames: [String] = []
     @State private var showFileImporter = false
     @FocusState private var messageFocused: Bool
+    @Environment(KeyboardRouter.self) private var keys
 
     private var destination: SendDestination? {
         switch mode {
@@ -191,6 +192,9 @@ struct ComposeBar: View {
             if case .fixed(let destination, _) = mode {
                 text = DraftStore.shared.draft(for: destination)
             }
+            // The keyboard router's r / c shortcuts focus this compose box.
+            let focus = $messageFocused
+            keys.focusCompose = { focus.wrappedValue = true }
         }
         .onChange(of: text) {
             if case .fixed(let destination, _) = mode {

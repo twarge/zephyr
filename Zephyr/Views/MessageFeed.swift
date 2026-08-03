@@ -30,6 +30,7 @@ struct MessageFeedList: View {
     var onHeaderTap: ((ConversationKey) -> Void)?
     var onNewMessages: (() -> Void)?
 
+    @Environment(KeyboardRouter.self) private var keys
     @State private var anchorId: String?
     @State private var nearBottom = true
 
@@ -102,6 +103,26 @@ struct MessageFeedList: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
+            feedScrollView
+                .onChange(of: keys.selectedMessageId) { _, newId in
+                    guard let newId else { return }
+                    // nil anchor: scroll the minimum needed for visibility.
+                    proxy.scrollTo("msg-\(newId)", anchor: nil)
+                }
+        }
+        .onAppear {
+            keys.activeFeed = model
+        }
+        .onDisappear {
+            if keys.activeFeed === model {
+                keys.activeFeed = nil
+                keys.selectedMessageId = nil
+            }
+        }
+    }
+
+    private var feedScrollView: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 if !model.haveOldest && !model.messages.isEmpty {
@@ -130,7 +151,8 @@ struct MessageFeedList: View {
                         MessageRow(
                             store: store, message: message,
                             showHeader: showHeader, cache: cache,
-                            useMatchHighlights: useMatchHighlights)
+                            useMatchHighlights: useMatchHighlights,
+                            isKeySelected: keys.selectedMessageId == message.id)
                     }
                 }
                 if model.haveNewest {
@@ -276,7 +298,9 @@ struct MessageRow: View {
     let showHeader: Bool
     let cache: MessageContentCache
     var useMatchHighlights = false
+    var isKeySelected = false
 
+    @Environment(KeyboardRouter.self) private var keys
     @State private var hovering = false
     @State private var showReactionPicker = false
     @State private var editing = false
@@ -366,6 +390,32 @@ struct MessageRow: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, 1)
+        .padding(.horizontal, 4)
+        .background(
+            isKeySelected ? Color.accentColor.opacity(0.08) : .clear,
+            in: RoundedRectangle(cornerRadius: 6))
+        .overlay(alignment: .leading) {
+            if isKeySelected {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(Color.accentColor.opacity(0.7))
+                    .frame(width: 3)
+            }
+        }
+        // Click/tap selects (like the web app); simultaneous so links and
+        // buttons inside the row keep working.
+        .simultaneousGesture(TapGesture().onEnded {
+            keys.selectedMessageId = message.id
+        })
+        .onChange(of: keys.editRequestId) { _, requested in
+            guard requested == message.id else { return }
+            keys.editRequestId = nil
+            Task {
+                editText = await store.fetchRawContent(message.id) ?? ""
+                if !editText.isEmpty {
+                    editing = true
+                }
+            }
+        }
         .onHover { hovering = $0 }
         .overlay(alignment: .topTrailing) {
             if hovering || showReactionPicker {

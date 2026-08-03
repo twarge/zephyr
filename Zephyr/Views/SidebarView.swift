@@ -12,6 +12,8 @@ struct SidebarView: View {
     @Bindable var search: SidebarSearchModel
     @Binding var selection: Destination?
     @Environment(AppModel.self) private var model
+    @Environment(KeyboardRouter.self) private var keys
+    @FocusState private var searchFocused: Bool
 
     @State private var collapsedSections: Set<String>
     @State private var expandedChannels: Set<Int>
@@ -166,8 +168,14 @@ struct SidebarView: View {
         ) { token in
             Text(token.bubbleText)
         }
+        .searchFocused($searchFocused)
         .onSubmit(of: .search) {
             runSearch(recordInRecents: true)
+        }
+        .onAppear {
+            // The keyboard router's / shortcut focuses the search field.
+            let focus = $searchFocused
+            keys.focusSearch = { focus.wrappedValue = true }
         }
         .onChange(of: search.tokens) {
             if !search.tokens.isEmpty {

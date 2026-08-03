@@ -17,7 +17,10 @@ viewer. Offline-first: warm launch from the cached snapshot, transcripts render
 from a per-conversation message cache, drafts and the outbox survive relaunch,
 sends that never reached the server queue and auto-resend on reconnect, and
 reactions/read-state recorded offline replay when the network returns (see
-ARCHITECTURE §9). The Xcode target is now multiplatform — the same
+ARCHITECTURE §9). Full Zulip-style keyboard navigation on both platforms
+(hardware keyboards on iPad/iPhone included): j/k message selection, r reply,
+s/S narrowing, n/p unread navigation, +/\* reactions and stars — press ? for
+the complete map. The Xcode target is now multiplatform — the same
 scheme builds and runs on iOS 18+/iPadOS (Simulator-verified); AppKit-specific
 behavior (Quick Look, popover search, Settings scene, dock badge) is gated behind
 a small `Platform` shim. Remaining before public beta: Developer ID

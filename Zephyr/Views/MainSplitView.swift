@@ -23,6 +23,10 @@ struct MainSplitView: View {
     @State private var search: SidebarSearchModel
     @State private var showNewConversation = false
     @State private var showSettings = false
+    @State private var keys = KeyboardRouter()
+    #if os(iOS)
+    @FocusState private var detailFocused: Bool
+    #endif
 
     init(store: PerAccountStore) {
         self.store = store
@@ -36,7 +40,20 @@ struct MainSplitView: View {
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 400)
         } detail: {
             detailContent
+                #if os(iOS)
+                // Hardware-keyboard route: keep the detail pane focusable so
+                // plain-letter shortcuts have somewhere to land; a focused
+                // text field consumes its own keys first.
+                .focusable()
+                .focusEffectDisabled()
+                .focused($detailFocused)
+                .onKeyPress(phases: .down) { press in
+                    handleKeyPress(press) ? .handled : .ignored
+                }
+                .onAppear { detailFocused = true }
+                #endif
         }
+        .environment(keys)
         .navigationTitle(store.realmName ?? "Zephyr")
         // Channel/topic/message links inside message content navigate in-app.
         .environment(
@@ -99,12 +116,39 @@ struct MainSplitView: View {
             SettingsView()
                 .environment(model)
         }
+        .sheet(isPresented: Bindable(keys).showHelp) {
+            ShortcutsHelpView()
+        }
+        .onAppear {
+            keys.store = store
+            keys.currentDestination = selection
+            keys.navigate = { destination in selection = destination }
+            keys.newConversation = { showNewConversation = true }
+            #if os(macOS)
+            keys.installMonitor()
+            #endif
+        }
+        .onDisappear {
+            #if os(macOS)
+            keys.removeMonitor()
+            #endif
+        }
+        // The store is replaced on event-queue rebuild while this view (keyed
+        // by account id) survives; keep the router pointed at the live one.
+        .onChange(of: ObjectIdentifier(store)) {
+            keys.store = store
+        }
         .onChange(of: selection) {
             if case .conversation(let key) = selection {
                 model.activeConversation = key
             } else {
                 model.activeConversation = nil
             }
+            keys.currentDestination = selection
+            keys.selectedMessageId = nil
+            #if os(iOS)
+            detailFocused = true
+            #endif
             AppStateStore.setSelection(selection, for: store.accountId)
         }
         .onChange(of: model.pendingDestination) {
@@ -147,6 +191,22 @@ struct MainSplitView: View {
     private func accountLabel(_ account: Account) -> String {
         "\(account.realmName ?? account.realmURL.host() ?? "?") — \(account.email)"
     }
+
+    #if os(iOS)
+    private func handleKeyPress(_ press: KeyPress) -> Bool {
+        guard press.modifiers.isDisjoint(with: [.command, .control, .option])
+        else { return false }
+        switch press.key {
+        case .upArrow: return keys.handleUpArrow()
+        case .downArrow: return keys.handleDownArrow()
+        case .return: return keys.handleReturn()
+        case .escape: return keys.handleEscape()
+        default:
+            guard let character = press.characters.first else { return false }
+            return keys.handleCharacter(character)
+        }
+    }
+    #endif
 
     @ViewBuilder
     private var detailContent: some View {
