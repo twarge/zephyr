@@ -223,5 +223,5 @@ feature, not as a later pass.
    energy/App Store implications; revisit at M3.
 2. **Mac App Store** — sandbox is compatible, but web-auth flow and Sparkle-vs-MAS
    updating differ; decide at M3.
-3. **App icon** — Zephyr needs an icon (wind/breeze motif?); the asset catalog slots are
-   empty.
+3. ~~**App icon**~~ — resolved: a bold rounded Z on a blue gradient squircle, generated
+   from code (`Design/AppIconGenerator.swift` is the source of truth).
