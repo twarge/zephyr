@@ -104,6 +104,25 @@ public final class MessageListModel: Identifiable {
     /// store triggers a real refetch on reconnect.
     private func populateOfflineFallback() {
         guard messages.isEmpty, let store else { return }
+        // Search narrows can't be matched client-side, but the local FTS
+        // index can answer them.
+        if case .custom(let elements) = narrow {
+            let text = elements.first { $0.operatorName == "search" }.flatMap { element -> String? in
+                if case .string(let value) = element.operand { return value }
+                return nil
+            }
+            guard let text else { return }
+            let gen = generation
+            Task { [weak self] in
+                guard let self, let store = self.store else { return }
+                let results = await store.searchOffline(text)
+                guard self.generation == gen, self.messages.isEmpty, !results.isEmpty
+                else { return }
+                self.messages = results
+                self.isOfflineFallback = true
+            }
+            return
+        }
         let cached = store.messages.values
             .filter { narrow.containsMessage($0, selfUserId: store.selfUserId) }
             .sorted { $0.id < $1.id }
@@ -140,6 +159,15 @@ public final class MessageListModel: Identifiable {
         } catch {
             guard generation == gen else { return }
             fetchError = error
+            // Offline scrollback: page older history out of the local
+            // database instead.
+            let cached = await store.olderFromCache(than: first.id, narrow: narrow)
+            guard generation == gen, let currentFirst = messages.first?.id else { return }
+            let older = cached.filter { $0.id < currentFirst }
+            guard !older.isEmpty else { return }
+            store.reconcileFetchedMessages(older)
+            messages.insert(
+                contentsOf: older.map { store.messages[$0.id] ?? $0 }, at: 0)
         }
     }
 

@@ -259,15 +259,25 @@ out) so Plans A/B swap without touching the model.
   polled) and replaces it when the live register lands — the "stale → live" pattern
   from zulip-mobile's realtime.md. If the register fails (offline), the provisional
   store stays up and a reconnect loop takes over.
-- **Offline store** (shipped; `OfflineStore`, JSON files per account under
-  Application Support/offline/): three files, all tolerant-read/atomic-write, holding
-  *work and history* (the snapshot cache above holds server *state*):
-  - `messages.json` — the newest ~50 messages per conversation from the canonical map,
-    saved debounced (2s) on message-affecting events and synchronously at quit.
-    Restored into the store at init (also seeding sidebar recency); transcripts render
-    from it when a fetch fails (`MessageListModel.isOfflineFallback`), then refetch on
-    reconnect. Reconcile is *reversed* for cache-restored ids: a fetched copy replaces
-    them (the server is fresher than last session), tracked via `cachedMessageIds`.
+- **Offline store** (shipped; `OfflineStore` + `MessageDatabase`, per account under
+  Application Support/offline/), holding *work and history* (the snapshot cache above
+  holds server *state*):
+  - `messages.sqlite` (GRDB) — full retained message history. Rows keep the complete
+    `Message` as a `ZulipJSON` payload blob (no field mapping to drift) plus indexed
+    conversation-identity columns and an FTS5 index (body/topic/sender, maintained by
+    triggers) over cheaply tag-stripped text. Writes are incremental: events mark
+    message ids dirty; a 2s-debounced batch upserts them (synchronously at quit).
+    Serving three features: cold launch restores the newest ~50 per conversation in
+    one window-function query (also seeding sidebar recency); offline scrollback
+    pages older history into transcripts when the network fetch fails
+    (topic/channel/DM/combined narrows); offline search answers `search` narrows
+    from the FTS index (`MessageListModel.isOfflineFallback` refetches server-side
+    on reconnect). Reconcile is *reversed* for cache-restored ids: a fetched copy
+    replaces them (the server is fresher than last session), via `cachedMessageIds`.
+    The old `messages.json` cache is imported once and deleted. GRDB is an
+    `internal import` — its SQL string-literal extensions must not leak into
+    importers' overload resolution (this bit us in tests: a `[String].joined` in
+    scope with GRDB silently inferred `SQL` elements).
   - `outbox.json` — unsent messages survive relaunch. Failure classification decides
     resend policy: errors proving the request never left (`isDefinitelyOfflineError`)
     park the entry as `.queued` for automatic resend; anything ambiguous (timeout,
@@ -289,9 +299,8 @@ out) so Plans A/B swap without touching the model.
     (would fork the async API layer for a 200ms request) and `BGAppRefreshTask`
     (deferred — system-scheduled wakes can't be tied to reconnects, and with no
     push service the next foreground is the reliable delivery point anyway).
-- SQLite/GRDB remains the escalation path if the JSON cache outgrows itself; an App
-  Group container if extensions ever need shared data (flutter does this for push
-  decryption on iOS).
+- An App Group container remains the move if extensions ever need shared data
+  (flutter does this for push decryption on iOS).
 
 ## 10. Notifications and platform services (App layer)
 

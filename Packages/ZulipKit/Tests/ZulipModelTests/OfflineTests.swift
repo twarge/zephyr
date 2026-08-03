@@ -34,23 +34,80 @@ struct OfflineTests {
             from: Data(Fixtures.channelMessageJSON(id: id, topic: topic, flags: ["read"]).utf8))
     }
 
-    // MARK: OfflineStore round-trips
+    // MARK: Message database
 
-    @Test func messagesRoundTripAndBound() throws {
+    @Test func databaseRestoreIsBoundedPerConversation() throws {
         let offline = tempOfflineStore()
         defer { try? FileManager.default.removeItem(at: offline.directory) }
-        // 60 in one topic (over the per-conversation bound), 3 in another.
+        let db = try #require(offline.openDatabase())
+        // 60 in one topic (over the per-conversation restore bound), 3 in
+        // another; the database retains all of them.
         var all = try (1...60).map { try fixtureMessage(id: $0) }
         all += try (100...102).map { try fixtureMessage(id: $0, topic: "other") }
-        offline.saveMessages(all, selfUserId: 1)
+        try db.upsert(all, selfUserId: 1)
+        #expect(try db.messageCount() == 63)
 
-        let loaded = offline.loadMessages()
-        let byTopic = Dictionary(grouping: loaded, by: \.subject)
+        let restored = try db.recentPerConversation(OfflineStore.messagesPerConversation)
+        let byTopic = Dictionary(grouping: restored, by: \.subject)
         #expect(byTopic["greetings"]?.count == OfflineStore.messagesPerConversation)
         // The newest survive the bound.
         #expect(byTopic["greetings"]?.map(\.id).min() == 11)
         #expect(byTopic["other"]?.count == 3)
-        #expect(loaded.map(\.id) == loaded.map(\.id).sorted())
+        #expect(restored.map(\.id) == restored.map(\.id).sorted())
+    }
+
+    @Test func databasePagesOlderHistory() throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        let db = try #require(offline.openDatabase())
+        try db.upsert(try (1...60).map { try fixtureMessage(id: $0) }, selfUserId: 1)
+
+        let page = try db.older(
+            than: 31, matching: .topic(streamId: 10, topic: "Greetings"), limit: 20)
+        #expect(page.map(\.id) == Array(11...30))
+        #expect(try db.older(than: 31, matching: .channel(streamId: 99), limit: 20).isEmpty)
+    }
+
+    @Test func databaseFullTextSearch() throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        let db = try #require(offline.openDatabase())
+        var special = try fixtureMessage(id: 7)
+        special.content = "<p>the <b>flux capacitor</b> hums</p>"
+        try db.upsert([special, try fixtureMessage(id: 8)], selfUserId: 1)
+
+        #expect(try db.search("capacitor").map(\.id) == [7])
+        #expect(try db.search("flux hums").map(\.id) == [7])
+        // Topic and sender names are indexed too; HTML tags are not.
+        #expect(try db.search("greetings").count == 2)
+        #expect(try db.search("Other").count == 2)
+        #expect(try db.search("nonexistent").isEmpty)
+        #expect(try db.search("<p>").isEmpty)
+
+        // Edits re-index; deletes drop out.
+        special.content = "<p>quantum foam</p>"
+        try db.upsert([special], selfUserId: 1)
+        #expect(try db.search("capacitor").isEmpty)
+        #expect(try db.search("quantum").map(\.id) == [7])
+        #expect(try db.messageCount() == 2)
+        try db.delete(ids: [7])
+        #expect(try db.search("quantum").isEmpty)
+        #expect(try db.messageCount() == 1)
+    }
+
+    @Test func legacyJSONCacheMigratesIntoDatabase() throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        let legacy = try (1...5).map { try fixtureMessage(id: $0) }
+        try ZulipJSON.encoder.encode(legacy)
+            .write(to: offline.directory.appendingPathComponent("messages.json"))
+
+        let (store, _) = try makeStore(script: [], offline: offline)
+        #expect(store.messages.count == 5)
+        #expect(try store.database?.messageCount() == 5)
+        // The JSON file is consumed by the import.
+        #expect(!FileManager.default.fileExists(
+            atPath: offline.directory.appendingPathComponent("messages.json").path))
     }
 
     @Test func outboxAndActionsRoundTrip() throws {
@@ -207,7 +264,8 @@ struct OfflineTests {
     @Test func cachedMessagesRenderOfflineAndRefetchOnReconnect() async throws {
         let offline = tempOfflineStore()
         defer { try? FileManager.default.removeItem(at: offline.directory) }
-        offline.saveMessages(try (1...5).map { try fixtureMessage(id: $0) }, selfUserId: 1)
+        try #require(offline.openDatabase())
+            .upsert(try (1...5).map { try fixtureMessage(id: $0) }, selfUserId: 1)
 
         let (store, _) = try makeStore(script: [.networkError], offline: offline)
         #expect(store.messages.count == 5)
@@ -223,10 +281,49 @@ struct OfflineTests {
         #expect(list.fetchError != nil)
     }
 
+    @Test func offlineScrollbackPagesFromDatabase() async throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        try #require(offline.openDatabase())
+            .upsert(try (1...60).map { try fixtureMessage(id: $0) }, selfUserId: 1)
+
+        // Restore loads the newest 50 (ids 11–60); the rest live only on disk.
+        let (store, _) = try makeStore(
+            script: [.networkError, .networkError], offline: offline)
+        #expect(store.messages.count == 50)
+
+        let list = MessageListModel(store: store, narrow: .topic(streamId: 10, topic: "greetings"))
+        await list.fetchInitial()
+        #expect(list.messages.first?.id == 11)
+
+        // Scrolling up offline pages ids 1–10 out of the database.
+        await list.fetchOlder()
+        #expect(list.messages.first?.id == 1)
+        #expect(list.messages.count == 60)
+    }
+
+    @Test func offlineSearchUsesFullTextIndex() async throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        var special = try fixtureMessage(id: 3)
+        special.content = "<p>zephyr rising</p>"
+        try #require(offline.openDatabase())
+            .upsert([special, try fixtureMessage(id: 4)], selfUserId: 1)
+
+        let (store, _) = try makeStore(script: [.networkError], offline: offline)
+        let list = MessageListModel(
+            store: store, narrow: .custom([NarrowElement("search", .string("zephyr"))]))
+        await list.fetchInitial()
+        try await eventually("offline search results") {
+            list.messages.map(\.id) == [3] && list.isOfflineFallback
+        }
+    }
+
     @Test func fetchedCopyBeatsCachedCopy() throws {
         let offline = tempOfflineStore()
         defer { try? FileManager.default.removeItem(at: offline.directory) }
-        offline.saveMessages([try fixtureMessage(id: 1)], selfUserId: 1)
+        try #require(offline.openDatabase())
+            .upsert([try fixtureMessage(id: 1)], selfUserId: 1)
 
         let (store, _) = try makeStore(script: [], offline: offline)
         var fresh = try fixtureMessage(id: 1)

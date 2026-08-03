@@ -5,7 +5,9 @@ import ZulipAPI
 
 struct MessageWidgetTests {
     private func message(submessages: [(senderId: Int, content: String)]) throws -> Message {
-        let subs = submessages
+        // Explicit type: GRDB (linked transitively) offers a Collection<SQL>
+        // joined(separator:) that literal inference can otherwise pick.
+        let subs: String = submessages
             .map { entry in
                 let escaped = entry.content
                     .replacingOccurrences(of: "\\", with: "\\\\")

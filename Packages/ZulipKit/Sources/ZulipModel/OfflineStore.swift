@@ -52,26 +52,22 @@ public struct OfflineStore: Sendable {
 
     // MARK: Messages
 
-    /// How many messages per conversation the cache keeps (newest first).
+    /// How many messages per conversation restore into memory at launch.
+    /// (The SQLite store itself retains full history.)
     public static let messagesPerConversation = 50
 
-    public func loadMessages() -> [Message] {
+    /// Opens (creating on first use) the account's SQLite message store.
+    public func openDatabase() -> MessageDatabase? {
+        try? MessageDatabase(path: url("messages.sqlite").path)
+    }
+
+    /// The pre-SQLite JSON cache, read once for migration then removed.
+    public func loadLegacyMessages() -> [Message] {
         load([Message].self, from: "messages.json") ?? []
     }
 
-    /// Persists a bounded slice of the canonical map: the newest
-    /// `messagesPerConversation` of each conversation.
-    public func saveMessages(_ messages: [Message], selfUserId: Int) {
-        var byConversation: [ConversationKey: [Message]] = [:]
-        for message in messages {
-            guard let key = Unreads.conversationKey(for: message, selfUserId: selfUserId)
-            else { continue }
-            byConversation[key, default: []].append(message)
-        }
-        let bounded = byConversation.values.flatMap { conversation in
-            conversation.sorted { $0.id > $1.id }.prefix(Self.messagesPerConversation)
-        }
-        save(bounded.sorted { $0.id < $1.id }, to: "messages.json")
+    public func removeLegacyMessages() {
+        try? FileManager.default.removeItem(at: url("messages.json"))
     }
 
     // MARK: Outbox

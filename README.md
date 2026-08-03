@@ -13,11 +13,12 @@ inline reply (DMs + mentions, while running — Zulip has no desktop push), dock
 send sounds (configurable in Settings ⌘,), multi-account with switching, a channel
 browser with subscribe/unsubscribe and muting, warm launch from a cached snapshot
 ("stale → live"), topic moves with propagation, read receipts, and an edit-history
-viewer. Offline-first: warm launch from the cached snapshot, transcripts render
-from a per-conversation message cache, drafts and the outbox survive relaunch,
-sends that never reached the server queue and auto-resend on reconnect, and
-reactions/read-state recorded offline replay when the network returns (see
-ARCHITECTURE §9). Full Zulip-style keyboard navigation on both platforms
+viewer. Offline-first: warm launch from the cached snapshot, a per-account SQLite
+message store (GRDB) retains full history for offline transcripts, offline
+scrollback, and offline full-text search, drafts and the outbox survive
+relaunch, sends that never reached the server queue and auto-resend on
+reconnect, and reactions/read-state recorded offline replay when the network
+returns (see ARCHITECTURE §9). Full Zulip-style keyboard navigation on both platforms
 (hardware keyboards on iPad/iPhone included): j/k message selection, r reply,
 s/S narrowing, n/p unread navigation, +/\* reactions and stars — press ? for
 the complete map. A Recent Conversations view (t) mirrors the web app's:

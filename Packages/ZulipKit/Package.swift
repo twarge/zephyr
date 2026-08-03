@@ -14,10 +14,13 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0"),
         .package(url: "https://github.com/mgriebling/SwiftMath.git", from: "1.5.0"),
+        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
     ],
     targets: [
         .target(name: "ZulipAPI"),
-        .target(name: "ZulipModel", dependencies: ["ZulipAPI"]),
+        .target(
+            name: "ZulipModel",
+            dependencies: ["ZulipAPI", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "ZulipContent", dependencies: ["SwiftSoup"]),
         .target(name: "ZulipMath", dependencies: ["SwiftMath"]),
         .executableTarget(name: "Harness", dependencies: ["ZulipAPI", "ZulipModel"]),

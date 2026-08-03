@@ -49,6 +49,9 @@ public final class PerAccountStore {
     /// last session's cache).
     private(set) var cachedMessageIds: Set<Int> = []
     @ObservationIgnored private let offline: OfflineStore?
+    /// Full retained message history + FTS index (see `MessageDatabase`).
+    @ObservationIgnored public private(set) var database: MessageDatabase?
+    @ObservationIgnored private var dirtyMessageIds: Set<Int> = []
     @ObservationIgnored private var cacheSaveTask: Task<Void, Never>?
     @ObservationIgnored private var isFlushing = false
     /// Who's typing where (from typing events).
@@ -110,15 +113,26 @@ public final class PerAccountStore {
         channelFolders = (snapshot.channelFolders ?? []).sorted { $0.order < $1.order }
         realmEmoji = snapshot.realmEmoji ?? [:]
 
-        // Offline restore: cached transcripts (also seeding sidebar recency),
-        // the unsent outbox, and any actions recorded offline last session.
+        // Offline restore: recent transcripts from the SQLite store (also
+        // seeding sidebar recency), the unsent outbox, and any actions
+        // recorded offline last session.
         if let offline {
-            let cached = offline.loadMessages()
-            for message in cached {
-                messages[message.id] = message
-                cachedMessageIds.insert(message.id)
+            database = offline.openDatabase()
+            if let database {
+                // One-time import of the pre-SQLite JSON cache.
+                let legacy = offline.loadLegacyMessages()
+                if !legacy.isEmpty {
+                    try? database.upsert(legacy, selfUserId: account.userId)
+                    offline.removeLegacyMessages()
+                }
+                let cached = (try? database.recentPerConversation(
+                    OfflineStore.messagesPerConversation)) ?? []
+                for message in cached {
+                    messages[message.id] = message
+                    cachedMessageIds.insert(message.id)
+                }
+                conversations.seed(messages: cached, selfUserId: account.userId)
             }
-            conversations.seed(messages: cached, selfUserId: account.userId)
             outbox = offline.loadOutbox().map { entry in
                 var restored = entry
                 restored.state = entry.restoredState
@@ -264,9 +278,10 @@ public final class PerAccountStore {
         offline?.savePendingActions(pendingActions)
     }
 
-    /// Debounced snapshot of the canonical message map to the offline cache.
-    private func scheduleMessageCacheSave() {
-        guard offline != nil else { return }
+    /// Marks messages dirty and schedules a debounced incremental upsert.
+    private func scheduleMessageCacheSave(_ ids: some Sequence<Int>) {
+        guard database != nil else { return }
+        dirtyMessageIds.formUnion(ids)
         cacheSaveTask?.cancel()
         cacheSaveTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2))
@@ -275,20 +290,44 @@ public final class PerAccountStore {
         }
     }
 
-    /// Writes the message cache now. Asynchronous (encoding off-main) by
-    /// default; synchronous at shutdown so the write completes before exit.
+    /// Flushes dirty messages to the database now. Asynchronous (write off
+    /// the main actor) by default; synchronous at shutdown so the write
+    /// completes before exit.
     public func persistMessageCache(synchronously: Bool = false) {
-        guard let offline else { return }
+        guard let database else { return }
         cacheSaveTask?.cancel()
-        let snapshot = Array(messages.values)
+        guard !dirtyMessageIds.isEmpty else { return }
+        let batch = dirtyMessageIds.compactMap { messages[$0] }
+        dirtyMessageIds = []
         let selfId = selfUserId
         if synchronously {
-            offline.saveMessages(snapshot, selfUserId: selfId)
+            try? database.upsert(batch, selfUserId: selfId)
         } else {
             Task.detached(priority: .utility) {
-                offline.saveMessages(snapshot, selfUserId: selfId)
+                try? await database.upsertAsync(batch, selfUserId: selfId)
             }
         }
+    }
+
+    // MARK: Offline reads (transcript paging + search)
+
+    /// Older messages for a narrow from the local database, for scrollback
+    /// when the network fetch fails.
+    func olderFromCache(than id: Int, narrow: Narrow, limit: Int = 100) async -> [Message] {
+        guard let database,
+              let filter = MessageDatabase.Filter(narrow: narrow, selfUserId: selfUserId)
+        else { return [] }
+        return await Task.detached {
+            (try? database.older(than: id, matching: filter, limit: limit)) ?? []
+        }.value
+    }
+
+    /// Full-text search against the local index, for offline search.
+    func searchOffline(_ text: String) async -> [Message] {
+        guard let database else { return [] }
+        return await Task.detached {
+            (try? database.search(text)) ?? []
+        }.value
     }
 
     // MARK: Sending
@@ -453,6 +492,7 @@ public final class PerAccountStore {
             }
             messages[message.id] = current
             forEachMessageList { $0.handleChangedMessages(ids: [message.id]) }
+            scheduleMessageCacheSave([message.id])
         }
         performOrQueue(
             .reaction(
@@ -467,6 +507,7 @@ public final class PerAccountStore {
             message.flags = Array(flags)
             messages[messageId] = message
             forEachMessageList { $0.handleChangedMessages(ids: [messageId]) }
+            scheduleMessageCacheSave([messageId])
         }
         performOrQueue(.updateFlags(messageIds: [messageId], add: starred, flag: "starred"))
     }
@@ -539,12 +580,14 @@ public final class PerAccountStore {
     /// Exception: copies installed from the offline cache lose to a fetch —
     /// the server is fresher than last session.
     public func reconcileFetchedMessages(_ fetched: [Message]) {
+        var written: [Int] = []
         for message in fetched
         where messages[message.id] == nil || cachedMessageIds.contains(message.id) {
             messages[message.id] = message
             cachedMessageIds.remove(message.id)
+            written.append(message.id)
         }
-        scheduleMessageCacheSave()
+        scheduleMessageCacheSave(written)
     }
 
     public func handleEvent(_ event: Event) {
@@ -564,7 +607,7 @@ public final class PerAccountStore {
                 outbox.removeAll { $0.id == localId }
                 persistOutbox()
             }
-            scheduleMessageCacheSave()
+            scheduleMessageCacheSave([message.id])
 
         case .updateMessage(let e):
             // Content edits touch messageId; topic/channel moves touch every
@@ -585,7 +628,7 @@ public final class PerAccountStore {
                 messages[id] = message
             }
             forEachMessageList { $0.handleChangedMessages(ids: ids) }
-            scheduleMessageCacheSave()
+            scheduleMessageCacheSave(ids)
 
         case .deleteMessage(let e):
             for id in e.allIds {
@@ -594,7 +637,13 @@ public final class PerAccountStore {
             }
             unreads.removeMessages(ids: e.allIds)
             forEachMessageList { $0.handleDeletedMessages(ids: e.allIds) }
-            scheduleMessageCacheSave()
+            dirtyMessageIds.subtract(e.allIds)
+            if let database {
+                let ids = e.allIds
+                Task.detached(priority: .utility) {
+                    try? database.delete(ids: ids)
+                }
+            }
 
         case .updateMessageFlags(let e):
             guard let op = UpdateFlagsOp(rawValue: e.op) else {
@@ -616,7 +665,7 @@ public final class PerAccountStore {
                 op: op, flag: e.flag, ids: e.messages, all: e.all,
                 locate: { self.messages[$0] })
             forEachMessageList { $0.handleChangedMessages(ids: ids) }
-            scheduleMessageCacheSave()
+            scheduleMessageCacheSave(ids)
 
         case .reaction(let e):
             guard var message = messages[e.messageId] else { break }
@@ -635,7 +684,7 @@ public final class PerAccountStore {
             }
             messages[e.messageId] = message
             forEachMessageList { $0.handleChangedMessages(ids: [e.messageId]) }
-            scheduleMessageCacheSave()
+            scheduleMessageCacheSave([e.messageId])
 
         case .typing(let e):
             guard e.senderId != selfUserId else { break }
