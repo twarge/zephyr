@@ -274,7 +274,11 @@ out) so Plans A/B swap without touching the model.
     from the FTS index (`MessageListModel.isOfflineFallback` refetches server-side
     on reconnect). Reconcile is *reversed* for cache-restored ids: a fetched copy
     replaces them (the server is fresher than last session), via `cachedMessageIds`.
-    The old `messages.json` cache is imported once and deleted. GRDB is an
+    The old `messages.json` cache is imported once and deleted. Retention: a
+    pruning policy (Settings → General, default 5 years, "forever" available)
+    deletes older rows at store creation and on setting change — starred
+    messages are always kept, large prunes VACUUM, and the server's history is
+    never touched. GRDB is an
     `internal import` — its SQL string-literal extensions must not leak into
     importers' overload resolution (this bit us in tests: a `[String].joined` in
     scope with GRDB silently inferred `SQL` elements).

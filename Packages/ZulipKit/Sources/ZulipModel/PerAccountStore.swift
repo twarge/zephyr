@@ -51,6 +51,9 @@ public final class PerAccountStore {
     @ObservationIgnored private let offline: OfflineStore?
     /// Full retained message history + FTS index (see `MessageDatabase`).
     @ObservationIgnored public private(set) var database: MessageDatabase?
+    /// Days of on-disk message history to retain (nil = forever). Set by
+    /// `GlobalStore` from app preferences.
+    @ObservationIgnored public var messageRetentionDays: Int?
     @ObservationIgnored private var dirtyMessageIds: Set<Int> = []
     @ObservationIgnored private var cacheSaveTask: Task<Void, Never>?
     @ObservationIgnored private var isFlushing = false
@@ -306,6 +309,17 @@ public final class PerAccountStore {
             Task.detached(priority: .utility) {
                 try? await database.upsertAsync(batch, selfUserId: selfId)
             }
+        }
+    }
+
+    /// Prunes on-disk history past the retention window (starred messages
+    /// are kept). Disk-level only — this session's in-memory map is
+    /// untouched. Runs at store creation and when the setting changes.
+    public func pruneMessageHistory() {
+        guard let database, let days = messageRetentionDays else { return }
+        let cutoff = Date.now.addingTimeInterval(-Double(days) * 86_400)
+        Task.detached(priority: .utility) {
+            _ = try? database.prune(olderThan: cutoff)
         }
     }
 

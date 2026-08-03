@@ -95,6 +95,42 @@ struct OfflineTests {
         #expect(try db.messageCount() == 1)
     }
 
+    @Test func pruneRemovesOldMessagesButKeepsStarred() throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        let db = try #require(offline.openDatabase())
+        var ancient = try fixtureMessage(id: 1)
+        ancient.timestamp = 1000
+        var ancientStarred = try fixtureMessage(id: 2)
+        ancientStarred.timestamp = 1000
+        ancientStarred.flags = ["read", "starred"]
+        let recent = try fixtureMessage(id: 3)
+        try db.upsert([ancient, ancientStarred, recent], selfUserId: 1)
+
+        let deleted = try db.prune(olderThan: Date(timeIntervalSince1970: 500_000))
+        #expect(deleted == 1)
+        #expect(try db.recentPerConversation(50).map(\.id) == [2, 3])
+        // The pruned message leaves the search index too.
+        #expect(try db.search("hello").map(\.id) == [2, 3])
+    }
+
+    @Test func retentionSettingPrunesThroughStore() async throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        var ancient = try fixtureMessage(id: 1)
+        ancient.timestamp = 1000  // 1970: far outside any retention window.
+        try #require(offline.openDatabase())
+            .upsert([ancient, try fixtureMessage(id: 2)], selfUserId: 1)
+
+        let (store, _) = try makeStore(script: [], offline: offline)
+        store.messageRetentionDays = 5 * 365
+        store.pruneMessageHistory()
+        try await eventually("ancient row pruned") {
+            guard let database = store.database else { return false }
+            return (try? database.messageCount()) == 1
+        }
+    }
+
     @Test func legacyJSONCacheMigratesIntoDatabase() throws {
         let offline = tempOfflineStore()
         defer { try? FileManager.default.removeItem(at: offline.directory) }

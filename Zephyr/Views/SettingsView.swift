@@ -31,9 +31,11 @@ struct SettingsView: View {
 }
 
 private struct GeneralSettings: View {
+    @Environment(AppModel.self) private var model
     @AppStorage("badgePolicy") private var badgePolicy = BadgePolicy.dmsAndMentions.rawValue
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("playSendSound") private var playSendSound = true
+    @AppStorage("messageRetentionYears") private var messageRetentionYears = 5
 
     var body: some View {
         Form {
@@ -48,8 +50,24 @@ private struct GeneralSettings: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Toggle("Play sound when sending", isOn: $playSendSound)
+            Divider()
+                .padding(.vertical, 4)
+            Picker("Keep message history for:", selection: $messageRetentionYears) {
+                Text("1 year").tag(1)
+                Text("2 years").tag(2)
+                Text("5 years").tag(5)
+                Text("10 years").tag(10)
+                Text("Forever").tag(0)
+            }
+            Text("Older messages are pruned from the offline archive on this device; starred messages are always kept. History on the server is unaffected.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding(20)
+        .onChange(of: messageRetentionYears) {
+            model.global.messageRetentionDays =
+                AppModel.retentionDays(forYears: messageRetentionYears)
+        }
     }
 }
 

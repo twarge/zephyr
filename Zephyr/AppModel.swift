@@ -54,6 +54,13 @@ final class AppModel {
         // Delegate + categories must exist before any notification response
         // arrives — including one that launches the app.
         NotificationManager.shared.attach(appModel: self)
+        global.messageRetentionDays = Self.retentionDays(
+            forYears: UserDefaults.standard.object(forKey: "messageRetentionYears") as? Int ?? 5)
+    }
+
+    /// Retention picker semantics: 0 means keep forever.
+    static func retentionDays(forYears years: Int) -> Int? {
+        years <= 0 ? nil : years * 365
     }
 
     func start() async {

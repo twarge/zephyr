@@ -18,6 +18,18 @@ public final class GlobalStore: UpdateMachineDelegate {
     /// Debug/harness hook: every applied event, tagged with its account.
     public var eventObserver: ((Account.ID, Event) -> Void)?
 
+    /// Message-history retention in days (nil = keep forever), applied to
+    /// every store; changing it re-prunes live stores immediately.
+    public var messageRetentionDays: Int? {
+        didSet {
+            guard messageRetentionDays != oldValue else { return }
+            for store in stores.values {
+                store.messageRetentionDays = messageRetentionDays
+                store.pruneMessageHistory()
+            }
+        }
+    }
+
     private var machines: [Account.ID: UpdateMachine] = [:]
     private var loadTasks: [Account.ID: Task<PerAccountStore, any Error>] = [:]
     /// Stores built from the on-disk snapshot cache: rendered while the live
@@ -146,6 +158,7 @@ public final class GlobalStore: UpdateMachineDelegate {
         let store = PerAccountStore(
             account: account, connection: connection, snapshot: snapshot,
             offline: OfflineStore.forAccount(accountId))
+        store.messageRetentionDays = messageRetentionDays
         store.isRecoveringEventStream = true
         stores[accountId] = store
         provisionalStores.insert(accountId)
@@ -188,6 +201,8 @@ public final class GlobalStore: UpdateMachineDelegate {
         machines[accountId]?.stop()
         provisionalStores.remove(accountId)
         stores[accountId] = store
+        store.messageRetentionDays = messageRetentionDays
+        store.pruneMessageHistory()
         let machine = UpdateMachine(
             store: store, delegate: self, enablePresence: enablePresencePings, sleep: sleep)
         machine.eventObserver = { [weak self] event in

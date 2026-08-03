@@ -228,6 +228,33 @@ public final class MessageDatabase: Sendable {
         }
     }
 
+    // MARK: Pruning
+
+    /// Deletes messages older than the cutoff — except starred ones, which
+    /// are kept indefinitely. The FTS index follows via the delete trigger.
+    /// Returns the number of rows removed; large prunes VACUUM to hand the
+    /// space back to the filesystem.
+    public func prune(olderThan cutoff: Date) throws -> Int {
+        let deleted = try queue.write { db -> Int in
+            try db.execute(
+                sql: """
+                    DELETE FROM message WHERE timestamp < ?
+                    AND NOT EXISTS (
+                        SELECT 1 FROM json_each(
+                            COALESCE(json_extract(payload, '$.flags'), '[]'))
+                        WHERE json_each.value = 'starred')
+                    """,
+                arguments: [Int(cutoff.timeIntervalSince1970)])
+            return db.changesCount
+        }
+        if deleted > 500 {
+            try queue.writeWithoutTransaction { db in
+                try db.execute(sql: "VACUUM")
+            }
+        }
+        return deleted
+    }
+
     private static func decode(_ rows: [Row]) -> [Message] {
         rows.compactMap { row in
             guard let data = row["payload"] as Data? else { return nil }
