@@ -113,6 +113,9 @@ struct SidebarView: View {
             }
             if !isFiltering {
                 Section("Views", isExpanded: expansion("views")) {
+                    viewRow(
+                        "Recent conversations", icon: "clock", tag: .recentConversations,
+                        badge: 0)
                     viewRow("Combined feed", icon: "line.3.horizontal", tag: .combinedFeed, badge: 0)
                     viewRow(
                         "Mentions", icon: "at", tag: .mentions,

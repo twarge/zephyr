@@ -8,6 +8,7 @@ enum Destination: Hashable, Codable {
     case conversation(ConversationKey)
     case channel(streamId: Int)
     case channelTopics(streamId: Int)
+    case recentConversations
     case combinedFeed
     case mentions
     case starred
@@ -221,6 +222,9 @@ struct MainSplitView: View {
             case .channelTopics(let streamId):
                 ChannelTopicsView(store: store, streamId: streamId, selection: $selection)
                     .id(streamId)
+            case .recentConversations:
+                RecentConversationsView(store: store, selection: $selection)
+                    .id(Destination.recentConversations)
             case .combinedFeed:
                 NarrowFeedView(
                     store: store, title: "Combined feed", narrow: .combinedFeed,

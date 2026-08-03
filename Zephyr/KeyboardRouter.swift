@@ -63,6 +63,9 @@ final class KeyboardRouter {
         case "a":
             navigate?(.combinedFeed)
             return true
+        case "t":
+            navigate?(.recentConversations)
+            return true
         case "n": return nextUnread(dms: false)
         case "p": return nextUnread(dms: true)
         case "/":
@@ -267,6 +270,7 @@ struct ShortcutsHelpView: View {
             ("n", "Next unread topic"),
             ("p", "Next unread direct message"),
             ("a", "Combined feed"),
+            ("t", "Recent conversations"),
             ("s", "Go to topic of selected message"),
             ("⇧S", "Go to channel of selected message"),
             ("/", "Search"),
