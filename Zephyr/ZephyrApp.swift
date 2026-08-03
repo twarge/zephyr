@@ -94,9 +94,7 @@ struct RootView: View {
         }
         .task { await model.start() }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase != .active {
-                model.persistCaches()
-            }
+            model.scenePhaseChanged(to: newPhase)
         }
     }
 }

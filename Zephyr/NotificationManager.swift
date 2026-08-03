@@ -20,7 +20,10 @@ final class NotificationManager: NSObject {
     private static let replyActionId = "REPLY"
     private static let markReadActionId = "MARK_READ"
 
-    func setup(appModel: AppModel) {
+    /// Wires the delegate and action categories. Called from `AppModel.init`
+    /// so a notification action that launches the app (iOS launches in the
+    /// background for a reply) finds the delegate installed; never prompts.
+    func attach(appModel: AppModel) {
         self.appModel = appModel
         let center = UNUserNotificationCenter.current()
         center.delegate = self
@@ -35,9 +38,16 @@ final class NotificationManager: NSObject {
                 identifier: Self.categoryId, actions: [reply, markRead],
                 intentIdentifiers: [], options: [])
         ])
+    }
+
+    /// Requests authorization (the user-visible prompt); called once an
+    /// account exists.
+    func setup(appModel: AppModel) {
+        attach(appModel: appModel)
         Task {
             authorized =
-                (try? await center.requestAuthorization(options: [.alert, .sound, .badge]))
+                (try? await UNUserNotificationCenter.current()
+                    .requestAuthorization(options: [.alert, .sound, .badge]))
                 ?? false
         }
     }
@@ -127,26 +137,37 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         let info = response.notification.request.content.userInfo
         let actionId = response.actionIdentifier
         let replyText = (response as? UNTextInputNotificationResponse)?.userText
-        let accountId = (info["account"] as? String).flatMap(UUID.init(uuidString:))
-        let parsedKey = Self.conversationKey(from: info)
-        await MainActor.run {
-            guard let appModel = self.appModel,
-                  let accountId,
-                  let store = appModel.global.stores[accountId],
-                  let key = parsedKey
+        guard let accountId = (info["account"] as? String).flatMap(UUID.init(uuidString:)),
+              let key = Self.conversationKey(from: info)
+        else { return }
+        await handleResponse(
+            accountId: accountId, key: key, actionId: actionId, replyText: replyText)
+    }
+
+    private func handleResponse(
+        accountId: Account.ID, key: ConversationKey, actionId: String, replyText: String?
+    ) async {
+        guard let appModel else { return }
+        // iOS grants a short grace period for handling; hold it explicitly.
+        let endActivity = BackgroundActivity.begin("notification-response")
+        defer { endActivity() }
+        switch actionId {
+        case Self.replyActionId, Self.markReadActionId:
+            // Cold launches (a reply from Notification Center after the app
+            // was terminated) load the account's store on demand.
+            guard let store = try? await appModel.global.perAccountStore(for: accountId)
             else { return }
-            switch actionId {
-            case Self.replyActionId:
+            if actionId == Self.replyActionId {
                 if let replyText, !replyText.isEmpty {
                     store.send(replyText, to: key.sendDestination(selfUserId: store.selfUserId))
                 }
-            case Self.markReadActionId:
+            } else {
                 store.markConversationRead(key)
-            default:
-                // Clicking the banner opens the conversation.
-                appModel.pendingDestination = .conversation(key)
-                Platform.activate()
             }
+        default:
+            // Clicking the banner opens the conversation.
+            appModel.pendingDestination = .conversation(key)
+            Platform.activate()
         }
     }
 }

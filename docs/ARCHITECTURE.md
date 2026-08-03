@@ -295,12 +295,22 @@ out) so Plans A/B swap without touching the model.
 
 ## 10. Notifications and platform services (App layer)
 
-- `UNUserNotificationCenter` local notifications from `message` events, filtered by the
-  store's per-channel/realm notification settings and self-authorship; inline-reply action
+- `UNUserNotificationCenter` local notifications from `message` events (both platforms),
+  filtered by self-authorship and policy (every DM + channel mentions); inline-reply action
   posts through the normal send path; "mark read" action updates flags. Deduplicate against
-  focused-conversation state (no banner for the transcript you're reading).
+  focused-conversation state (no banner for the transcript you're reading). Foreground
+  banners via `willPresent`.
+- Lifecycle split: the delegate and action categories attach in `AppModel.init` (a
+  notification action can *launch* the app — iOS launches in the background for a reply —
+  and must find the delegate installed); the authorization prompt waits until an account
+  exists. Responses load the account's store on demand (`perAccountStore`), so a reply
+  from Notification Center works even after the app was terminated, and run under a
+  `BackgroundActivity` assertion.
 - No push when not running (protocol limitation — PROTOCOL.md §6): document clearly; the
-  M3 menu-bar mode (app keeps polling with windows closed) is the honest mitigation.
+  M3 menu-bar mode (app keeps polling with windows closed) is the honest mitigation. On
+  iOS, backgrounding holds a finite background-task assertion (~30s of continued event
+  polling) so last-moment messages still produce banners; beyond that, delivery resumes
+  on next foreground.
 - Dock badge from `Unreads` (policy configurable). Sounds via system sounds.
 
 ## 11. Testing strategy

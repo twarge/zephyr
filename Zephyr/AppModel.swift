@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 import ZulipAPI
 import ZulipModel
 
@@ -50,6 +51,9 @@ final class AppModel {
             NotificationManager.shared.handleMessageEvent(
                 messageEvent, accountId: accountId, store: store)
         }
+        // Delegate + categories must exist before any notification response
+        // arrives — including one that launches the app.
+        NotificationManager.shared.attach(appModel: self)
     }
 
     func start() async {
@@ -161,6 +165,24 @@ final class AppModel {
     func persistCaches() {
         for store in global.stores.values {
             store.persistMessageCache(synchronously: true)
+        }
+    }
+
+    private var backgroundLinger: (@MainActor () -> Void)?
+
+    /// On iOS, backgrounding freezes the event stream immediately; a finite
+    /// background-task assertion keeps it polling (~30s), so last-moment
+    /// messages still produce notifications. No-op on macOS.
+    func scenePhaseChanged(to phase: ScenePhase) {
+        switch phase {
+        case .active:
+            backgroundLinger?()
+            backgroundLinger = nil
+        default:
+            if backgroundLinger == nil {
+                backgroundLinger = BackgroundActivity.begin("background-linger")
+            }
+            persistCaches()
         }
     }
 
