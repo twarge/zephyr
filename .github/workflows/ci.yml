@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ZulipKit is pure SwiftPM, but SwiftMath needs CoreGraphics/CoreText,
+  # so the tests run on a Mac rather than Linux.
+  test:
+    name: ZulipKit tests
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - run: swift test --package-path Packages/ZulipKit
+
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            destination: generic/platform=macOS
+          - name: iOS Simulator
+            destination: generic/platform=iOS Simulator
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build
+        run: |
+          xcodebuild build \
+            -project Zephyr.xcodeproj \
+            -scheme Zephyr \
+            -configuration Release \
+            -destination '${{ matrix.destination }}' \
+            CODE_SIGNING_ALLOWED=NO
