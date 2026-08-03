@@ -75,6 +75,9 @@ public final class UpdateMachine {
     private func poll() async {
         var backoff = BackoffMachine()
         var consecutiveFailures = 0
+        // Flush offline work on the first successful poll (queues restored
+        // from disk) and again whenever the connection recovers.
+        var needsOfflineFlush = true
         let timeout = Double(store.eventQueueLongpollTimeoutSeconds) + 10
 
         while !Task.isCancelled {
@@ -87,6 +90,10 @@ public final class UpdateMachine {
                 consecutiveFailures = 0
                 backoff.reset()
                 store.isRecoveringEventStream = false
+                if needsOfflineFlush {
+                    needsOfflineFlush = false
+                    store.flushPending()
+                }
                 for event in events {
                     store.handleEvent(event)
                     eventObserver?(event)
@@ -106,6 +113,7 @@ public final class UpdateMachine {
                 return
             } catch {
                 consecutiveFailures += 1
+                needsOfflineFlush = true
                 if consecutiveFailures >= 2 {
                     store.isRecoveringEventStream = true
                 }

@@ -51,6 +51,9 @@ public final class MessageListModel: Identifiable {
     public private(set) var isFetching = false
     public private(set) var fetchError: (any Error)?
     public private(set) var didInitialFetch = false
+    /// True when `messages` came from the offline cache because the initial
+    /// fetch failed; the list refetches when connectivity returns.
+    public private(set) var isOfflineFallback = false
 
     private weak var store: PerAccountStore?
     private var generation = 0
@@ -86,12 +89,33 @@ public final class MessageListModel: Identifiable {
             haveOldest = result.foundOldest ?? false
             fetchError = nil
             didInitialFetch = true
+            isOfflineFallback = false
         } catch is CancellationError {
         } catch {
             guard generation == gen else { return }
             fetchError = error
             didInitialFetch = true
+            populateOfflineFallback()
         }
+    }
+
+    /// Renders the transcript from the store's cached messages when the
+    /// network is down. Live events still append (`haveNewest`), and the
+    /// store triggers a real refetch on reconnect.
+    private func populateOfflineFallback() {
+        guard messages.isEmpty, let store else { return }
+        let cached = store.messages.values
+            .filter { narrow.containsMessage($0, selfUserId: store.selfUserId) }
+            .sorted { $0.id < $1.id }
+        guard !cached.isEmpty else { return }
+        messages = Array(cached.suffix(100))
+        haveNewest = true
+        isOfflineFallback = true
+    }
+
+    func refetchIfOfflineFallback() {
+        guard isOfflineFallback else { return }
+        Task { await self.fetchInitial() }
     }
 
     /// Safe to call repeatedly from scroll tracking; no-ops while busy or at

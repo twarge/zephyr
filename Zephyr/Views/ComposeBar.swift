@@ -394,6 +394,16 @@ struct OutboxRow: View {
                         }
                         .font(.caption)
                         .foregroundStyle(.tertiary)
+                    case .queued:
+                        Label("Waiting for network", systemImage: "wifi.slash")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button("Send Now") { store.retrySend(message.id) }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                        Button("Discard") { store.discardSend(message.id) }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
                     case .failed(let reason):
                         Label(reason, systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)

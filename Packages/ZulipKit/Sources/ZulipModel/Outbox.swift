@@ -39,10 +39,14 @@ extension ConversationKey {
 }
 
 /// A message sent optimistically, shown in the transcript until the server's
-/// `message` event (carrying our `local_message_id`) replaces it.
-public struct OutboxMessage: Identifiable, Sendable, Equatable {
-    public enum State: Sendable, Equatable {
+/// `message` event (carrying our `local_message_id`) replaces it. Codable so
+/// the outbox survives relaunch (see `OfflineStore`).
+public struct OutboxMessage: Identifiable, Sendable, Equatable, Codable {
+    public enum State: Sendable, Equatable, Codable {
         case sending
+        /// Waiting for the network: the send never reached the server, so
+        /// it's resent automatically on reconnect.
+        case queued
         case failed(String)
     }
 
@@ -52,4 +56,15 @@ public struct OutboxMessage: Identifiable, Sendable, Equatable {
     public let content: String
     public let timestamp: Int
     public var state: State
+
+    /// The state a persisted entry restores to on relaunch: `.sending` is
+    /// ambiguous (the send may have completed; its echo died with the old
+    /// event queue), so it demotes to `.failed` and requires a manual retry.
+    /// `.queued` entries never reached the server and stay auto-resendable.
+    public var restoredState: State {
+        switch state {
+        case .sending: return .failed("Not confirmed sent before quitting")
+        case .queued, .failed: return state
+        }
+    }
 }

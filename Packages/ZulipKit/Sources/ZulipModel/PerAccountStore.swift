@@ -42,6 +42,15 @@ public final class PerAccountStore {
 
     /// Optimistically-sent messages awaiting their server echo event.
     public private(set) var outbox: [OutboxMessage] = []
+    /// Idempotent mutations recorded while offline, replayed on reconnect.
+    public private(set) var pendingActions: [PendingAction] = []
+    /// Ids installed from the offline cache: a *fetched* copy replaces these
+    /// (the usual reconcile rule is reversed — the server is fresher than
+    /// last session's cache).
+    private(set) var cachedMessageIds: Set<Int> = []
+    @ObservationIgnored private let offline: OfflineStore?
+    @ObservationIgnored private var cacheSaveTask: Task<Void, Never>?
+    @ObservationIgnored private var isFlushing = false
     /// Who's typing where (from typing events).
     public let typing = TypingStatus()
     /// User presence (maintained by the ping loop).
@@ -66,10 +75,14 @@ public final class PerAccountStore {
 
     private let logger = Logger(subsystem: "com.twarge.zephyr", category: "store")
 
-    public init(account: Account, connection: ApiConnection, snapshot: InitialSnapshot) {
+    public init(
+        account: Account, connection: ApiConnection, snapshot: InitialSnapshot,
+        offline: OfflineStore? = nil
+    ) {
         accountId = account.id
         selfUserId = account.userId
         self.connection = connection
+        self.offline = offline
         queueId = snapshot.queueId
         lastEventId = snapshot.lastEventId
         zulipFeatureLevel = snapshot.zulipFeatureLevel
@@ -96,6 +109,23 @@ public final class PerAccountStore {
         conversations = ConversationList(snapshot: snapshot, selfUserId: account.userId)
         channelFolders = (snapshot.channelFolders ?? []).sorted { $0.order < $1.order }
         realmEmoji = snapshot.realmEmoji ?? [:]
+
+        // Offline restore: cached transcripts (also seeding sidebar recency),
+        // the unsent outbox, and any actions recorded offline last session.
+        if let offline {
+            let cached = offline.loadMessages()
+            for message in cached {
+                messages[message.id] = message
+                cachedMessageIds.insert(message.id)
+            }
+            conversations.seed(messages: cached, selfUserId: account.userId)
+            outbox = offline.loadOutbox().map { entry in
+                var restored = entry
+                restored.state = entry.restoredState
+                return restored
+            }
+            pendingActions = offline.loadPendingActions()
+        }
     }
 
     // MARK: Message-list fan-out
@@ -153,9 +183,107 @@ public final class PerAccountStore {
 
     private func markRead(ids: [Int]) {
         unreads.removeMessages(ids: ids)
-        let connection = connection
+        performOrQueue(.updateFlags(messageIds: ids, add: true, flag: "read"))
+    }
+
+    // MARK: Offline queue
+
+    /// Runs one idempotent server mutation, or records it for replay when the
+    /// network is down. Order is preserved: while a backlog exists, new
+    /// actions join it instead of racing ahead of the replay.
+    private func performOrQueue(_ action: PendingAction) {
+        guard pendingActions.isEmpty else {
+            pendingActions.append(action)
+            persistPendingActions()
+            return
+        }
         Task {
-            try? await connection.updateMessageFlags(messages: ids, op: .add, flag: "read")
+            do {
+                try await perform(action)
+            } catch where isTransientNetworkError(error) {
+                pendingActions.append(action)
+                persistPendingActions()
+            } catch {
+                // Server rejected it; the confirming event (or its absence)
+                // corrects our optimistic local state.
+            }
+        }
+    }
+
+    private func perform(_ action: PendingAction) async throws {
+        switch action {
+        case .updateFlags(let ids, let add, let flag):
+            try await connection.updateMessageFlags(
+                messages: ids, op: add ? .add : .remove, flag: flag)
+        case .reaction(let messageId, let add, let emojiName, let emojiCode, let reactionType):
+            try await connection.updateReaction(
+                messageId: messageId, add: add,
+                emojiName: emojiName, emojiCode: emojiCode, reactionType: reactionType)
+        }
+    }
+
+    /// Resends queued outbox messages and replays recorded actions, in order.
+    /// Called when connectivity returns (event-poll recovery or the app's
+    /// path monitor); a no-op when there's nothing waiting.
+    public func flushPending() {
+        guard !isFlushing else { return }
+        isFlushing = true
+        Task {
+            defer { isFlushing = false }
+            for entry in outbox where entry.state == .queued {
+                if let index = outbox.firstIndex(where: { $0.id == entry.id }) {
+                    outbox[index].state = .sending
+                }
+                await performSend(localId: entry.id)
+            }
+            while let action = pendingActions.first {
+                do {
+                    try await perform(action)
+                    pendingActions.removeFirst()
+                } catch where isTransientNetworkError(error) {
+                    break  // Still offline; keep the backlog for next time.
+                } catch {
+                    pendingActions.removeFirst()  // Rejected (e.g. duplicate): drop.
+                }
+            }
+            persistPendingActions()
+            // Transcripts rendered from the offline cache may be stale.
+            forEachMessageList { $0.refetchIfOfflineFallback() }
+        }
+    }
+
+    private func persistOutbox() {
+        offline?.saveOutbox(outbox)
+    }
+
+    private func persistPendingActions() {
+        offline?.savePendingActions(pendingActions)
+    }
+
+    /// Debounced snapshot of the canonical message map to the offline cache.
+    private func scheduleMessageCacheSave() {
+        guard offline != nil else { return }
+        cacheSaveTask?.cancel()
+        cacheSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self?.persistMessageCache()
+        }
+    }
+
+    /// Writes the message cache now. Asynchronous (encoding off-main) by
+    /// default; synchronous at shutdown so the write completes before exit.
+    public func persistMessageCache(synchronously: Bool = false) {
+        guard let offline else { return }
+        cacheSaveTask?.cancel()
+        let snapshot = Array(messages.values)
+        let selfId = selfUserId
+        if synchronously {
+            offline.saveMessages(snapshot, selfUserId: selfId)
+        } else {
+            Task.detached(priority: .utility) {
+                offline.saveMessages(snapshot, selfUserId: selfId)
+            }
         }
     }
 
@@ -169,17 +297,20 @@ public final class PerAccountStore {
             OutboxMessage(
                 id: localId, destination: destination, content: content,
                 timestamp: Int(Date.now.timeIntervalSince1970), state: .sending))
+        persistOutbox()
         Task { await performSend(localId: localId) }
     }
 
     public func retrySend(_ localId: String) {
         guard let index = outbox.firstIndex(where: { $0.id == localId }) else { return }
         outbox[index].state = .sending
+        persistOutbox()
         Task { await performSend(localId: localId) }
     }
 
     public func discardSend(_ localId: String) {
         outbox.removeAll { $0.id == localId }
+        persistOutbox()
     }
 
     private func performSend(localId: String) async {
@@ -199,8 +330,14 @@ public final class PerAccountStore {
             // already have, if it raced the response).
         } catch {
             if let index = outbox.firstIndex(where: { $0.id == localId }) {
-                outbox[index].state = .failed(error.localizedDescription)
+                // Never reached the server → wait for the network and resend
+                // automatically. Anything ambiguous needs a manual retry
+                // (resending could duplicate the message).
+                outbox[index].state = isDefinitelyOfflineError(error)
+                    ? .queued
+                    : .failed(error.localizedDescription)
             }
+            persistOutbox()
         }
     }
 
@@ -294,21 +431,38 @@ public final class PerAccountStore {
             $0.userId == selfUserId && $0.emojiCode == emojiCode
                 && $0.reactionType == reactionType
         }
-        let connection = connection
-        let id = message.id
-        Task {
-            try? await connection.updateReaction(
-                messageId: id, add: !mine,
-                emojiName: emojiName, emojiCode: emojiCode, reactionType: reactionType)
+        // Optimistic local apply; the server's reaction event confirms
+        // idempotently (its add/remove handlers tolerate the echo).
+        if var current = messages[message.id] {
+            if mine {
+                current.reactions.removeAll {
+                    $0.userId == selfUserId && $0.emojiCode == emojiCode
+                        && $0.reactionType == reactionType
+                }
+            } else {
+                current.reactions.append(
+                    Reaction(
+                        emojiName: emojiName, emojiCode: emojiCode,
+                        reactionType: reactionType, userId: selfUserId))
+            }
+            messages[message.id] = current
+            forEachMessageList { $0.handleChangedMessages(ids: [message.id]) }
         }
+        performOrQueue(
+            .reaction(
+                messageId: message.id, add: !mine,
+                emojiName: emojiName, emojiCode: emojiCode, reactionType: reactionType))
     }
 
     public func setStarred(_ starred: Bool, messageId: Int) {
-        let connection = connection
-        Task {
-            try? await connection.updateMessageFlags(
-                messages: [messageId], op: starred ? .add : .remove, flag: "starred")
+        if var message = messages[messageId] {
+            var flags = Set(message.flags ?? [])
+            if starred { flags.insert("starred") } else { flags.remove("starred") }
+            message.flags = Array(flags)
+            messages[messageId] = message
+            forEachMessageList { $0.handleChangedMessages(ids: [messageId]) }
         }
+        performOrQueue(.updateFlags(messageIds: [messageId], add: starred, flag: "starred"))
     }
 
     public func deleteMessage(_ messageId: Int) {
@@ -376,10 +530,15 @@ public final class PerAccountStore {
     /// Adds fetched messages to the canonical map, applying zulip-flutter's
     /// reconcile rule: a message we already have wins over a fetched copy
     /// (events applied to it can't be replayed; the fetch may predate them).
+    /// Exception: copies installed from the offline cache lose to a fetch —
+    /// the server is fresher than last session.
     public func reconcileFetchedMessages(_ fetched: [Message]) {
-        for message in fetched where messages[message.id] == nil {
+        for message in fetched
+        where messages[message.id] == nil || cachedMessageIds.contains(message.id) {
             messages[message.id] = message
+            cachedMessageIds.remove(message.id)
         }
+        scheduleMessageCacheSave()
     }
 
     public func handleEvent(_ event: Event) {
@@ -391,12 +550,15 @@ public final class PerAccountStore {
             var message = e.message
             message.flags = e.flags
             messages[message.id] = message
+            cachedMessageIds.remove(message.id)
             unreads.handleMessage(message, flags: e.flags)
             conversations.noteMessage(message, selfUserId: selfUserId)
             forEachMessageList { $0.handleNewMessage(message, selfUserId: selfUserId) }
             if let localId = e.localMessageId {
                 outbox.removeAll { $0.id == localId }
+                persistOutbox()
             }
+            scheduleMessageCacheSave()
 
         case .updateMessage(let e):
             // Content edits touch messageId; topic/channel moves touch every
@@ -417,13 +579,16 @@ public final class PerAccountStore {
                 messages[id] = message
             }
             forEachMessageList { $0.handleChangedMessages(ids: ids) }
+            scheduleMessageCacheSave()
 
         case .deleteMessage(let e):
             for id in e.allIds {
                 messages.removeValue(forKey: id)
+                cachedMessageIds.remove(id)
             }
             unreads.removeMessages(ids: e.allIds)
             forEachMessageList { $0.handleDeletedMessages(ids: e.allIds) }
+            scheduleMessageCacheSave()
 
         case .updateMessageFlags(let e):
             guard let op = UpdateFlagsOp(rawValue: e.op) else {
@@ -445,6 +610,7 @@ public final class PerAccountStore {
                 op: op, flag: e.flag, ids: e.messages, all: e.all,
                 locate: { self.messages[$0] })
             forEachMessageList { $0.handleChangedMessages(ids: ids) }
+            scheduleMessageCacheSave()
 
         case .reaction(let e):
             guard var message = messages[e.messageId] else { break }
@@ -463,6 +629,7 @@ public final class PerAccountStore {
             }
             messages[e.messageId] = message
             forEachMessageList { $0.handleChangedMessages(ids: [e.messageId]) }
+            scheduleMessageCacheSave()
 
         case .typing(let e):
             guard e.senderId != selfUserId else { break }

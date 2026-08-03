@@ -41,6 +41,7 @@ extension ZephyrApp {
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -92,5 +93,10 @@ struct RootView: View {
             }
         }
         .task { await model.start() }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase != .active {
+                model.persistCaches()
+            }
+        }
     }
 }

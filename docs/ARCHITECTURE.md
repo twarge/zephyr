@@ -254,13 +254,37 @@ out) so Plans A/B swap without touching the model.
   API keys (Keychain) + UI state (window/frame, per-conversation drafts, in
   `UserDefaults`/file). Everything server-side is refetched via `/register` on launch.
   Launch shows the sidebar skeleton immediately, populated when the snapshot lands.
-- **M4 offline cache**: GRDB/SQLite — persisted latest snapshot for instant warm launch
-  (render stale, reconcile via fresh register — the "stale → live" pattern from
-  zulip-mobile's realtime.md), plus a message cache per conversation. Kept out of v1
-  deliberately: flutter's history shows staleness/rehydration is where the bug surface
-  lives (their RN predecessor's chronic bugs; their own cache is still future work).
-  If notification/share extensions ever need shared data, the DB moves to an App Group
-  container (flutter does this on iOS for push decryption).
+- **Warm launch** (shipped): the raw `/register` response is cached to disk; launch
+  builds a *provisional* store from it (rendered with a "connecting" banner, never
+  polled) and replaces it when the live register lands — the "stale → live" pattern
+  from zulip-mobile's realtime.md. If the register fails (offline), the provisional
+  store stays up and a reconnect loop takes over.
+- **Offline store** (shipped; `OfflineStore`, JSON files per account under
+  Application Support/offline/): three files, all tolerant-read/atomic-write, holding
+  *work and history* (the snapshot cache above holds server *state*):
+  - `messages.json` — the newest ~50 messages per conversation from the canonical map,
+    saved debounced (2s) on message-affecting events and synchronously at quit.
+    Restored into the store at init (also seeding sidebar recency); transcripts render
+    from it when a fetch fails (`MessageListModel.isOfflineFallback`), then refetch on
+    reconnect. Reconcile is *reversed* for cache-restored ids: a fetched copy replaces
+    them (the server is fresher than last session), tracked via `cachedMessageIds`.
+  - `outbox.json` — unsent messages survive relaunch. Failure classification decides
+    resend policy: errors proving the request never left (`isDefinitelyOfflineError`)
+    park the entry as `.queued` for automatic resend; anything ambiguous (timeout,
+    connection lost, server error) is `.failed` and needs a manual Retry, because
+    resending could duplicate. A `.sending` entry restored after relaunch is demoted
+    to `.failed` — its echo died with the old event queue.
+  - `actions.json` — idempotent mutations (reactions, read/starred flags) recorded
+    while offline and replayed FIFO on reconnect; server rejections (e.g. "already
+    reacted") are dropped. All three actions apply optimistically to local state
+    first. Destructive operations (delete/edit/move) stay online-only. While a
+    backlog exists, new actions join it rather than racing ahead of the replay.
+  - Flush triggers: the event poll's first success and every failure→success
+    recovery (`UpdateMachine`), plus the app's `NWPathMonitor` the moment the
+    network path returns (which also short-circuits the 15s register-retry loop).
+- SQLite/GRDB remains the escalation path if the JSON cache outgrows itself; an App
+  Group container if extensions ever need shared data (flutter does this for push
+  decryption on iOS).
 
 ## 10. Notifications and platform services (App layer)
 

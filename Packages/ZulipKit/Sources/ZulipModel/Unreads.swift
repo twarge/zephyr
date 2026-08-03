@@ -68,7 +68,7 @@ public final class Unreads {
         }
     }
 
-    public static func dmKey(participantIds: [Int], selfUserId: Int) -> ConversationKey {
+    public nonisolated static func dmKey(participantIds: [Int], selfUserId: Int) -> ConversationKey {
         .dm(
             participantIds
                 .filter { $0 != selfUserId }
@@ -77,7 +77,9 @@ public final class Unreads {
                 .joined(separator: ","))
     }
 
-    public static func conversationKey(for message: Message, selfUserId: Int) -> ConversationKey? {
+    public nonisolated static func conversationKey(
+        for message: Message, selfUserId: Int
+    ) -> ConversationKey? {
         switch message.type {
         case .stream:
             guard let streamId = message.streamId else { return nil }

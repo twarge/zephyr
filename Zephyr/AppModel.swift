@@ -20,6 +20,7 @@ final class AppModel {
 
     private(set) var phase: Phase = .launching
     let global: GlobalStore
+    private var connectivity: ConnectivityMonitor?
 
     /// Set by MainSplitView; used to suppress banners for the conversation
     /// being read.
@@ -53,6 +54,9 @@ final class AppModel {
 
     func start() async {
         guard case .launching = phase else { return }
+        connectivity = ConnectivityMonitor { [weak self] in
+            self?.networkRestored()
+        }
         let accounts = global.accounts
         guard !accounts.isEmpty else {
             phase = .needsAccount
@@ -129,6 +133,35 @@ final class AppModel {
             return
         }
         await load(accountId: account.id)
+    }
+
+    /// The network path came back: flush queued work on live stores, connect
+    /// the rest right away (instead of waiting out the 15s reconnect loop),
+    /// and leave any failure screen.
+    private func networkRestored() {
+        if case .failed = phase {
+            Task { await self.retry() }
+        }
+        for account in global.accounts {
+            if global.hasLiveStore(account.id) {
+                global.stores[account.id]?.flushPending()
+            } else if global.stores[account.id] != nil || activeAccountId == account.id {
+                Task { [weak self] in
+                    guard let self else { return }
+                    if (try? await self.global.perAccountStore(for: account.id)) != nil {
+                        await self.global.stores[account.id]?.seedConversations()
+                    }
+                }
+            }
+        }
+    }
+
+    /// Belt-and-suspenders for the debounced message-cache writes: called on
+    /// backgrounding and at quit.
+    func persistCaches() {
+        for store in global.stores.values {
+            store.persistMessageCache(synchronously: true)
+        }
     }
 
     func switchAccount(_ accountId: Account.ID) async {

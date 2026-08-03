@@ -86,6 +86,7 @@ public final class GlobalStore: UpdateMachineDelegate {
         if let cacheURL = snapshotCacheURL(for: accountId) {
             try? FileManager.default.removeItem(at: cacheURL)
         }
+        OfflineStore.remove(for: accountId)
         provisionalStores.remove(accountId)
         accounts.removeAll { $0.id == accountId }
         try accountsStore.save(accounts)
@@ -142,7 +143,9 @@ public final class GlobalStore: UpdateMachineDelegate {
             realmURL: account.realmURL, email: account.email, apiKey: apiKey,
             transport: transport)
         connection.featureLevel = snapshot.zulipFeatureLevel
-        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+        let store = PerAccountStore(
+            account: account, connection: connection, snapshot: snapshot,
+            offline: OfflineStore.forAccount(accountId))
         store.isRecoveringEventStream = true
         stores[accountId] = store
         provisionalStores.insert(accountId)
@@ -174,7 +177,9 @@ public final class GlobalStore: UpdateMachineDelegate {
         if let cacheURL = snapshotCacheURL(for: accountId) {
             try? result.rawData.write(to: cacheURL, options: .atomic)
         }
-        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+        let store = PerAccountStore(
+            account: account, connection: connection, snapshot: snapshot,
+            offline: OfflineStore.forAccount(accountId))
         installStore(store, for: accountId)
         return store
     }
@@ -227,6 +232,9 @@ public final class GlobalStore: UpdateMachineDelegate {
     public func shutdown(deleteQueues: Bool = true) async {
         for machine in machines.values {
             machine.stop()
+        }
+        for store in stores.values {
+            store.persistMessageCache(synchronously: true)
         }
         if deleteQueues {
             for store in stores.values {

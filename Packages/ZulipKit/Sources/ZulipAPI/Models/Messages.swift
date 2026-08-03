@@ -1,12 +1,12 @@
 import Foundation
 
-public enum MessageType: String, Decodable, Sendable {
+public enum MessageType: String, Codable, Sendable {
     case stream
     case `private`
 }
 
 /// One entry of a DM message's `display_recipient` array.
-public struct DmRecipient: Decodable, Sendable, Hashable {
+public struct DmRecipient: Codable, Sendable, Hashable {
     public var id: Int
     public var email: String?
     public var fullName: String?
@@ -19,7 +19,7 @@ public enum DisplayRecipient: Sendable, Hashable {
     case users([DmRecipient])
 }
 
-extension DisplayRecipient: Decodable {
+extension DisplayRecipient: Codable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let name = try? container.decode(String.self) {
@@ -28,9 +28,17 @@ extension DisplayRecipient: Decodable {
             self = .users(try container.decode([DmRecipient].self))
         }
     }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .channelName(let name): try container.encode(name)
+        case .users(let users): try container.encode(users)
+        }
+    }
 }
 
-public struct Reaction: Decodable, Sendable, Hashable {
+public struct Reaction: Codable, Sendable, Hashable {
     public var emojiName: String
     public var emojiCode: String
     public var reactionType: String
@@ -45,8 +53,9 @@ public struct Reaction: Decodable, Sendable, Hashable {
 }
 
 /// A message as returned by GET /messages and `message` events, with
-/// `apply_markdown: true` (so `content` is server-rendered HTML).
-public struct Message: Decodable, Sendable, Identifiable {
+/// `apply_markdown: true` (so `content` is server-rendered HTML). Encodable
+/// so the offline message cache can round-trip it through `ZulipJSON`.
+public struct Message: Codable, Sendable, Identifiable {
     public var id: Int
     public var senderId: Int
     public var senderFullName: String
@@ -75,7 +84,7 @@ public struct Message: Decodable, Sendable, Identifiable {
 }
 
 /// One widget submessage: `content` is a JSON-encoded widget event.
-public struct Submessage: Decodable, Sendable {
+public struct Submessage: Codable, Sendable {
     public var msgType: String
     public var content: String
     public var senderId: Int
