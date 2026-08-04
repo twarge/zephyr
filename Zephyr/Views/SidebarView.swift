@@ -61,6 +61,25 @@ struct SidebarView: View {
         }
     }
 
+    /// Everyone else: active human users with no 1:1 conversation yet, below
+    /// the recency-ordered conversations, alphabetical. Selecting one opens
+    /// an empty transcript ready to compose.
+    private var usersWithoutConversation: [User] {
+        let existingKeys = Set(
+            store.conversations.conversations.compactMap { conversation -> ConversationKey? in
+                if case .dm = conversation.key { return conversation.key }
+                return nil
+            })
+        return store.users.values
+            .filter { $0.isActive != false && !$0.isBot && $0.userId != store.selfUserId }
+            .filter {
+                !existingKeys.contains(
+                    Unreads.dmKey(participantIds: [$0.userId], selfUserId: store.selfUserId))
+            }
+            .filter { matchesFilter($0.fullName) }
+            .sorted { $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending }
+    }
+
     private var sortedSubscriptions: [Subscription] {
         store.subscriptions.values
             .sorted { a, b in
@@ -126,14 +145,16 @@ struct SidebarView: View {
                 }
             }
             Section("Direct messages", isExpanded: expansion("dms")) {
-                if dmRows.isEmpty && !isFiltering {
-                    Text("No recent direct messages")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
                 ForEach(dmRows) { conversation in
                     DirectMessageRow(store: store, conversation: conversation)
                         .tag(Destination.conversation(conversation.key))
+                }
+                ForEach(usersWithoutConversation) { user in
+                    UserDirectMessageRow(store: store, user: user)
+                        .tag(Destination.conversation(
+                            Unreads.dmKey(
+                                participantIds: [user.userId],
+                                selfUserId: store.selfUserId)))
                 }
             }
             if store.channelFolders.isEmpty {
@@ -373,6 +394,25 @@ private struct RecentSearchRow: View {
 
 /// Compact one-line DM row: presence dot (placeholder until M2), name(s),
 /// bot marker, unread badge.
+/// A user with no conversation yet: same shape as `DirectMessageRow`, name
+/// dimmed until there's history.
+private struct UserDirectMessageRow: View {
+    let store: PerAccountStore
+    let user: User
+
+    var body: some View {
+        HStack(spacing: 8) {
+            PresenceDot(state: store.presenceState(of: user.userId))
+            Text(user.fullName)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+        }
+        .padding(.vertical, 1)
+    }
+}
+
 private struct DirectMessageRow: View {
     let store: PerAccountStore
     let conversation: ConversationList.Conversation
