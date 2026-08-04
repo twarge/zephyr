@@ -24,8 +24,6 @@ struct RecentConversationsView: View {
         var channelName: String
         var title: String
         var timestamp: Int?
-        var senderIds: [Int]
-        var extraSenders: Bool
         var unreadCount: Int
 
         var id: ConversationKey { key }
@@ -71,23 +69,11 @@ struct RecentConversationsView: View {
                 continue
             }
 
-            var senders: [Int] = []
-            var extra = false
-            for message in cached {
-                if !senders.contains(message.senderId) {
-                    if senders.count == 3 {
-                        extra = true
-                        break
-                    }
-                    senders.append(message.senderId)
-                }
-            }
-
             out.append(
                 Row(
                     key: key, streamId: streamId, channelName: channelName, title: title,
                     timestamp: conversation.timestamp ?? cached.first?.timestamp,
-                    senderIds: senders, extraSenders: extra, unreadCount: unread))
+                    unreadCount: unread))
             if out.count == 150 { break }
         }
         return out
@@ -187,16 +173,6 @@ private struct RecentConversationRow: View {
                         .padding(.horizontal, 7)
                         .padding(.vertical, 2)
                         .background(.tint, in: .capsule)
-                }
-                HStack(spacing: -6) {
-                    ForEach(row.senderIds, id: \.self) { userId in
-                        AvatarView(store: store, userId: userId, size: 22)
-                    }
-                }
-                if row.extraSenders {
-                    Text("+")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
                 Group {
                     if let timestamp = row.timestamp {

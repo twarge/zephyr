@@ -140,7 +140,9 @@ struct SidebarView: View {
                     viewRow(
                         "Recent conversations", icon: "clock", tag: .recentConversations,
                         badge: 0)
-                    viewRow("Combined feed", icon: "line.3.horizontal", tag: .combinedFeed, badge: 0)
+                    viewRow(
+                        "Combined feed", icon: "line.3.horizontal", tag: .combinedFeed,
+                        badge: store.unreads.totalCount)
                     viewRow(
                         "Mentions", icon: "at", tag: .mentions,
                         badge: store.unreads.mentionIds.count)
