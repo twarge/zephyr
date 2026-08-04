@@ -23,7 +23,6 @@ struct MainSplitView: View {
     @State private var selection: Destination?
     @State private var search: SidebarSearchModel
     @State private var newConversation: NewConversationMode?
-    @State private var showSettings = false
     @State private var dropTargeted = false
     @State private var keys = KeyboardRouter()
     #if os(iOS)
@@ -99,56 +98,18 @@ struct MainSplitView: View {
                 }
                 return .handled
             })
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    newConversation = .general
-                } label: {
-                    Image(systemName: "square.and.pencil")
-                }
-                .keyboardShortcut("n", modifiers: .command)
-                .help("New conversation (⌘N)")
-            }
-            ToolbarItem(placement: .automatic) {
-                Menu {
-                    ForEach(model.global.accounts) { account in
-                        Button {
-                            Task { await model.switchAccount(account.id) }
-                        } label: {
-                            if account.id == model.activeAccountId {
-                                Label(accountLabel(account), systemImage: "checkmark")
-                            } else {
-                                Text(accountLabel(account))
-                            }
-                        }
-                    }
-                    Divider()
-                    #if os(macOS)
-                    SettingsLink {
-                        Text("Accounts & Settings…")
-                    }
-                    #else
-                    Button("Accounts & Settings…") {
-                        showSettings = true
-                    }
-                    #endif
-                    Button("Sign Out…") {
-                        Task { await model.signOutCurrent() }
-                    }
-                } label: {
-                    Image(systemName: "person.crop.circle")
-                }
-            }
-        }
         .sheet(item: $newConversation) { mode in
             NewConversationSheet(store: store, selection: $selection, mode: mode)
         }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .environment(model)
-        }
         .sheet(isPresented: Bindable(keys).showHelp) {
             ShortcutsHelpView()
+        }
+        // File → New Conversation (⌘N) arrives via the app commands.
+        .onChange(of: model.pendingNewConversation) {
+            if model.pendingNewConversation {
+                model.pendingNewConversation = false
+                newConversation = .general
+            }
         }
         .onAppear {
             keys.store = store
@@ -217,10 +178,6 @@ struct MainSplitView: View {
                 total
             }
         }
-    }
-
-    private func accountLabel(_ account: Account) -> String {
-        "\(account.realmName ?? account.realmURL.host() ?? "?") — \(account.email)"
     }
 
     #if os(iOS)

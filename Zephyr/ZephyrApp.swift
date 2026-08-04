@@ -24,6 +24,12 @@ extension ZephyrApp {
     /// ⌘1…⌘9 switch servers, in the order set in Settings → Accounts.
     @CommandsBuilder
     var accountCommands: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("New Conversation") {
+                model.pendingNewConversation = true
+            }
+            .keyboardShortcut("n", modifiers: .command)
+        }
         CommandGroup(after: .sidebar) {
             Divider()
             ForEach(

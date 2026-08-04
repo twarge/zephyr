@@ -28,6 +28,8 @@ final class AppModel {
     var activeConversation: ConversationKey?
     /// Set by notification clicks; MainSplitView consumes it as navigation.
     var pendingDestination: Destination?
+    /// Set by File → New Conversation (⌘N); MainSplitView opens the sheet.
+    var pendingNewConversation = false
 
     var activeAccountId: Account.ID? {
         if case .ready(let id) = phase { return id }

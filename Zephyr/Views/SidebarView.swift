@@ -18,6 +18,7 @@ struct SidebarView: View {
 
     @State private var collapsedSections: Set<String>
     @State private var expandedChannels: Set<Int>
+    @State private var showSettings = false
 
     init(
         store: PerAccountStore, search: SidebarSearchModel,
@@ -269,7 +270,46 @@ struct SidebarView: View {
                     .help("Switch server (⌘1–⌘\(min(model.global.accounts.count, 9)))")
                 }
             }
+            ToolbarItem(placement: .automatic) {
+                Menu {
+                    ForEach(model.global.accounts) { account in
+                        Button {
+                            Task { await model.switchAccount(account.id) }
+                        } label: {
+                            if account.id == model.activeAccountId {
+                                Label(accountLabel(account), systemImage: "checkmark")
+                            } else {
+                                Text(accountLabel(account))
+                            }
+                        }
+                    }
+                    Divider()
+                    #if os(macOS)
+                    SettingsLink {
+                        Text("Accounts & Settings…")
+                    }
+                    #else
+                    Button("Accounts & Settings…") {
+                        showSettings = true
+                    }
+                    #endif
+                    Button("Sign Out…") {
+                        Task { await model.signOutCurrent() }
+                    }
+                } label: {
+                    Image(systemName: "person.crop.circle")
+                }
+                .help("Accounts")
+            }
         }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .environment(model)
+        }
+    }
+
+    private func accountLabel(_ account: Account) -> String {
+        "\(account.realmName ?? account.realmURL.host() ?? "?") — \(account.email)"
     }
 
     private static var searchPlacement: SearchFieldPlacement {
