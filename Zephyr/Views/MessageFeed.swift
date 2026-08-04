@@ -493,6 +493,7 @@ struct ReactionsRow: View {
         var sample: Reaction
         var count: Int
         var reactedBySelf: Bool
+        var userIds: [Int]
     }
 
     private var groups: [Group] {
@@ -501,15 +502,28 @@ struct ReactionsRow: View {
         for reaction in reactions {
             let key = "\(reaction.reactionType):\(reaction.emojiCode)"
             if byEmoji[key] == nil {
-                byEmoji[key] = Group(id: key, sample: reaction, count: 0, reactedBySelf: false)
+                byEmoji[key] = Group(
+                    id: key, sample: reaction, count: 0, reactedBySelf: false, userIds: [])
                 order.append(key)
             }
             byEmoji[key]?.count += 1
+            byEmoji[key]?.userIds.append(reaction.userId)
             if reaction.userId == store.selfUserId {
                 byEmoji[key]?.reactedBySelf = true
             }
         }
         return order.compactMap { byEmoji[$0] }.sorted { $0.count > $1.count }
+    }
+
+    /// "Steven Nguyen, You" — the hover tooltip; self listed last as "You".
+    private func reactorNames(_ group: Group) -> String {
+        var names = group.userIds
+            .filter { $0 != store.selfUserId }
+            .map { store.users[$0]?.fullName ?? "Someone" }
+        if group.reactedBySelf {
+            names.append("You")
+        }
+        return names.joined(separator: ", ")
     }
 
     var body: some View {
@@ -522,23 +536,24 @@ struct ReactionsRow: View {
                         emojiCode: group.sample.emojiCode,
                         reactionType: group.sample.reactionType)
                 } label: {
-                    HStack(spacing: 3) {
+                    HStack(spacing: 4) {
                         emojiView(group.sample)
-                        Text("\(group.count)")
-                            .monospacedDigit()
+                            .font(.system(size: 16))
+                        if group.count > 1 {
+                            Text("\(group.count)")
+                                .font(.caption)
+                                .monospacedDigit()
+                        }
                     }
-                    .font(.caption)
                     .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
+                    .padding(.vertical, 2)
                     .background(
                         group.reactedBySelf ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.quaternary),
                         in: .capsule)
                     .contentShape(.capsule)
                 }
                 .buttonStyle(.plain)
-                .help(group.reactedBySelf
-                    ? "Remove your :\(group.sample.emojiName): reaction"
-                    : "React with :\(group.sample.emojiName):")
+                .help("\(reactorNames(group)) reacted with :\(group.sample.emojiName):")
             }
             Button {
                 showPicker = true
