@@ -22,7 +22,7 @@ struct MainSplitView: View {
     let store: PerAccountStore
     @State private var selection: Destination?
     @State private var search: SidebarSearchModel
-    @State private var showNewConversation = false
+    @State private var newConversation: NewConversationMode?
     @State private var showSettings = false
     @State private var keys = KeyboardRouter()
     #if os(iOS)
@@ -37,7 +37,9 @@ struct MainSplitView: View {
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(store: store, search: search, selection: $selection)
+            SidebarView(
+                store: store, search: search, selection: $selection,
+                startDirectMessage: { newConversation = .directMessage(initialUsers: []) })
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 400)
         } detail: {
             detailContent
@@ -72,7 +74,7 @@ struct MainSplitView: View {
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {
-                    showNewConversation = true
+                    newConversation = .general
                 } label: {
                     Image(systemName: "square.and.pencil")
                 }
@@ -110,8 +112,8 @@ struct MainSplitView: View {
                 }
             }
         }
-        .sheet(isPresented: $showNewConversation) {
-            NewConversationSheet(store: store, selection: $selection)
+        .sheet(item: $newConversation) { mode in
+            NewConversationSheet(store: store, selection: $selection, mode: mode)
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
@@ -124,7 +126,7 @@ struct MainSplitView: View {
             keys.store = store
             keys.currentDestination = selection
             keys.navigate = { destination in selection = destination }
-            keys.newConversation = { showNewConversation = true }
+            keys.newConversation = { newConversation = .directMessage(initialUsers: []) }
             #if os(macOS)
             keys.installMonitor()
             #endif

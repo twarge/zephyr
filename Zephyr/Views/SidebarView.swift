@@ -11,6 +11,7 @@ struct SidebarView: View {
     let store: PerAccountStore
     @Bindable var search: SidebarSearchModel
     @Binding var selection: Destination?
+    var startDirectMessage: (() -> Void)?
     @Environment(AppModel.self) private var model
     @Environment(KeyboardRouter.self) private var keys
     @FocusState private var searchFocused: Bool
@@ -18,10 +19,14 @@ struct SidebarView: View {
     @State private var collapsedSections: Set<String>
     @State private var expandedChannels: Set<Int>
 
-    init(store: PerAccountStore, search: SidebarSearchModel, selection: Binding<Destination?>) {
+    init(
+        store: PerAccountStore, search: SidebarSearchModel,
+        selection: Binding<Destination?>, startDirectMessage: (() -> Void)? = nil
+    ) {
         self.store = store
         self.search = search
         _selection = selection
+        self.startDirectMessage = startDirectMessage
         _collapsedSections = State(
             initialValue: AppStateStore.collapsedSections(for: store.accountId))
         _expandedChannels = State(
@@ -144,7 +149,7 @@ struct SidebarView: View {
                         "All channels", icon: "rectangle.stack", tag: .allChannels, badge: 0)
                 }
             }
-            Section("Direct messages", isExpanded: expansion("dms")) {
+            Section(isExpanded: expansion("dms")) {
                 ForEach(dmRows) { conversation in
                     DirectMessageRow(store: store, conversation: conversation)
                         .tag(Destination.conversation(conversation.key))
@@ -155,6 +160,19 @@ struct SidebarView: View {
                             Unreads.dmKey(
                                 participantIds: [user.userId],
                                 selfUserId: store.selfUserId)))
+                }
+            } header: {
+                HStack {
+                    Text("Direct messages")
+                    Spacer()
+                    if let startDirectMessage {
+                        Button(action: startDirectMessage) {
+                            Image(systemName: "plus.circle")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .help("New direct message")
+                    }
                 }
             }
             if store.channelFolders.isEmpty {

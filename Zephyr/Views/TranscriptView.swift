@@ -1,4 +1,5 @@
 import SwiftUI
+import ZulipAPI
 import ZulipModel
 
 /// A focused transcript for one topic or DM thread. Opens anchored at the
@@ -10,10 +11,18 @@ struct TranscriptView: View {
 
     @State private var model: MessageListModel?
     @State private var cache = MessageContentCache()
+    @State private var showAddPeople = false
 
     private var isTopic: Bool {
         if case .topic = conversation { return true }
         return false
+    }
+
+    /// The other people in this DM, seeding the "Add People…" sheet.
+    private var dmParticipants: [User] {
+        (conversation.dmParticipantIds ?? [])
+            .filter { $0 != store.selfUserId }
+            .compactMap { store.users[$0] }
     }
 
     private func channelName(_ streamId: Int) -> String {
@@ -69,6 +78,24 @@ struct TranscriptView: View {
                     }
                 }
             }
+            // A DM can't change membership (Zulip semantics), so "Add
+            // People" starts a new conversation pre-seeded with everyone
+            // here.
+            if case .dm = conversation {
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        showAddPeople = true
+                    } label: {
+                        Image(systemName: "person.badge.plus")
+                    }
+                    .help("New conversation with these people plus others")
+                }
+            }
+        }
+        .sheet(isPresented: $showAddPeople) {
+            NewConversationSheet(
+                store: store, selection: $selection,
+                mode: .directMessage(initialUsers: dmParticipants))
         }
         .task {
             guard model == nil else { return }

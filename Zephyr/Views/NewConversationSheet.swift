@@ -2,19 +2,54 @@ import SwiftUI
 import ZulipAPI
 import ZulipModel
 
+/// How the new-conversation sheet is opened: the full ⌘N flow (people or
+/// channel+topic), or scoped to people only — from the sidebar's "+" or a DM
+/// transcript's "Add People…" (pre-seeded with the current participants;
+/// Zulip DM membership is immutable, so that starts a new conversation).
+enum NewConversationMode: Identifiable {
+    case general
+    case directMessage(initialUsers: [User])
+
+    var id: String {
+        switch self {
+        case .general:
+            return "general"
+        case .directMessage(let users):
+            return "dm-\(users.map { String($0.userId) }.joined(separator: ","))"
+        }
+    }
+}
+
 /// The ⌘N flow: pick people (DM, multi-select) or a channel + topic, write
 /// the first message, send — then land in the conversation.
 struct NewConversationSheet: View {
     let store: PerAccountStore
     @Binding var selection: Destination?
+    let peopleOnly: Bool
 
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
-    @State private var selectedUsers: [User] = []
+    @State private var selectedUsers: [User]
     @State private var selectedChannel: Subscription?
     @State private var topicText = ""
     @State private var messageText = ""
     @FocusState private var queryFocused: Bool
+
+    init(
+        store: PerAccountStore, selection: Binding<Destination?>,
+        mode: NewConversationMode = .general
+    ) {
+        self.store = store
+        _selection = selection
+        switch mode {
+        case .general:
+            peopleOnly = false
+            _selectedUsers = State(initialValue: [])
+        case .directMessage(let initialUsers):
+            peopleOnly = true
+            _selectedUsers = State(initialValue: initialUsers)
+        }
+    }
 
     private var userSuggestions: [User] {
         guard selectedChannel == nil else { return [] }
@@ -29,7 +64,7 @@ struct NewConversationSheet: View {
     }
 
     private var channelSuggestions: [Subscription] {
-        guard selectedUsers.isEmpty, selectedChannel == nil else { return [] }
+        guard !peopleOnly, selectedUsers.isEmpty, selectedChannel == nil else { return [] }
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         return store.subscriptions.values
             .filter { trimmed.isEmpty || $0.name.localizedCaseInsensitiveContains(trimmed) }
@@ -55,7 +90,7 @@ struct NewConversationSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("New Conversation")
+            Text(peopleOnly ? "New Direct Message" : "New Conversation")
                 .font(.headline)
 
             // Recipient line: chips + search field.
@@ -75,7 +110,7 @@ struct NewConversationSheet: View {
                 }
                 TextField(
                     selectedUsers.isEmpty && selectedChannel == nil
-                        ? "Person or #channel" : "Add person",
+                        ? (peopleOnly ? "Person" : "Person or #channel") : "Add person",
                     text: $query)
                     .textFieldStyle(.plain)
                     .focused($queryFocused)
