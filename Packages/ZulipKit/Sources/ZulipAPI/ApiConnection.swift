@@ -40,6 +40,22 @@ public struct ApiRequest: Sendable, Equatable {
 /// The lowest network layer, fakeable in tests.
 public protocol ApiTransport: Sendable {
     func perform(_ request: URLRequest) async throws -> (Data, HTTPURLResponse)
+
+    /// Like `perform`, reporting request-body upload progress (0…1).
+    func perform(
+        _ request: URLRequest,
+        uploadProgress: @escaping @Sendable (Double) -> Void
+    ) async throws -> (Data, HTTPURLResponse)
+}
+
+extension ApiTransport {
+    /// Default: progress unavailable; behaves like plain `perform`.
+    public func perform(
+        _ request: URLRequest,
+        uploadProgress: @escaping @Sendable (Double) -> Void
+    ) async throws -> (Data, HTTPURLResponse) {
+        try await perform(request)
+    }
 }
 
 public struct URLSessionTransport: ApiTransport {
@@ -61,6 +77,36 @@ public struct URLSessionTransport: ApiTransport {
             throw URLError(.badServerResponse)
         }
         return (data, http)
+    }
+
+    public func perform(
+        _ request: URLRequest,
+        uploadProgress: @escaping @Sendable (Double) -> Void
+    ) async throws -> (Data, HTTPURLResponse) {
+        let delegate = UploadProgressDelegate(callback: uploadProgress)
+        let (data, response) = try await session.data(for: request, delegate: delegate)
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        return (data, http)
+    }
+
+    private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate,
+        @unchecked Sendable {
+        // @unchecked: the only state is an immutable Sendable closure.
+        private let callback: @Sendable (Double) -> Void
+
+        init(callback: @escaping @Sendable (Double) -> Void) {
+            self.callback = callback
+        }
+
+        func urlSession(
+            _ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64,
+            totalBytesSent: Int64, totalBytesExpectedToSend: Int64
+        ) {
+            guard totalBytesExpectedToSend > 0 else { return }
+            callback(Double(totalBytesSent) / Double(totalBytesExpectedToSend))
+        }
     }
 }
 
@@ -174,9 +220,11 @@ public final class ApiConnection: Sendable {
     }
 
     /// POST /user_uploads (multipart) — returns the upload's realm-relative
-    /// URL, for `[filename](url)` message references.
+    /// URL, for `[filename](url)` message references. `progress` reports the
+    /// body upload fraction when the transport supports it.
     public func uploadFile(
-        _ fileData: Data, filename: String, mimeType: String = "application/octet-stream"
+        _ fileData: Data, filename: String, mimeType: String = "application/octet-stream",
+        progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> String {
         guard var components = URLComponents(url: realmURL, resolvingAgainstBaseURL: false) else {
             throw ApiError(httpStatus: 0, code: "BAD_REALM_URL", message: realmURL.absoluteString)
@@ -212,7 +260,12 @@ public final class ApiConnection: Sendable {
             var url: String?
             var uri: String?
         }
-        let (data, response) = try await transport.perform(urlRequest)
+        let (data, response): (Data, HTTPURLResponse)
+        if let progress {
+            (data, response) = try await transport.perform(urlRequest, uploadProgress: progress)
+        } else {
+            (data, response) = try await transport.perform(urlRequest)
+        }
         let processed = try processResponse(data, response)
         let result = try ZulipJSON.decoder.decode(UploadResult.self, from: processed)
         guard let path = result.url ?? result.uri else {

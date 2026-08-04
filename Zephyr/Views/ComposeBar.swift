@@ -78,7 +78,12 @@ struct ComposeBar: View {
     @State private var suggestions: [ComposeSuggestion] = []
     @State private var selectedSuggestion = 0
     @State private var tokenTriggerIndex: String.Index?
-    @State private var uploadingFilenames: [String] = []
+    private struct UploadItem: Identifiable, Equatable {
+        let id = UUID()
+        var filename: String
+        var progress: Double = 0
+    }
+    @State private var uploads: [UploadItem] = []
     @State private var showFileImporter = false
     @FocusState private var messageFocused: Bool
     @Environment(KeyboardRouter.self) private var keys
@@ -105,7 +110,11 @@ struct ComposeBar: View {
     }
 
     private var canSend: Bool {
-        destination != nil && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        destination != nil
+            && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            // Sending waits for uploads: their [name](url) references only
+            // land in the text when the upload finishes.
+            && uploads.isEmpty
     }
 
     var body: some View {
@@ -122,12 +131,25 @@ struct ComposeBar: View {
                     .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
                     .frame(maxWidth: 260)
             }
-            if !uploadingFilenames.isEmpty {
+            if !uploads.isEmpty {
                 HStack(spacing: 6) {
-                    ProgressView().controlSize(.mini)
-                    Text("Uploading \(uploadingFilenames.joined(separator: ", "))…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    ForEach(uploads) { item in
+                        HStack(spacing: 5) {
+                            Image(systemName: Self.fileIcon(for: item.filename))
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Text(item.filename)
+                                .font(.caption)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: 140)
+                            UploadProgressRing(progress: item.progress)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.quaternary.opacity(0.4), in: .capsule)
+                    }
+                    Spacer(minLength: 0)
                 }
             }
             HStack(alignment: .bottom, spacing: 8) {
@@ -359,15 +381,45 @@ struct ComposeBar: View {
         }
         if scoped { fileURL.stopAccessingSecurityScopedResource() }
 
-        uploadingFilenames.append(filename)
+        let item = UploadItem(filename: filename)
+        uploads.append(item)
+        let itemId = item.id
         let connection = store.connection
-        Task {
-            defer { uploadingFilenames.removeAll { $0 == filename } }
-            guard let path = try? await connection.uploadFile(data, filename: filename) else {
-                return
+        let updateProgress: @MainActor (Double) -> Void = { fraction in
+            if let index = uploads.firstIndex(where: { $0.id == itemId }) {
+                uploads[index].progress = fraction
             }
+        }
+        Task {
+            defer { uploads.removeAll { $0.id == itemId } }
+            guard let path = try? await connection.uploadFile(
+                data, filename: filename,
+                progress: { fraction in
+                    Task { @MainActor in updateProgress(fraction) }
+                })
+            else { return }
             let reference = "[\(filename)](\(path))"
             text = text.isEmpty ? reference : "\(text)\n\(reference)"
+        }
+    }
+
+    /// SF Symbol for an upload chip, by file extension.
+    private static func fileIcon(for filename: String) -> String {
+        switch (filename as NSString).pathExtension.lowercased() {
+        case "png", "jpg", "jpeg", "gif", "heic", "webp", "tiff", "bmp", "svg":
+            "photo"
+        case "mov", "mp4", "m4v", "avi", "mkv", "webm":
+            "film"
+        case "mp3", "m4a", "wav", "aac", "flac", "ogg":
+            "waveform"
+        case "pdf":
+            "doc.richtext"
+        case "zip", "gz", "tar", "7z", "rar", "dmg":
+            "doc.zipper"
+        case "txt", "md", "csv", "json", "log", "swift", "py", "js":
+            "doc.text"
+        default:
+            "doc"
         }
     }
 
@@ -384,6 +436,25 @@ struct ComposeBar: View {
         if UserDefaults.standard.object(forKey: "playSendSound") as? Bool ?? true {
             Platform.playSendSound()
         }
+    }
+}
+
+/// A small determinate ring for one upload's progress.
+private struct UploadProgressRing: View {
+    let progress: Double
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(.quaternary, lineWidth: 2.5)
+            Circle()
+                // A sliver even at 0 so the ring reads as progress, not decoration.
+                .trim(from: 0, to: max(progress, 0.04))
+                .stroke(.tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: 15, height: 15)
+        .animation(.linear(duration: 0.2), value: progress)
     }
 }
 
