@@ -42,6 +42,23 @@ final class KeyboardRouter {
     @ObservationIgnored var newConversation: (() -> Void)?
     @ObservationIgnored private var monitor: Any?
 
+    /// File-drop routing: the visible compose bar registers here so a drop
+    /// anywhere in the conversation area uploads into it. Ownership-tokened —
+    /// a disappearing compose must not unregister its successor.
+    @ObservationIgnored private(set) var uploadFiles: (([URL]) -> Void)?
+    @ObservationIgnored private var uploadOwner: UUID?
+
+    func registerUpload(owner: UUID, _ handler: @escaping ([URL]) -> Void) {
+        uploadOwner = owner
+        uploadFiles = handler
+    }
+
+    func unregisterUpload(owner: UUID) {
+        guard uploadOwner == owner else { return }
+        uploadOwner = nil
+        uploadFiles = nil
+    }
+
     private var selectedMessage: Message? {
         guard let selectedMessageId else { return nil }
         return store?.messages[selectedMessageId]

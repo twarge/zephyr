@@ -24,6 +24,7 @@ struct MainSplitView: View {
     @State private var search: SidebarSearchModel
     @State private var newConversation: NewConversationMode?
     @State private var showSettings = false
+    @State private var dropTargeted = false
     @State private var keys = KeyboardRouter()
     #if os(iOS)
     @FocusState private var detailFocused: Bool
@@ -43,6 +44,33 @@ struct MainSplitView: View {
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 400)
         } detail: {
             detailContent
+                // Files dropped anywhere in the conversation area upload via
+                // the visible compose bar (nil when this view has none —
+                // the drop is refused).
+                .dropDestination(for: URL.self) { urls, _ in
+                    let files = urls.filter(\.isFileURL)
+                    guard !files.isEmpty, let upload = keys.uploadFiles else { return false }
+                    upload(files)
+                    return true
+                } isTargeted: { targeted in
+                    dropTargeted = targeted
+                }
+                .overlay {
+                    if dropTargeted && keys.uploadFiles != nil {
+                        RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(.tint, lineWidth: 2)
+                            .background(
+                                .tint.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+                            .overlay {
+                                Label("Drop files to upload", systemImage: "arrow.down.doc")
+                                    .font(.headline)
+                                    .padding(10)
+                                    .background(.bar, in: RoundedRectangle(cornerRadius: 8))
+                            }
+                            .padding(8)
+                            .allowsHitTesting(false)
+                    }
+                }
                 #if os(iOS)
                 // Hardware-keyboard route: keep the detail pane focusable so
                 // plain-letter shortcuts have somewhere to land; a focused

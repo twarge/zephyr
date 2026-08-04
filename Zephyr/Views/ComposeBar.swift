@@ -82,6 +82,7 @@ struct ComposeBar: View {
     @State private var showFileImporter = false
     @FocusState private var messageFocused: Bool
     @Environment(KeyboardRouter.self) private var keys
+    @State private var uploadOwnerId = UUID()
 
     private var destination: SendDestination? {
         switch mode {
@@ -195,6 +196,16 @@ struct ComposeBar: View {
             // The keyboard router's r / c shortcuts focus this compose box.
             let focus = $messageFocused
             keys.focusCompose = { focus.wrappedValue = true }
+            // Files dropped anywhere in the conversation upload into here.
+            keys.registerUpload(owner: uploadOwnerId) { urls in
+                for url in urls {
+                    upload(fileURL: url, securityScoped: false)
+                }
+                focus.wrappedValue = true
+            }
+        }
+        .onDisappear {
+            keys.unregisterUpload(owner: uploadOwnerId)
         }
         .onChange(of: text) {
             if case .fixed(let destination, _) = mode {
