@@ -34,16 +34,6 @@ struct ChannelFeedView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ComposeBar(store: store, mode: .channel(streamId: streamId))
         }
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    selection = .channelTopics(streamId: streamId)
-                } label: {
-                    Label("Topics", systemImage: "list.bullet")
-                }
-                .help("List this channel's topics")
-            }
-        }
         .task {
             guard model == nil else { return }
             let list = MessageListModel(store: store, narrow: .channel(streamId: streamId))

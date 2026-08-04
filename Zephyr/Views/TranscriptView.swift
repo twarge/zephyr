@@ -55,14 +55,14 @@ struct TranscriptView: View {
                 ToolbarItem(placement: .navigation) {
                     HStack(spacing: 5) {
                         Button {
-                            selection = .channelTopics(streamId: streamId)
+                            selection = .channel(streamId: streamId)
                         } label: {
                             Text("#\(channelName(streamId))")
                                 .font(.headline)
                                 .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
-                        .help("Show all topics in this channel")
+                        .help("Show all messages in this channel")
                         Text("›")
                             .font(.headline)
                             .foregroundStyle(.tertiary)
