@@ -29,6 +29,31 @@ struct TranscriptView: View {
         store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel"
     }
 
+    private func breadcrumb(streamId: Int, topic: String) -> some View {
+        HStack(spacing: 5) {
+            Button {
+                selection = .channel(streamId: streamId)
+            } label: {
+                Text("#\(channelName(streamId))")
+                    .font(.headline)
+            }
+            .buttonStyle(.plain)
+            .help("Show all messages in this channel")
+            Text("›")
+                .font(.headline)
+                .foregroundStyle(.tertiary)
+            if TopicName.isResolved(topic) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.green)
+            }
+            Text(TopicName.displayName(topic).isEmpty
+                ? "general chat" : TopicName.displayName(topic))
+                .font(.headline)
+                .lineLimit(1)
+        }
+    }
+
     var body: some View {
         Group {
             if let model, model.didInitialFetch {
@@ -50,31 +75,18 @@ struct TranscriptView: View {
         }
         .toolbar {
             // Topic transcripts title as a breadcrumb: "#channel › topic",
-            // where the channel segment opens the channel's topic list.
+            // where the channel segment opens the channel's full feed.
             if case .topic(let streamId, let topic) = conversation {
-                ToolbarItem(placement: .navigation) {
-                    HStack(spacing: 5) {
-                        Button {
-                            selection = .channel(streamId: streamId)
-                        } label: {
-                            Text("#\(channelName(streamId))")
-                                .font(.headline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Show all messages in this channel")
-                        Text("›")
-                            .font(.headline)
-                            .foregroundStyle(.tertiary)
-                        if TopicName.isResolved(topic) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.subheadline)
-                                .foregroundStyle(.green)
-                        }
-                        Text(TopicName.displayName(topic).isEmpty
-                            ? "general chat" : TopicName.displayName(topic))
-                            .font(.headline)
-                            .lineLimit(1)
+                if #available(macOS 26.0, iOS 26.0, *) {
+                    // No glass capsule around the breadcrumb — it's a title,
+                    // not a control.
+                    ToolbarItem(placement: .navigation) {
+                        breadcrumb(streamId: streamId, topic: topic)
+                    }
+                    .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .navigation) {
+                        breadcrumb(streamId: streamId, topic: topic)
                     }
                 }
             }
