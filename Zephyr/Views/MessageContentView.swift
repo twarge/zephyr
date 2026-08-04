@@ -683,7 +683,8 @@ enum InlineRenderer {
             flush()
             guard var result = segments.first else { return Text(verbatim: "") }
             for segment in segments.dropFirst() {
-                result = result + segment
+                // Text interpolation is the non-deprecated concatenation.
+                result = Text("\(result)\(segment)")
             }
             return result
         }
