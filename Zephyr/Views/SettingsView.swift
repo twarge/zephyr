@@ -2,7 +2,7 @@ import SwiftUI
 import ZulipModel
 
 enum BadgePolicy: String, CaseIterable, Identifiable {
-    case dms
+    case dmsAndMentions
     case allUnreads
     case none
 
@@ -10,7 +10,7 @@ enum BadgePolicy: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .dms: "Direct messages"
+        case .dmsAndMentions: "Direct messages and mentions"
         case .allUnreads: "All unread messages"
         case .none: "None"
         }
@@ -32,7 +32,7 @@ struct SettingsView: View {
 
 private struct GeneralSettings: View {
     @Environment(AppModel.self) private var model
-    @AppStorage("badgePolicy") private var badgePolicy = BadgePolicy.dms.rawValue
+    @AppStorage("badgePolicy") private var badgePolicy = BadgePolicy.dmsAndMentions.rawValue
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("playSendSound") private var playSendSound = true
     @AppStorage("messageRetentionYears") private var messageRetentionYears = 5

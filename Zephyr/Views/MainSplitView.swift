@@ -202,17 +202,15 @@ struct MainSplitView: View {
         }
     }
 
-    @AppStorage("badgePolicy") private var badgePolicy = BadgePolicy.dms.rawValue
+    @AppStorage("badgePolicy") private var badgePolicy = BadgePolicy.dmsAndMentions.rawValue
 
-    /// Badge aggregates across every connected server, not just the front
-    /// one. (An unknown stored value — e.g. the retired dmsAndMentions
-    /// policy — falls back to the DM default.)
+    /// Badge aggregates across every connected server, not just the front one.
     private var badgeCount: Int {
-        let policy = BadgePolicy(rawValue: badgePolicy) ?? .dms
+        let policy = BadgePolicy(rawValue: badgePolicy) ?? .dmsAndMentions
         return model.global.stores.values.reduce(0) { total, store in
             switch policy {
-            case .dms:
-                total + store.unreads.dmCount
+            case .dmsAndMentions:
+                total + store.unreads.dmCount + store.unreads.mentionIds.count
             case .allUnreads:
                 total + store.unreads.totalCount
             case .none:
