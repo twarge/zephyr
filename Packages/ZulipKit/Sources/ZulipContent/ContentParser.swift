@@ -185,8 +185,10 @@ public enum ContentParser {
                     isEmbed: false))
 
         case "div" where classes.contains("message_inline_image"):
-            guard let anchor = element.children().first(), anchor.tagName() == "a",
-                  let img = anchor.children().first(where: { $0.tagName() == "img" })
+            // Tolerant of wrapper variation: the anchor need not be the
+            // first child, nor the img a direct child of the anchor.
+            guard let anchor = element.children().first(where: { $0.tagName() == "a" }),
+                  let img = try2 { try anchor.select("img").first() } ?? nil
             else {
                 return .unimplemented(html: outerHTML(element))
             }

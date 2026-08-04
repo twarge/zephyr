@@ -71,10 +71,16 @@ struct BlockNodeView: View {
             MathBlockView(tex: tex)
         case .thematicBreak:
             Divider()
-        case .unimplemented:
+        case .unimplemented(let html):
             Label("Unsupported content", systemImage: "questionmark.square.dashed")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                // Diagnosis affordance: the raw HTML names what's missing.
+                .contextMenu {
+                    Button("Copy Raw HTML", systemImage: "doc.on.doc") {
+                        Platform.copyToPasteboard(html)
+                    }
+                }
         }
     }
 
@@ -576,9 +582,22 @@ private struct MessageImageView: View {
     }
 
     private func load() async {
-        guard let (data, _) = await fetchMedia(path: node.src, connection: connection)
-        else { return }
-        image = PlatformImage(data: data)
+        // Skip the server's transient thumbnailing placeholder (an SVG
+        // loader graphic); go straight to the original below.
+        if !node.src.hasPrefix("/static/images/loading"),
+           let (data, _) = await fetchMedia(path: node.src, connection: connection),
+           let decoded = PlatformImage(data: data) {
+            image = decoded
+            return
+        }
+        // Thumbnail missing or undecodable: fall back to the original.
+        // ImageIO decodes HEIC/AVIF/TIFF locally even where a browser
+        // (and hence the server's preview pipeline) wouldn't.
+        if let original = node.originalSrc, original != node.src,
+           let (data, _) = await fetchMedia(path: original, connection: connection),
+           let decoded = PlatformImage(data: data) {
+            image = decoded
+        }
     }
 
     private func openInDefaultViewer() {
