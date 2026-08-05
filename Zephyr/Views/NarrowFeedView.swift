@@ -29,7 +29,8 @@ struct NarrowFeedView: View {
                         useMatchHighlights: useMatchHighlights,
                         onHeaderTap: { key in
                             selection = .conversation(key)
-                        })
+                        },
+                        marksReadOnView: narrow == .combinedFeed)
                 }
             } else {
                 ProgressView()

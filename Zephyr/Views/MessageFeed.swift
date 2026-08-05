@@ -29,11 +29,16 @@ struct MessageFeedList: View {
     var useMatchHighlights = false
     var onHeaderTap: ((ConversationKey) -> Void)?
     var onNewMessages: (() -> Void)?
+    /// Cross-conversation feeds: a message scrolled into view is marked
+    /// read (batched).
+    var marksReadOnView = false
 
     @Environment(KeyboardRouter.self) private var keys
     @State private var anchorId: String?
     @State private var nearBottom = true
     @State private var quickLook = FeedQuickLook()
+    @State private var pendingReadIds: Set<Int> = []
+    @State private var readFlushTask: Task<Void, Never>?
 
     private var outboxMessages: [OutboxMessage] {
         store.outbox.filter {
@@ -201,6 +206,22 @@ struct MessageFeedList: View {
         }
     }
 
+    /// Seen-in-view read marking, batched so a scroll doesn't spam the
+    /// flags endpoint.
+    private func noteSeen(_ message: Message) {
+        guard marksReadOnView,
+              !(message.flags ?? []).contains("read") else { return }
+        pendingReadIds.insert(message.id)
+        readFlushTask?.cancel()
+        readFlushTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled else { return }
+            let ids = Array(pendingReadIds)
+            pendingReadIds = []
+            store.markMessagesRead(ids: ids)
+        }
+    }
+
     /// The message-link flash fades after a beat.
     private func scheduleHighlightClear() {
         guard let target = keys.highlightMessageId else { return }
@@ -275,6 +296,7 @@ struct MessageFeedList: View {
                             useMatchHighlights: useMatchHighlights,
                             isKeySelected: keys.selectedMessageId == message.id,
                             isLinkTarget: keys.highlightMessageId == message.id)
+                            .onAppear { noteSeen(message) }
                     }
                 }
                 if !model.haveNewest && !model.messages.isEmpty {

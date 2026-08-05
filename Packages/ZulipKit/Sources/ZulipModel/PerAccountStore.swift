@@ -217,6 +217,25 @@ public final class PerAccountStore {
         markRead(ids: ids.sorted())
     }
 
+    /// Marks specific messages read — visibility-based marking in
+    /// cross-conversation feeds (a message scrolled into view counts as
+    /// seen). Applies locally (flags + unreads) and syncs like any flag.
+    public func markMessagesRead(ids: [Int]) {
+        let unreadIds = ids.filter { !(messages[$0]?.flags ?? []).contains("read") }
+        guard !unreadIds.isEmpty else { return }
+        for id in unreadIds {
+            guard var message = messages[id] else { continue }
+            var flags = Set(message.flags ?? [])
+            flags.insert("read")
+            message.flags = Array(flags)
+            messages[id] = message
+        }
+        unreads.removeMessages(ids: unreadIds)
+        forEachMessageList { $0.handleChangedMessages(ids: unreadIds) }
+        scheduleMessageCacheSave(unreadIds)
+        performOrQueue(.updateFlags(messageIds: unreadIds.sorted(), add: true, flag: "read"))
+    }
+
     private func markRead(ids: [Int]) {
         unreads.removeMessages(ids: ids)
         performOrQueue(.updateFlags(messageIds: ids, add: true, flag: "read"))
