@@ -191,35 +191,38 @@ struct MessageFeedList: View {
                             proxy.scrollTo("msg-\(newId)", anchor: .center)
                             scheduleHighlightClear()
                         }
-                }
-                .overlay(alignment: .bottomTrailing) {
-                    if !nearBottom || !model.haveNewest {
-                        Button {
-                            if model.haveNewest {
-                                anchorId = Self.bottomAnchorId
-                            } else {
-                                Task {
-                                    await model.jumpToNewest()
-                                    anchorId = Self.bottomAnchorId
+                        .overlay(alignment: .bottomTrailing) {
+                            if !nearBottom || !model.haveNewest {
+                                Button {
+                                    if model.haveNewest {
+                                        scrollToBottomSettled(proxy)
+                                    } else {
+                                        Task {
+                                            await model.jumpToNewest()
+                                            scrollToBottomSettled(proxy)
+                                        }
+                                    }
+                                } label: {
+                                    Image(systemName: "arrow.down.circle.fill")
+                                        .font(.system(size: 26))
+                                        .symbolRenderingMode(.hierarchical)
+                                        .foregroundStyle(.tint)
+                                        .background(.bar, in: .circle)
                                 }
+                                .buttonStyle(.plain)
+                                .padding(12)
+                                .help("Jump to latest messages")
                             }
-                        } label: {
-                            Image(systemName: "arrow.down.circle.fill")
-                                .font(.system(size: 26))
-                                .symbolRenderingMode(.hierarchical)
-                                .foregroundStyle(.tint)
-                                .background(.bar, in: .circle)
                         }
-                        .buttonStyle(.plain)
-                        .padding(12)
-                        .help("Jump to latest messages")
-                    }
-                }
-                .onChange(of: outboxMessages.count) { old, new in
-                    // Sending while viewing history jumps to the newest
-                    // messages so the send is visible.
-                    guard new > old, !model.haveNewest else { return }
-                    Task { await model.jumpToNewest() }
+                        .onChange(of: outboxMessages.count) { old, new in
+                            // Sending while viewing history jumps to the
+                            // newest messages so the send is visible.
+                            guard new > old, !model.haveNewest else { return }
+                            Task {
+                                await model.jumpToNewest()
+                                scrollToBottomSettled(proxy)
+                            }
+                        }
                 }
             }
         }
@@ -233,6 +236,22 @@ struct MessageFeedList: View {
             if keys.activeFeed === model {
                 keys.activeFeed = nil
                 keys.selectedMessageId = nil
+            }
+        }
+    }
+
+    /// Pins the feed to the true bottom. Lazy row heights are estimates
+    /// until rows realize, so the binding's scroll can land short —
+    /// corrective passes after layout settles converge on the real bottom.
+    /// Bails if the user scrolls away mid-settle (the position binding
+    /// leaves the sentinel).
+    private func scrollToBottomSettled(_ proxy: ScrollViewProxy) {
+        anchorId = Self.bottomAnchorId
+        Task { @MainActor in
+            for delay in [250, 600] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                guard anchorId == Self.bottomAnchorId else { return }
+                proxy.scrollTo(Self.bottomAnchorId, anchor: .bottom)
             }
         }
     }
@@ -327,7 +346,13 @@ struct MessageFeedList: View {
                             useMatchHighlights: useMatchHighlights,
                             isKeySelected: keys.selectedMessageId == message.id,
                             isLinkTarget: keys.highlightMessageId == message.id)
-                            .onAppear { noteSeen(message) }
+                            // Actual viewport visibility, not lazy-stack
+                            // realization (which includes off-screen rows).
+                            // The low threshold lets rows taller than the
+                            // window still count once a fifth is shown.
+                            .onScrollVisibilityChange(threshold: 0.2) { visible in
+                                if visible { noteSeen(message) }
+                            }
                     }
                 }
                 if !model.haveNewest && !model.messages.isEmpty {
