@@ -292,6 +292,7 @@ struct SidebarView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
+                        .padding(.trailing, 8)
                         .help("New direct message")
                     }
                 }
