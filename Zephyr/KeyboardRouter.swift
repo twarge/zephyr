@@ -31,10 +31,6 @@ final class KeyboardRouter {
     weak var store: PerAccountStore?
     weak var activeFeed: MessageListModel?
     var selectedMessageId: Int?
-    /// True when the last selection change came from j/k/arrows: only then
-    /// does the feed scroll-follow (a click must not scroll — the resulting
-    /// programmatic scroll was knocking focus off just-clicked images).
-    @ObservationIgnored var selectionMovedByKeyboard = false
     /// Set to a message id to ask its row to enter edit mode; the row clears it.
     var editRequestId: Int?
     var showHelp = false
@@ -136,7 +132,6 @@ final class KeyboardRouter {
         } else {
             index = ids.count - 1  // First press selects the newest message.
         }
-        selectionMovedByKeyboard = true
         selectedMessageId = ids[index]
         if index == 0 && delta < 0 {
             Task { await feed.fetchOlder() }

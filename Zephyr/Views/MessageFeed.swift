@@ -118,17 +118,9 @@ struct MessageFeedList: View {
                 ContentUnavailableView("No Messages", systemImage: "bubble")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollViewReader { proxy in
-                    feedScrollView
-                        .onChange(of: keys.selectedMessageId) { _, newId in
-                            // Follow keyboard movement only; click-selection
-                            // must not scroll (it would steal image focus).
-                            guard let newId, keys.selectionMovedByKeyboard else { return }
-                            keys.selectionMovedByKeyboard = false
-                            // nil anchor: scroll the minimum needed for visibility.
-                            proxy.scrollTo("msg-\(newId)", anchor: nil)
-                        }
-                }
+                // No scroll-follow on selection: programmatic scrolls were
+                // fighting image focus, and selection reads fine without it.
+                feedScrollView
             }
         }
         .environment(quickLook)

@@ -30,7 +30,17 @@ struct BlockNodeView: View {
     var body: some View {
         switch block {
         case .paragraph(let inlines):
-            inlineText(inlines)
+            let pdfs = pdfAttachmentLinks(inlines)
+            if pdfs.isEmpty {
+                inlineText(inlines)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    inlineText(inlines)
+                    ForEach(pdfs, id: \.href) { link in
+                        PDFAttachmentView(href: link.href, connection: connection)
+                    }
+                }
+            }
         case .heading(let level, let inlines):
             inlineText(inlines)
                 .font(.system(size: CGFloat(20 - min(level, 4) * 2), weight: .bold))
