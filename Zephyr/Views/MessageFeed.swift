@@ -39,6 +39,9 @@ struct MessageFeedList: View {
     @State private var quickLook = FeedQuickLook()
     @State private var pendingReadIds: Set<Int> = []
     @State private var readFlushTask: Task<Void, Never>?
+    /// Bumped when the viewport is detected outside the content bounds;
+    /// the reader responds with an imperative rescue scroll.
+    @State private var recoverNonce = 0
 
     init(
         store: PerAccountStore, model: MessageListModel, cache: MessageContentCache,
@@ -179,7 +182,20 @@ struct MessageFeedList: View {
                             } else {
                                 target = nil
                             }
-                            guard let target else { return }
+                            guard let target else {
+                                // Bottom-anchored open: deferred insurance
+                                // passes — no-ops when the initial position
+                                // landed, a rescue when estimate drift
+                                // parked the viewport in unrealized space.
+                                Task { @MainActor in
+                                    for delay in [300, 700] {
+                                        try? await Task.sleep(for: .milliseconds(delay))
+                                        guard nearBottom else { return }
+                                        proxy.scrollTo(Self.bottomAnchorId, anchor: .bottom)
+                                    }
+                                }
+                                return
+                            }
                             Task { @MainActor in
                                 try? await Task.sleep(for: .milliseconds(350))
                                 withAnimation(.easeOut(duration: 0.2)) {
@@ -187,6 +203,20 @@ struct MessageFeedList: View {
                                 }
                             }
                             scheduleHighlightClear()
+                        }
+                        // Blank-state recovery: the geometry observer bumps
+                        // the nonce; the proxy scroll is imperative, so it
+                        // can't be coalesced away like a binding rewrite
+                        // (nil→same-value collapsed to no change, which is
+                        // why recovery used to silently do nothing).
+                        .onChange(of: recoverNonce) {
+                            let target = anchorId ?? Self.bottomAnchorId
+                            Task { @MainActor in
+                                for delay in [50, 350] {
+                                    try? await Task.sleep(for: .milliseconds(delay))
+                                    proxy.scrollTo(target, anchor: .bottom)
+                                }
+                            }
                         }
                         .onChange(of: keys.highlightMessageId) { _, newId in
                             // Same-conversation message links scroll live.
@@ -411,11 +441,8 @@ struct MessageFeedList: View {
                         || geometry.visibleRect.maxY <= 0))
         } action: { old, new in
             nearBottom = new.nearBottom
-            guard new.lost, !old.lost else { return }
-            let target = anchorId ?? Self.bottomAnchorId
-            anchorId = nil
-            Task { @MainActor in
-                anchorId = target
+            if new.lost, !old.lost {
+                recoverNonce &+= 1
             }
         }
         .onAppear {
