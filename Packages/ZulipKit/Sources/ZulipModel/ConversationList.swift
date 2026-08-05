@@ -9,13 +9,15 @@ extension ConversationKey {
         return joined.isEmpty ? [] : joined.split(separator: ",").compactMap { Int($0) }
     }
 
-    /// The narrow that shows this conversation.
-    public var narrow: Narrow {
+    /// The narrow that shows this conversation. The self-DM key has an empty
+    /// participant set — its narrow must query dm:[selfUserId], not dm:[].
+    public func narrow(selfUserId: Int) -> Narrow {
         switch self {
-        case .dm(let joined):
-            .dm(userIds: joined.split(separator: ",").compactMap { Int($0) })
+        case .dm:
+            let ids = dmParticipantIds ?? []
+            return .dm(userIds: ids.isEmpty ? [selfUserId] : ids)
         case .topic(let streamId, let topic):
-            .topic(streamId: streamId, topic: topic)
+            return .topic(streamId: streamId, topic: topic)
         }
     }
 }

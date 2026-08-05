@@ -140,10 +140,27 @@ struct ConversationListTests {
     }
 
     @Test func conversationKeyNarrowRoundTrip() {
-        #expect(ConversationKey.dm("2,5").narrow == .dm(userIds: [2, 5]))
+        #expect(ConversationKey.dm("2,5").narrow(selfUserId: 1) == .dm(userIds: [2, 5]))
         #expect(
-            ConversationKey.topic(streamId: 10, topic: "hi").narrow
+            ConversationKey.topic(streamId: 10, topic: "hi").narrow(selfUserId: 1)
                 == .topic(streamId: 10, topic: "hi"))
         #expect(ConversationKey.dm("2,5").dmParticipantIds == [2, 5])
+    }
+}
+
+@MainActor
+struct SelfDmTests {
+    /// The self-DM key's participant set is empty; its narrow must query
+    /// dm:[selfUserId] (dm:[] returns nothing).
+    @Test func selfDmNarrowTargetsSelf() throws {
+        let key = Unreads.dmKey(participantIds: [1], selfUserId: 1)
+        #expect(key.narrow(selfUserId: 1) == .dm(userIds: [1]))
+        #expect(key.sendDestination(selfUserId: 1) == .dm(userIds: [1]))
+
+        let message = try ZulipJSON.decoder.decode(
+            Message.self,
+            from: Data(Fixtures.dmMessageJSON(id: 9, senderId: 1, recipientIds: [1]).utf8))
+        #expect(Narrow.dm(userIds: [1]).containsMessage(message, selfUserId: 1))
+        #expect(Unreads.conversationKey(for: message, selfUserId: 1) == key)
     }
 }

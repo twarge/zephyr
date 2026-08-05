@@ -111,7 +111,8 @@ struct TranscriptView: View {
         }
         .task {
             guard model == nil else { return }
-            let list = MessageListModel(store: store, narrow: conversation.narrow)
+            let list = MessageListModel(
+                store: store, narrow: conversation.narrow(selfUserId: store.selfUserId))
             model = list
             await list.fetchInitial()
             store.markConversationRead(conversation)
