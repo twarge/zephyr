@@ -44,6 +44,14 @@ public enum ContentParser {
                 continue
             }
             guard let element = node as? Element else { continue }
+            // New-style previews (bare img.inline-image, no wrapper div —
+            // Zulip 11+) sit in paragraph flow; hoist them into image blocks.
+            if element.tagName() == "p",
+               element.children().contains(where: Self.isInlineImage) {
+                flushInlines()
+                blocks.append(contentsOf: splitParagraphWithImages(element))
+                continue
+            }
             if let block = parseBlockElement(element) {
                 flushInlines()
                 blocks.append(block)
@@ -53,6 +61,48 @@ public enum ContentParser {
         }
         flushInlines()
         return coalesceGalleries(blocks)
+    }
+
+    private static func isInlineImage(_ element: Element) -> Bool {
+        element.tagName() == "img" && classList(element).contains("inline-image")
+    }
+
+    private static func inlineImageNode(_ img: Element) -> ImageNode {
+        let dimensions = (try2 { try img.attr("data-original-dimensions") } ?? "")
+            .split(separator: "x").compactMap { Int($0) }
+        return ImageNode(
+            src: try2 { try img.attr("src") } ?? "",
+            originalSrc: try2 { try img.attr("data-original-src") }
+                .flatMap { $0.isEmpty ? nil : $0 },
+            alt: try2 { try img.attr("alt") }.flatMap { $0.isEmpty ? nil : $0 },
+            originalWidth: dimensions.count == 2 ? dimensions[0] : nil,
+            originalHeight: dimensions.count == 2 ? dimensions[1] : nil)
+    }
+
+    /// A paragraph interleaving text and new-style images becomes alternating
+    /// paragraph and image blocks (consecutive images then gallery-coalesce).
+    private static func splitParagraphWithImages(_ paragraph: Element) -> [BlockNode] {
+        var out: [BlockNode] = []
+        var pending: [Node] = []
+
+        func flushPending() {
+            let inlines = trimInlines(parseInlines(pending))
+            if !inlines.isEmpty {
+                out.append(.paragraph(inlines))
+            }
+            pending = []
+        }
+
+        for node in paragraph.getChildNodes() {
+            if let element = node as? Element, isInlineImage(element) {
+                flushPending()
+                out.append(.image(inlineImageNode(element)))
+            } else {
+                pending.append(node)
+            }
+        }
+        flushPending()
+        return out
     }
 
     /// Consecutive image previews group into a gallery grid.
@@ -117,6 +167,9 @@ public enum ContentParser {
 
         case "hr":
             return .thematicBreak
+
+        case "img" where classes.contains("inline-image"):
+            return .image(inlineImageNode(element))
 
         case "div" where classes.contains("codehilite"):
             let language = try2 { try element.attr("data-code-language") }
@@ -448,6 +501,16 @@ public enum ContentParser {
             let name = (try2 { try element.attr("alt") } ?? "")
                 .trimmingCharacters(in: CharacterSet(charactersIn: ":"))
             return .emoji(.realm(src: try2 { try element.attr("src") } ?? "", name: name))
+
+        case "img" where classes.contains("inline-image"):
+            // Normally hoisted to an image block; nested too deep for that,
+            // degrade to a link to the original rather than ⟨unsupported⟩.
+            let node = inlineImageNode(element)
+            return .link(
+                LinkNode(
+                    text: [.text(node.alt ?? "image")],
+                    href: node.originalSrc ?? node.src,
+                    kind: .plain))
 
         default:
             return .unimplemented(html: outerHTML(element))
