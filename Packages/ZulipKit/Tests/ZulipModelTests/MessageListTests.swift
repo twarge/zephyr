@@ -164,3 +164,45 @@ struct SelfDmTests {
         #expect(Unreads.conversationKey(for: message, selfUserId: 1) == key)
     }
 }
+
+@MainActor
+struct SelfDmEchoTests {
+    @Test func selfDmEchoStaysInOpenList() async throws {
+        let transport = FakeTransport(
+            script: [
+                .json(Fixtures.getMessagesJSON([])),
+                .json(#"{"result": "success", "id": 500}"#),
+            ], defaultResponse: .hang)
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key", transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        let list = MessageListModel(store: store, narrow: .dm(userIds: [1]))
+        await list.fetchInitial()
+        #expect(list.haveNewest)
+
+        store.send("note to self", to: .dm(userIds: [1]))
+        let localId = try #require(store.outbox.first?.id)
+        try await eventually("send issued") {
+            transport.requests.contains { $0.path == "/api/v1/messages" }
+        }
+
+        let echo = """
+            {"id": 9, "type": "message", "local_message_id": "\(localId)",
+             "message": \(Fixtures.dmMessageJSON(id: 500, senderId: 1, recipientIds: [1])),
+             "flags": ["read"]}
+            """
+        store.handleEvent(try ZulipJSON.decoder.decode(Event.self, from: Data(echo.utf8)))
+        #expect(store.outbox.isEmpty)
+        #expect(list.messages.map(\.id) == [500])
+
+        // The mark-read flags event that follows must not evict it.
+        store.handleEvent(
+            try decodeEvent(Fixtures.flagsEventJSON(eventId: 10, op: "add", flag: "read", messages: [500])))
+        #expect(list.messages.map(\.id) == [500])
+    }
+}

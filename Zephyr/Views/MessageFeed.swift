@@ -448,7 +448,6 @@ struct MessageRow: View {
                 }
             }
         }
-        .onHover { hovering = $0 }
         .overlay(alignment: .topTrailing) {
             if hovering || showReactionPicker {
                 Button {
@@ -472,6 +471,10 @@ struct MessageRow: View {
                 .padding(.top, showHeader ? 8 : 0)
             }
         }
+        // After the overlay: the hover region must include the reaction
+        // button itself, or entering the button drops row-hover and the
+        // button vanishes under the pointer (flicker + missed clicks).
+        .onHover { hovering = $0 }
         .contextMenu {
             let isStarred = (message.flags ?? []).contains("starred")
             Button("Reply Quoting Message", systemImage: "text.quote") {

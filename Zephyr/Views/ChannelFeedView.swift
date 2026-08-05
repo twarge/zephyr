@@ -34,8 +34,9 @@ struct ChannelFeedView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ComposeBar(store: store, mode: .channel(streamId: streamId))
         }
-        .task {
-            guard model == nil else { return }
+        // Store-keyed: re-binds when the store instance is replaced
+        // (warm-launch swap, queue rebuild).
+        .task(id: ObjectIdentifier(store)) {
             let list = MessageListModel(store: store, narrow: .channel(streamId: streamId))
             model = list
             await list.fetchInitial(count: 100)

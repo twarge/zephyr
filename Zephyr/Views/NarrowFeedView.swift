@@ -37,8 +37,9 @@ struct NarrowFeedView: View {
             }
         }
         .navigationTitle(title)
-        .task {
-            guard model == nil else { return }
+        // Store-keyed: re-binds when the store instance is replaced
+        // (warm-launch swap, queue rebuild).
+        .task(id: ObjectIdentifier(store)) {
             let list = MessageListModel(store: store, narrow: narrow)
             model = list
             await list.fetchInitial(count: 100)

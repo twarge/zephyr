@@ -109,8 +109,11 @@ struct TranscriptView: View {
                 store: store, selection: $selection,
                 mode: .directMessage(initialUsers: dmParticipants))
         }
-        .task {
-            guard model == nil else { return }
+        // Keyed to the store instance: when the provisional warm-launch
+        // store is replaced by the live one (or a queue rebuild swaps
+        // stores), the list re-binds — otherwise it stays registered with a
+        // dead store and never receives live events.
+        .task(id: ObjectIdentifier(store)) {
             let list = MessageListModel(
                 store: store, narrow: conversation.narrow(selfUserId: store.selfUserId))
             model = list
