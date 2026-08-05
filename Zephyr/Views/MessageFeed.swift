@@ -90,6 +90,11 @@ struct MessageFeedList: View {
     /// really lands at the bottom.
     private static let bottomAnchorId = "feed-bottom"
 
+    private struct FeedGeometry: Equatable {
+        var nearBottom: Bool
+        var lost: Bool
+    }
+
     private enum Item: Identifiable {
         case daySeparator(String)
         case conversationHeader(key: ConversationKey, firstMessageId: Int)
@@ -393,21 +398,20 @@ struct MessageFeedList: View {
         }
         .defaultScrollAnchor(.bottom)
         .scrollPosition(id: $anchorId, anchor: .bottom)
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            geometry.contentSize.height - geometry.visibleRect.maxY < 60
-        } action: { _, isNear in
-            nearBottom = isNear
-        }
-        // The blank-view failure mode: the viewport parked outside the
-        // content bounds (offset never re-clamped). Detect it from scroll
-        // geometry and re-assert the anchor instead of waiting for a
-        // window resize to force the re-layout.
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            geometry.contentSize.height > 0
-                && (geometry.visibleRect.minY >= geometry.contentSize.height - 1
-                    || geometry.visibleRect.maxY <= 0)
-        } action: { wasLost, isLost in
-            guard isLost, !wasLost else { return }
+        // One geometry observer for both signals (two separate ones
+        // double-fired per frame): bottom proximity, and the blank-view
+        // failure mode — the viewport parked outside the content bounds
+        // (offset never re-clamped), fixed by re-asserting the anchor
+        // instead of waiting for a window resize to force re-layout.
+        .onScrollGeometryChange(for: FeedGeometry.self) { geometry in
+            FeedGeometry(
+                nearBottom: geometry.contentSize.height - geometry.visibleRect.maxY < 60,
+                lost: geometry.contentSize.height > 0
+                    && (geometry.visibleRect.minY >= geometry.contentSize.height - 1
+                        || geometry.visibleRect.maxY <= 0))
+        } action: { old, new in
+            nearBottom = new.nearBottom
+            guard new.lost, !old.lost else { return }
             let target = anchorId ?? Self.bottomAnchorId
             anchorId = nil
             Task { @MainActor in

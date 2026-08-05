@@ -167,6 +167,18 @@ public final class PerAccountStore {
         }
     }
 
+    /// Carries a replaced store instance's cached-message hydration across
+    /// a store swap — no second database read, no contention with first
+    /// render.
+    public func adoptCachedMessages(from previous: PerAccountStore) {
+        for (id, message) in previous.messages where messages[id] == nil {
+            messages[id] = message
+            cachedMessageIds.insert(id)
+        }
+        conversations.seed(
+            messages: Array(previous.messages.values), selfUserId: selfUserId)
+    }
+
     /// Hydrates recent transcripts from the SQLite store (also seeding
     /// sidebar recency). The read + payload decode (~130 ms for a few
     /// hundred cached conversations) runs off the main actor; only the

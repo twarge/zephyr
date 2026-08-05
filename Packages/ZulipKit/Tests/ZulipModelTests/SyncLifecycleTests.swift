@@ -84,8 +84,15 @@ struct SyncLifecycleTests {
                 && global.stores[account.id]?.queueId == "q2"
         }
         #expect(global.storeGeneration > firstGeneration)
-        // The replacement store came from a fresh register, not event replay.
-        #expect(global.stores[account.id]?.messages.isEmpty == true)
+        // The replacement adopts the old instance's messages (flagged
+        // cached, so one refetched copy replaces each) — transcripts keep
+        // rendering across the rebuild instead of blanking.
+        let rebuilt = try #require(global.stores[account.id])
+        #expect(rebuilt.messages[100] != nil)
+        var fresh = try #require(rebuilt.messages[100])
+        fresh.content = "<p>refetched</p>"
+        rebuilt.reconcileFetchedMessages([fresh])
+        #expect(rebuilt.messages[100]?.content == "<p>refetched</p>")
 
         await global.shutdown(deleteQueues: false)
     }

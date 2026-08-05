@@ -226,6 +226,7 @@ public final class GlobalStore: UpdateMachineDelegate {
     }
 
     private func installStore(_ store: PerAccountStore, for accountId: Account.ID) {
+        let previous = stores[accountId]
         machines[accountId]?.stop()
         provisionalStores.remove(accountId)
         stores[accountId] = store
@@ -239,7 +240,15 @@ public final class GlobalStore: UpdateMachineDelegate {
         machines[accountId] = machine
         machine.start()
         storeGeneration += 1
-        Task { await store.restoreOfflineCache() }
+        if let previous {
+            // Store swap (provisional → live, queue rebuild): carry the
+            // old instance's hydration over instead of re-reading SQLite —
+            // the second read ran during the post-register render storm
+            // and starved for seconds at background priority.
+            store.adoptCachedMessages(from: previous)
+        } else {
+            Task { await store.restoreOfflineCache() }
+        }
     }
 
     public func updateMachineNeedsRebuild(_ machine: UpdateMachine, reason: UpdateMachine.RebuildReason) {
