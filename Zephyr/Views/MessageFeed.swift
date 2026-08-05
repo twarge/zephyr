@@ -347,6 +347,10 @@ struct MessageRow: View {
         return cache.content(for: message)
     }
 
+    private var isStarred: Bool {
+        (message.flags ?? []).contains("starred")
+    }
+
     /// The system selection highlight (follows the user's accent setting).
     static var selectionColor: Color {
         #if os(macOS)
@@ -449,7 +453,28 @@ struct MessageRow: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if hovering || showReactionPicker {
+            // Fixed layout (opacity gating, not insertion) so the star sits
+            // in exactly the same spot as control and as starred indicator.
+            let controlsActive = hovering || showReactionPicker
+            HStack(spacing: 2) {
+                Button {
+                    store.setStarred(!isStarred, messageId: message.id)
+                } label: {
+                    Image(systemName: isStarred ? "star.fill" : "star")
+                        .font(.callout)
+                        .foregroundStyle(
+                            isStarred ? AnyShapeStyle(.yellow) : AnyShapeStyle(.secondary))
+                        .padding(5)
+                        .background(
+                            controlsActive
+                                ? AnyShapeStyle(.quaternary.opacity(0.6))
+                                : AnyShapeStyle(.clear),
+                            in: .circle)
+                }
+                .buttonStyle(.plain)
+                .help(isStarred ? "Unstar" : "Star")
+                .opacity(controlsActive || isStarred ? 1 : 0)
+                .allowsHitTesting(controlsActive || isStarred)
                 Button {
                     showReactionPicker = true
                 } label: {
@@ -468,15 +493,16 @@ struct MessageRow: View {
                             emojiCode: entry.code, reactionType: entry.reactionType)
                     }
                 }
-                .padding(.top, showHeader ? 8 : 0)
+                .opacity(controlsActive ? 1 : 0)
+                .allowsHitTesting(controlsActive)
             }
+            .padding(.top, showHeader ? 8 : 0)
         }
         // After the overlay: the hover region must include the reaction
         // button itself, or entering the button drops row-hover and the
         // button vanishes under the pointer (flicker + missed clicks).
         .onHover { hovering = $0 }
         .contextMenu {
-            let isStarred = (message.flags ?? []).contains("starred")
             Button("Reply Quoting Message", systemImage: "text.quote") {
                 quoteAndReply()
             }
