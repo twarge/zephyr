@@ -459,19 +459,19 @@ struct SidebarView: View {
         .help("Servers and accounts (⌘1–⌘9 switch this window)")
     }
 
-    /// A "#" with a small plus badge at the lower right — the join-channel
-    /// analog of person.badge.plus (SF Symbols has no number.badge.plus).
+    /// A "#" with a circled-plus badge at the lower right, drawn to match
+    /// person.badge.plus (SF Symbols has no number.badge.plus): same open
+    /// plus.circle badge, base glyph knocked out behind it.
     private var joinChannelIcon: some View {
         Image(systemName: "number")
-            .font(.system(size: 14, weight: .medium))
+            .font(.system(size: 15, weight: .regular))
             .overlay(alignment: .bottomTrailing) {
-                Image(systemName: "plus")
-                    .font(.system(size: 7, weight: .heavy))
-                    .padding(1)
-                    // Knockout behind the badge: the # is stroke-dense
-                    // where person.badge.plus has empty space.
+                Image(systemName: "plus.circle")
+                    .font(.system(size: 9, weight: .regular))
+                    // Clears the # strokes inside the badge circle, like
+                    // the badge cutout in real badge symbols.
                     .background(.bar, in: .circle)
-                    .offset(x: 4, y: 2)
+                    .offset(x: 4, y: 3)
             }
     }
 
