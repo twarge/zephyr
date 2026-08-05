@@ -28,6 +28,7 @@ struct LoginView: View {
     @State private var busy = false
     @State private var errorText: String?
     @State private var webAuthSession = WebAuthSession()
+    @State private var showAdvanced = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -70,10 +71,17 @@ struct LoginView: View {
     }
 
     private func credentialsForm(_ settings: ServerSettings, realm: URL) -> some View {
-        VStack(spacing: 12) {
+        let emailAuth = settings.emailAuthEnabled ?? false
+        let external = settings.externalAuthenticationMethods ?? []
+        // SSO-only realms show just their buttons; the manual API-key form
+        // hides behind an "advanced" reveal instead of implying a password
+        // login the server doesn't offer.
+        let showsForm = emailAuth || showAdvanced
+
+        return VStack(spacing: 12) {
             Text(settings.realmName ?? realm.host() ?? "")
                 .font(.headline)
-            if let external = settings.externalAuthenticationMethods, !external.isEmpty {
+            if !external.isEmpty {
                 VStack(spacing: 8) {
                     ForEach(external, id: \.name) { authMethod in
                         Button {
@@ -97,43 +105,61 @@ struct LoginView: View {
                         .disabled(busy)
                     }
                 }
-                Text("or")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Picker("Method", selection: $method) {
-                ForEach(availableMethods(settings)) { method in
-                    Text(method.rawValue).tag(method)
+                if showsForm {
+                    Text("or")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 240)
+            if showsForm {
+                if emailAuth {
+                    Picker("Method", selection: $method) {
+                        ForEach(availableMethods(settings)) { method in
+                            Text(method.rawValue).tag(method)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 240)
+                }
 
-            TextField("Email", text: $email)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 320)
-            switch method {
-            case .password:
-                SecureField("Password", text: $password)
+                TextField("Email", text: $email)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 320)
-                    .onSubmit { signIn(settings, realm: realm) }
-            case .apiKey:
-                SecureField("API key (Personal settings → Account & privacy)", text: $apiKey)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 320)
-                    .onSubmit { signIn(settings, realm: realm) }
+                switch method {
+                case .password:
+                    SecureField("Password", text: $password)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 320)
+                        .onSubmit { signIn(settings, realm: realm) }
+                case .apiKey:
+                    SecureField("API key (Personal settings → Account & privacy)", text: $apiKey)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 320)
+                        .onSubmit { signIn(settings, realm: realm) }
+                }
             }
 
             HStack {
                 Button("Back") {
                     step = .realm
+                    showAdvanced = false
                     errorText = nil
                 }
-                Button("Sign In") { signIn(settings, realm: realm) }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(busy || email.isEmpty || (method == .password ? password.isEmpty : apiKey.isEmpty))
+                if showsForm {
+                    Button("Sign In") { signIn(settings, realm: realm) }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(busy || email.isEmpty
+                            || (method == .password ? password.isEmpty : apiKey.isEmpty))
+                }
+            }
+            if !showsForm {
+                Button("Sign in with an API key instead…") {
+                    showAdvanced = true
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             if busy { ProgressView().controlSize(.small) }
         }
