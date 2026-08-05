@@ -34,6 +34,13 @@ public final class Presence {
         }
     }
 
+    /// The most recent moment the user was seen at all (active or idle);
+    /// nil when the server has never reported presence for them.
+    public func lastSeen(of userId: Int) -> Date? {
+        guard let timestamps = info[userId] else { return nil }
+        return [timestamps.active, timestamps.idle].compactMap { $0 }.max()
+    }
+
     public func state(of userId: Int, offlineThresholdSeconds: Int) -> PresenceState {
         guard let timestamps = info[userId] else { return .offline }
         let threshold = Double(offlineThresholdSeconds)

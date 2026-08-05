@@ -19,6 +19,9 @@ struct SidebarView: View {
     @State private var collapsedSections: Set<String>
     @State private var expandedChannels: Set<Int>
     @State private var showSettings = false
+    @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
+    @State private var showOfflineUsers = false
+    @State private var expandedInactiveSections: Set<String> = []
 
     init(
         store: PerAccountStore, search: SidebarSearchModel,
@@ -60,30 +63,71 @@ struct SidebarView: View {
             })
     }
 
+    private var sortByActivity: Bool {
+        dmSortOrder == DmSortOrder.activity.rawValue
+    }
+
+    /// The conversation's most recently seen participant, for activity sort.
+    private func lastSeen(_ key: ConversationKey) -> Date {
+        (key.dmParticipantIds ?? [])
+            .filter { $0 != store.selfUserId }
+            .compactMap { store.presence.lastSeen(of: $0) }
+            .max() ?? .distantPast
+    }
+
     private var dmRows: [ConversationList.Conversation] {
-        store.conversations.conversations.filter { conversation in
+        let rows = store.conversations.conversations.filter { conversation in
             guard case .dm = conversation.key else { return false }
             return matchesFilter(conversation.key.displayTitle(in: store))
+        }
+        guard sortByActivity else { return rows }  // Already message-recency order.
+        return rows.sorted {
+            (lastSeen($0.key), $0.lastMessageId) > (lastSeen($1.key), $1.lastMessageId)
         }
     }
 
     /// Everyone else: active human users with no 1:1 conversation yet, below
-    /// the recency-ordered conversations, alphabetical. Selecting one opens
-    /// an empty transcript ready to compose.
+    /// the recency-ordered conversations. Selecting one opens an empty
+    /// transcript ready to compose.
     private var usersWithoutConversation: [User] {
         let existingKeys = Set(
             store.conversations.conversations.compactMap { conversation -> ConversationKey? in
                 if case .dm = conversation.key { return conversation.key }
                 return nil
             })
-        return store.users.values
+        let users = store.users.values
             .filter { $0.isActive != false && !$0.isBot && $0.userId != store.selfUserId }
             .filter {
                 !existingKeys.contains(
                     Unreads.dmKey(participantIds: [$0.userId], selfUserId: store.selfUserId))
             }
             .filter { matchesFilter($0.fullName) }
-            .sorted { $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending }
+        if sortByActivity {
+            return users.sorted {
+                let (a, b) = (
+                    store.presence.lastSeen(of: $0.userId) ?? .distantPast,
+                    store.presence.lastSeen(of: $1.userId) ?? .distantPast)
+                if a != b { return a > b }
+                return $0.fullName.localizedCaseInsensitiveCompare($1.fullName)
+                    == .orderedAscending
+            }
+        }
+        return users.sorted {
+            $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending
+        }
+    }
+
+    /// The no-conversation directory splits at presence: offline users hide
+    /// behind "More conversations…" (filtering searches everyone).
+    private var visibleDirectoryUsers: [User] {
+        if isFiltering || showOfflineUsers { return usersWithoutConversation }
+        return usersWithoutConversation.filter {
+            store.presenceState(of: $0.userId) != .offline
+        }
+    }
+
+    private var hiddenDirectoryCount: Int {
+        usersWithoutConversation.count - visibleDirectoryUsers.count
     }
 
     private var sortedSubscriptions: [Subscription] {
@@ -157,12 +201,24 @@ struct SidebarView: View {
                     DirectMessageRow(store: store, conversation: conversation)
                         .tag(Destination.conversation(conversation.key))
                 }
-                ForEach(usersWithoutConversation) { user in
+                ForEach(visibleDirectoryUsers) { user in
                     UserDirectMessageRow(store: store, user: user)
                         .tag(Destination.conversation(
                             Unreads.dmKey(
                                 participantIds: [user.userId],
                                 selfUserId: store.selfUserId)))
+                }
+                if hiddenDirectoryCount > 0 {
+                    SidebarExpanderRow(
+                        title: "More conversations… (\(hiddenDirectoryCount))"
+                    ) {
+                        showOfflineUsers = true
+                    }
+                } else if showOfflineUsers && !isFiltering
+                    && !usersWithoutConversation.isEmpty {
+                    SidebarExpanderRow(title: "Fewer conversations") {
+                        showOfflineUsers = false
+                    }
                 }
             } header: {
                 HStack {
@@ -271,6 +327,14 @@ struct SidebarView: View {
                 }
             }
             ToolbarItem(placement: .automatic) {
+                Button {
+                    selection = .allChannels
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .help("Browse and join channels")
+            }
+            ToolbarItem(placement: .automatic) {
                 Menu {
                     ForEach(model.global.accounts) { account in
                         Button {
@@ -340,12 +404,33 @@ struct SidebarView: View {
         selection = .search(query)
     }
 
+    /// A channel is "active" when pinned, carrying unreads, or present in
+    /// the recency list; the rest hide behind "Inactive channels…".
+    private func isActiveChannel(_ subscription: Subscription) -> Bool {
+        if subscription.pinToTop ?? false { return true }
+        if store.unreads.unreadCount(inChannel: subscription.streamId) > 0 { return true }
+        return recentStreamIds.contains(subscription.streamId)
+    }
+
+    private var recentStreamIds: Set<Int> {
+        var ids = Set<Int>()
+        for conversation in store.conversations.conversations {
+            if case .topic(let streamId, _) = conversation.key {
+                ids.insert(streamId)
+            }
+        }
+        return ids
+    }
+
     @ViewBuilder
     private func channelSection(title: String, id: String, channels: [Subscription]) -> some View {
         let visible = visibleChannels(channels)
+        let hideInactive = !isFiltering && !expandedInactiveSections.contains(id)
+        let shown = hideInactive ? visible.filter { isActiveChannel($0.0) } : visible
+        let hiddenCount = visible.count - shown.count
         if !visible.isEmpty {
             Section(title, isExpanded: expansion(id)) {
-                ForEach(visible, id: \.0.id) { subscription, topicMatches in
+                ForEach(shown, id: \.0.id) { subscription, topicMatches in
                     let streamId = subscription.streamId
                     ChannelRow(
                         store: store, subscription: subscription,
@@ -368,6 +453,16 @@ struct SidebarView: View {
                         }
                     } else if expandedChannels.contains(streamId) {
                         topicRows(for: streamId)
+                    }
+                }
+                if hiddenCount > 0 {
+                    SidebarExpanderRow(title: "Inactive channels… (\(hiddenCount))") {
+                        expandedInactiveSections.insert(id)
+                    }
+                } else if !isFiltering && expandedInactiveSections.contains(id)
+                    && visible.contains(where: { !isActiveChannel($0.0) }) {
+                    SidebarExpanderRow(title: "Hide inactive channels") {
+                        expandedInactiveSections.remove(id)
                     }
                 }
             }
@@ -454,6 +549,28 @@ private struct RecentSearchRow: View {
 
 /// Compact one-line DM row: presence dot (placeholder until M2), name(s),
 /// bot marker, unread badge.
+/// A quiet disclosure row ("More conversations…", "Inactive channels…").
+private struct SidebarExpanderRow: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "ellipsis.circle")
+                    .font(.caption)
+                Text(title)
+                    .font(.callout)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.secondary)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, 1)
+    }
+}
+
 /// A user with no conversation yet: same shape as `DirectMessageRow`, name
 /// dimmed until there's history.
 private struct UserDirectMessageRow: View {

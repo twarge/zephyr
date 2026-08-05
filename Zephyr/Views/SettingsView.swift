@@ -17,6 +17,20 @@ enum BadgePolicy: String, CaseIterable, Identifiable {
     }
 }
 
+enum DmSortOrder: String, CaseIterable, Identifiable {
+    case lastMessage
+    case activity
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .lastMessage: "Most recent message"
+        case .activity: "Recent activity"
+        }
+    }
+}
+
 struct SettingsView: View {
     var body: some View {
         TabView {
@@ -36,6 +50,7 @@ private struct GeneralSettings: View {
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("playSendSound") private var playSendSound = true
     @AppStorage("messageRetentionYears") private var messageRetentionYears = 5
+    @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
 
     var body: some View {
         Form {
@@ -50,6 +65,13 @@ private struct GeneralSettings: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Toggle("Play sound when sending", isOn: $playSendSound)
+            Divider()
+                .padding(.vertical, 4)
+            Picker("Sort direct messages by:", selection: $dmSortOrder) {
+                ForEach(DmSortOrder.allCases) { order in
+                    Text(order.label).tag(order.rawValue)
+                }
+            }
             Divider()
                 .padding(.vertical, 4)
             Picker("Keep message history for:", selection: $messageRetentionYears) {
