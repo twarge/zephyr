@@ -587,6 +587,26 @@ public final class PerAccountStore {
         }
     }
 
+    /// Toggle a poll vote (vote true adds, false retracts).
+    public func voteInPoll(messageId: Int, optionKey: String, vote: Bool) {
+        sendWidgetEvent(
+            messageId: messageId,
+            content: #"{"type":"vote","key":"\#(optionKey)","vote":\#(vote ? 1 : -1)}"#)
+    }
+
+    /// Toggle a todo task's completion.
+    public func strikeTodoTask(messageId: Int, taskKey: String) {
+        sendWidgetEvent(
+            messageId: messageId, content: #"{"type":"strike","key":"\#(taskKey)"}"#)
+    }
+
+    private func sendWidgetEvent(messageId: Int, content: String) {
+        let connection = connection
+        Task {
+            try? await connection.sendSubmessage(messageId: messageId, content: content)
+        }
+    }
+
     public func subscribe(toChannel name: String) {
         let connection = connection
         Task {
@@ -807,6 +827,16 @@ public final class PerAccountStore {
                 channels.removeValue(forKey: id)
                 subscriptions.removeValue(forKey: id)
             }
+
+        case .submessage(let e):
+            guard var message = messages[e.messageId] else { break }
+            var submessages = message.submessages ?? []
+            submessages.append(
+                Submessage(msgType: e.msgType, content: e.content, senderId: e.senderId))
+            message.submessages = submessages
+            messages[e.messageId] = message
+            forEachMessageList { $0.handleChangedMessages(ids: [e.messageId]) }
+            scheduleMessageCacheSave([e.messageId])
 
         case .userTopic(let item):
             let key = TopicKey(streamId: item.streamId, topic: item.topicName)

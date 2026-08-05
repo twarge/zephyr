@@ -254,4 +254,17 @@ extension ApiConnection {
         return try await request(
             ApiRequest(method: .get, path: "/api/v1/messages", params: params))
     }
+
+    /// POST /submessage — a widget interaction (poll vote, todo strike).
+    /// `content` is the JSON-encoded widget event.
+    public func sendSubmessage(messageId: Int, content: String) async throws {
+        _ = try await send(
+            ApiRequest(
+                method: .post, path: "/api/v1/submessage",
+                params: [
+                    Param("message_id", String(messageId)),
+                    Param("msg_type", "widget"),
+                    Param("content", content),
+                ]))
+    }
 }

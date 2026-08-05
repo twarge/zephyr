@@ -88,6 +88,12 @@ public struct Submessage: Codable, Sendable {
     public var msgType: String
     public var content: String
     public var senderId: Int
+
+    public init(msgType: String, content: String, senderId: Int) {
+        self.msgType = msgType
+        self.content = content
+        self.senderId = senderId
+    }
 }
 
 // MARK: - Unreads (register payload)

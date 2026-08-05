@@ -193,3 +193,39 @@ struct BackoffMachineTests {
         #expect(machine.next() <= .milliseconds(100))
     }
 }
+
+@MainActor
+struct SubmessageEventTests {
+    @Test func submessageEventUpdatesWidget() throws {
+        let transport = FakeTransport(defaultResponse: .hang)
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key", transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        // A poll message, then a live vote submessage event for it.
+        let widgetJSON = #"{\"widget_type\": \"poll\", \"extra_data\": {\"question\": \"Lunch?\", \"options\": [\"Pizza\"]}}"#
+        let pollMessage = """
+            {"id": 700, "sender_id": 5, "sender_full_name": "Poller", "timestamp": 1750000000,
+             "type": "stream", "content": "<p>/poll</p>", "stream_id": 10, "subject": "t",
+             "display_recipient": "general", "reactions": [],
+             "submessages": [{"msg_type": "widget", "sender_id": 5, "content": "\(widgetJSON)"}]}
+            """
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(eventId: 1, message: pollMessage, flags: ["read"])))
+
+        let vote = #"{"id": 2, "type": "submessage", "msg_type": "widget", "message_id": 700, "sender_id": 9, "submessage_id": 55, "content": "{\"type\":\"vote\",\"key\":\"canned,0\",\"vote\":1}"}"#
+        store.handleEvent(try decodeEvent(vote))
+
+        let message = try #require(store.messages[700])
+        guard case .poll(let poll) = MessageWidget.parse(message) else {
+            Issue.record("expected poll")
+            return
+        }
+        #expect(poll.options.first?.voterIds == [9])
+    }
+}

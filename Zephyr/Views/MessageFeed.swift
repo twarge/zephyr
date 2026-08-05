@@ -520,7 +520,7 @@ struct MessageRow: View {
                         .controlSize(.small)
                     }
                 } else if let widget = MessageWidget.parse(message) {
-                    MessageWidgetView(widget: widget, store: store)
+                    MessageWidgetView(widget: widget, store: store, messageId: message.id)
                 } else {
                     MessageContentView(
                         content: content, connection: store.connection)

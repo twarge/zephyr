@@ -24,6 +24,7 @@ public struct Event: Sendable {
         case subscriptionRemove(streamIds: [Int])
         case subscriptionUpdate(SubscriptionUpdateEvent)
         case userTopic(UserTopicItem)
+        case submessage(SubmessageEvent)
         case streamCreate([ZulipStream])
         case streamDelete(streamIds: [Int])
         case unexpected(type: String, op: String?)
@@ -201,8 +202,19 @@ extension Event: Decodable {
             kind = .streamDelete(streamIds: try DeletedStreamsEnvelope(from: decoder).allIds)
         case ("user_topic", _):
             kind = .userTopic(try UserTopicItem(from: decoder))
+        case ("submessage", _):
+            kind = .submessage(try SubmessageEvent(from: decoder))
         default:
             kind = .unexpected(type: type, op: op)
         }
     }
+}
+
+/// A widget update (poll vote, todo strike, new option) for an existing
+/// message.
+public struct SubmessageEvent: Decodable, Sendable {
+    public var msgType: String
+    public var content: String
+    public var messageId: Int
+    public var senderId: Int
 }
