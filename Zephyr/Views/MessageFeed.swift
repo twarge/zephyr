@@ -62,6 +62,11 @@ struct MessageFeedList: View {
             .compactMap { store.users[$0]?.fullName }
     }
 
+    /// The sentinel row at the very end of the stack — below the last
+    /// message, outbox rows, and typing indicator — so "scroll to bottom"
+    /// really lands at the bottom.
+    private static let bottomAnchorId = "feed-bottom"
+
     private enum Item: Identifiable {
         case daySeparator(String)
         case conversationHeader(key: ConversationKey, firstMessageId: Int)
@@ -168,11 +173,11 @@ struct MessageFeedList: View {
                     if !nearBottom || !model.haveNewest {
                         Button {
                             if model.haveNewest {
-                                anchorId = items.last?.id
+                                anchorId = Self.bottomAnchorId
                             } else {
                                 Task {
                                     await model.jumpToNewest()
-                                    anchorId = model.messages.last.map { "msg-\($0.id)" }
+                                    anchorId = Self.bottomAnchorId
                                 }
                             }
                         } label: {
@@ -329,10 +334,14 @@ struct MessageFeedList: View {
                     .padding(.vertical, 6)
                     .padding(.leading, 42)
                 }
+                // Doubles as the feed's bottom breathing room (in place of
+                // stack padding, which the scroll anchor couldn't reach).
+                Color.clear
+                    .frame(height: 12)
+                    .id(Self.bottomAnchorId)
             }
             .scrollTargetLayout()
             .padding(.horizontal, 16)
-            .padding(.bottom, 12)
         }
         .defaultScrollAnchor(.bottom)
         .scrollPosition(id: $anchorId, anchor: .bottom)
@@ -351,19 +360,19 @@ struct MessageFeedList: View {
             } else if model.firstUnreadMarkerId != nil {
                 anchorId = "unread-marker"
             } else {
-                anchorId = items.last?.id
+                anchorId = Self.bottomAnchorId
             }
         }
         .onChange(of: model.messages.last?.id) { _, newLastId in
-            guard let newLastId else { return }
+            guard newLastId != nil else { return }
             if nearBottom {
-                anchorId = "msg-\(newLastId)"
+                anchorId = Self.bottomAnchorId
             }
             onNewMessages?()
         }
         .onChange(of: outboxMessages.last?.id) { _, newLastId in
-            if let newLastId, nearBottom {
-                anchorId = "out-\(newLastId)"
+            if newLastId != nil, nearBottom {
+                anchorId = Self.bottomAnchorId
             }
         }
     }
