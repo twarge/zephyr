@@ -53,12 +53,13 @@ public enum Fixtures {
         channelName: String = "general",
         topic: String = "greetings",
         content: String = "<p>hello</p>",
+        timestamp: Int = 1750000000,
         flags: [String]? = nil
     ) -> String {
         let flagsField = flags.map { ", \"flags\": \(jsonStringArray($0))" } ?? ""
         return """
         {"id": \(id), "sender_id": \(senderId), "sender_full_name": "\(senderName)",
-         "timestamp": 1750000000, "type": "stream",
+         "timestamp": \(timestamp), "type": "stream",
          "content": "\(content.replacingOccurrences(of: "\"", with: "\\\""))",
          "content_type": "text/html",
          "stream_id": \(streamId), "subject": "\(topic)",

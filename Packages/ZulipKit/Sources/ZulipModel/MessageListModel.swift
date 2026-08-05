@@ -58,6 +58,14 @@ public final class MessageListModel: Identifiable {
     /// Set once by the initial fetch and left stable as reading proceeds.
     public private(set) var firstUnreadMarkerId: Int?
 
+    /// A first-unread window whose newest fetched message is older than
+    /// this is a stale backlog (e.g. years of never-read #general): the
+    /// view opens at the newest messages instead of deep in history.
+    private static let staleBacklogAge: TimeInterval = 14 * 86400
+    /// Paging keeps at most this many messages in memory — beyond it the
+    /// far end is dropped and re-pages from the server or cache on demand.
+    private static let maxWindowCount = 600
+
     private weak var store: PerAccountStore?
     private var generation = 0
     /// A specific message to open at (message links); overrides the
@@ -98,11 +106,28 @@ public final class MessageListModel: Identifiable {
             anchor = .firstUnread
         }
         do {
-            let result = try await store.connection.getMessages(
+            var result = try await store.connection.getMessages(
                 anchor: anchor, numBefore: count,
                 numAfter: anchoredMidHistory ? count : 0,
                 narrow: narrow.apiElements)
             guard generation == gen else { return }
+            // A stale backlog (the first unread is weeks-to-years deep, as
+            // in huge never-read public channels) would open the view far
+            // in the past; reopen at the newest messages, with no NEW
+            // marker — that backlog is beyond catching up linearly.
+            var suppressUnreadMarker = false
+            if case .firstUnread = anchor,
+               !(result.foundNewest ?? false),
+               let newestFetched = result.messages.map(\.timestamp).max(),
+               Date.now.timeIntervalSince1970 - TimeInterval(newestFetched)
+                   > Self.staleBacklogAge {
+                result = try await store.connection.getMessages(
+                    anchor: .newest, numBefore: count, numAfter: 0,
+                    narrow: narrow.apiElements)
+                guard generation == gen else { return }
+                anchoredMidHistory = false
+                suppressUnreadMarker = true
+            }
             store.reconcileFetchedMessages(result.messages)
             messages = result.messages
                 .sorted { $0.id < $1.id }
@@ -110,7 +135,7 @@ public final class MessageListModel: Identifiable {
             haveNewest = result.foundNewest ?? !anchoredMidHistory
             haveOldest = result.foundOldest ?? false
             // The marker is the oldest fetched message still unread.
-            firstUnreadMarkerId = messages.first { message in
+            firstUnreadMarkerId = suppressUnreadMarker ? nil : messages.first { message in
                 !(message.flags ?? []).contains("read")
             }?.id
             fetchError = nil
@@ -144,6 +169,7 @@ public final class MessageListModel: Identifiable {
                 .map { store.messages[$0.id] ?? $0 }
             messages.append(contentsOf: newer)
             haveNewest = result.foundNewest ?? false
+            trimWindowKeepingNewest()
         } catch is CancellationError {
         } catch {
             guard generation == gen else { return }
@@ -233,6 +259,7 @@ public final class MessageListModel: Identifiable {
                 .map { store.messages[$0.id] ?? $0 }
             messages.insert(contentsOf: older, at: 0)
             haveOldest = result.foundOldest ?? false
+            trimWindowKeepingOldest()
         } catch is CancellationError {
         } catch {
             guard generation == gen else { return }
@@ -246,7 +273,24 @@ public final class MessageListModel: Identifiable {
             store.reconcileFetchedMessages(older)
             messages.insert(
                 contentsOf: older.map { store.messages[$0.id] ?? $0 }, at: 0)
+            trimWindowKeepingOldest()
         }
+    }
+
+    // MARK: Window bounding
+
+    /// Dropping the far end keeps huge scrollback sessions responsive; the
+    /// cleared have-flag makes the dropped side re-page on demand.
+    private func trimWindowKeepingNewest() {
+        guard messages.count > Self.maxWindowCount else { return }
+        messages.removeFirst(messages.count - Self.maxWindowCount)
+        haveOldest = false
+    }
+
+    private func trimWindowKeepingOldest() {
+        guard messages.count > Self.maxWindowCount else { return }
+        messages.removeLast(messages.count - Self.maxWindowCount)
+        haveNewest = false
     }
 
     // MARK: Event fan-in (called by PerAccountStore)
@@ -255,6 +299,7 @@ public final class MessageListModel: Identifiable {
         guard haveNewest, narrow.containsMessage(message, selfUserId: selfUserId) else { return }
         guard (messages.last?.id ?? -1) < message.id else { return }
         messages.append(message)
+        trimWindowKeepingNewest()
     }
 
     func handleChangedMessages(ids: some Sequence<Int>) {

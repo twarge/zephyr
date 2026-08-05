@@ -63,6 +63,66 @@ struct MessageListModelTests {
         #expect(transport.requests[1].queryValue("anchor") == "200")
     }
 
+    @Test func staleFirstUnreadBacklogReanchorsToNewest() async throws {
+        // The fixture timestamp (June 2025) is far in the past: a
+        // first-unread window that stale re-anchors at the newest messages
+        // and suppresses the NEW marker.
+        let (store, transport) = try makeStoreWithTransport(script: [
+            .json(Fixtures.getMessagesJSON(
+                [Fixtures.channelMessageJSON(id: 100)], foundNewest: false)),
+            .json(Fixtures.getMessagesJSON([
+                Fixtures.channelMessageJSON(id: 900),
+                Fixtures.channelMessageJSON(id: 901),
+            ])),
+        ])
+        let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
+        await list.fetchInitial()
+        #expect(transport.requests.count == 2)
+        #expect(transport.requests[1].queryValue("anchor") == "newest")
+        #expect(list.messages.map(\.id) == [900, 901])
+        #expect(list.haveNewest)
+        #expect(list.firstUnreadMarkerId == nil)
+    }
+
+    @Test func recentFirstUnreadBacklogKeepsAnchor() async throws {
+        // A backlog whose newest fetched message is recent stays anchored
+        // at the first unread (normal Zulip semantics).
+        let now = Int(Date.now.timeIntervalSince1970)
+        let (store, transport) = try makeStoreWithTransport(script: [
+            .json(Fixtures.getMessagesJSON(
+                [Fixtures.channelMessageJSON(id: 100, timestamp: now - 3600)],
+                foundNewest: false))
+        ])
+        let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
+        await list.fetchInitial()
+        #expect(transport.requests.count == 1)
+        #expect(list.messages.map(\.id) == [100])
+        #expect(!list.haveNewest)
+        #expect(list.firstUnreadMarkerId == 100)
+    }
+
+    @Test func pagingForwardTrimsWindow() async throws {
+        let now = Int(Date.now.timeIntervalSince1970)
+        let initial = (0..<550).map {
+            Fixtures.channelMessageJSON(id: 1000 + $0, timestamp: now, flags: ["read"])
+        }
+        let newer = (0..<100).map {
+            Fixtures.channelMessageJSON(id: 1550 + $0, timestamp: now, flags: ["read"])
+        }
+        let (store, _) = try makeStoreWithTransport(script: [
+            .json(Fixtures.getMessagesJSON(initial, foundNewest: false)),
+            .json(Fixtures.getMessagesJSON(newer)),
+        ])
+        let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
+        await list.fetchInitial()
+        await list.fetchNewer()
+        #expect(list.messages.count == 600)
+        #expect(list.messages.first?.id == 1050)
+        #expect(list.messages.last?.id == 1649)
+        #expect(!list.haveOldest)
+        #expect(list.haveNewest)
+    }
+
     @Test func deleteAndEditPropagate() async throws {
         let (store, _) = try makeStoreWithTransport(script: [
             .json(Fixtures.getMessagesJSON([
