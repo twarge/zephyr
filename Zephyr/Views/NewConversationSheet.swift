@@ -55,7 +55,7 @@ struct NewConversationSheet: View {
         guard selectedChannel == nil else { return [] }
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         return store.users.values
-            .filter { $0.isActive != false && $0.userId != store.selfUserId }
+            .filter { $0.isActive != false }
             .filter { trimmed.isEmpty || $0.fullName.localizedCaseInsensitiveContains(trimmed) }
             .filter { user in !selectedUsers.contains(where: { $0.userId == user.userId }) }
             .sorted { $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending }
@@ -130,7 +130,11 @@ struct NewConversationSheet: View {
                         }
                     }
                     ForEach(userSuggestions, id: \.userId) { user in
-                        suggestionButton(label: user.fullName, icon: "person") {
+                        suggestionButton(
+                            label: user.userId == store.selfUserId
+                                ? "\(user.fullName) (you)" : user.fullName,
+                            icon: "person"
+                        ) {
                             selectedUsers.append(user)
                             selectedChannel = nil
                             query = ""

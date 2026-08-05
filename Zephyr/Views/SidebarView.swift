@@ -112,14 +112,24 @@ struct SidebarView: View {
                 return nil
             })
         let users = store.users.values
-            .filter { $0.isActive != false && !$0.isBot && $0.userId != store.selfUserId }
+            .filter { $0.isActive != false && !$0.isBot }
             .filter {
                 !existingKeys.contains(
                     Unreads.dmKey(participantIds: [$0.userId], selfUserId: store.selfUserId))
             }
-            .filter { matchesFilter($0.fullName) }
+            .filter { user in
+                matchesFilter(
+                    user.userId == store.selfUserId ? "Yourself" : user.fullName)
+            }
+        // Yourself pins first (a self-DM is notes-to-self, like the web app).
+        func selfFirst(_ a: User, _ b: User) -> Bool? {
+            if a.userId == store.selfUserId { return true }
+            if b.userId == store.selfUserId { return false }
+            return nil
+        }
         if sortByActivity {
             return users.sorted {
+                if let pinned = selfFirst($0, $1) { return pinned }
                 let (a, b) = (
                     store.presence.lastSeen(of: $0.userId) ?? .distantPast,
                     store.presence.lastSeen(of: $1.userId) ?? .distantPast)
@@ -129,7 +139,8 @@ struct SidebarView: View {
             }
         }
         return users.sorted {
-            $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending
+            if let pinned = selfFirst($0, $1) { return pinned }
+            return $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending
         }
     }
 
@@ -697,10 +708,14 @@ private struct UserDirectMessageRow: View {
     let store: PerAccountStore
     let user: User
 
+    private var title: String {
+        user.userId == store.selfUserId ? "Yourself" : user.fullName
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             PresenceDot(state: store.presenceState(of: user.userId))
-            Text(user.fullName)
+            Text(title)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
