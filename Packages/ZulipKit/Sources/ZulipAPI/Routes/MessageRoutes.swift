@@ -206,6 +206,19 @@ extension ApiConnection {
                 params: [Param("apply_markdown", "false")]))
         return result.message.content
     }
+
+    /// POST /messages/render — the server-rendered HTML for draft markdown
+    /// (compose preview through the production renderer).
+    public func renderMessage(content: String) async throws -> String {
+        struct RenderResult: Decodable {
+            var rendered: String
+        }
+        let result: RenderResult = try await request(
+            ApiRequest(
+                method: .post, path: "/api/v1/messages/render",
+                params: [Param("content", content)]))
+        return result.rendered
+    }
 }
 
 extension ApiConnection {

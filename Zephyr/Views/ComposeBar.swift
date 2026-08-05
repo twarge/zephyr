@@ -1,5 +1,6 @@
 import SwiftUI
 import ZulipAPI
+import ZulipContent
 import ZulipModel
 
 /// Per-conversation draft persistence: survives switching conversations AND
@@ -91,6 +92,15 @@ struct ComposeBar: View {
     @Environment(KeyboardRouter.self) private var keys
     @State private var uploadOwnerId = UUID()
 
+    // Long-form mode: multi-line editor, drag-resizable, server-rendered
+    // preview; Return newlines and ⇧Return sends.
+    @AppStorage("composeExpanded") private var expanded = false
+    @AppStorage("composeEditorHeight") private var editorHeight = 140.0
+    @State private var dragBaseHeight: CGFloat?
+    @State private var showPreview = false
+    @State private var previewContent: MessageContent?
+    @State private var previewTask: Task<Void, Never>?
+
     private var destination: SendDestination? {
         switch mode {
         case .fixed(let destination, _):
@@ -121,6 +131,9 @@ struct ComposeBar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if expanded {
+                dragHandle
+            }
             if !suggestions.isEmpty {
                 suggestionsCard
             }
@@ -165,23 +178,55 @@ struct ComposeBar: View {
                 .buttonStyle(.plain)
                 .padding(.bottom, 6)
                 .help("Attach a file (or drop one on the message field)")
-                TextField(placeholder, text: $text, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .lineLimit(1...10)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 17))
-                    .focused($messageFocused)
-                    .onSubmit { send() }
-                    .onKeyPress(.upArrow) { moveSelection(-1) }
-                    .onKeyPress(.downArrow) { moveSelection(1) }
-                    .onKeyPress(.tab) { acceptSelection() }
-                    .onKeyPress(.return) { acceptSelection() }
-                    .onKeyPress(.escape) {
-                        guard !suggestions.isEmpty else { return .ignored }
-                        suggestions = []
-                        return .handled
+                Button {
+                    withAnimation(.snappy) {
+                        expanded.toggle()
                     }
+                    showPreview = false
+                    previewTask?.cancel()
+                } label: {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 7)
+                .help(expanded ? "Compact message field" : "Long-form message field")
+                if expanded {
+                    expandedEditor
+                } else {
+                    TextField(placeholder, text: $text, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...10)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 17))
+                        .focused($messageFocused)
+                        .onSubmit { send() }
+                        .onKeyPress(.upArrow) { moveSelection(-1) }
+                        .onKeyPress(.downArrow) { moveSelection(1) }
+                        .onKeyPress(.tab) { acceptSelection() }
+                        .onKeyPress(.return) { acceptSelection() }
+                        .onKeyPress(.escape) {
+                            guard !suggestions.isEmpty else { return .ignored }
+                            suggestions = []
+                            return .handled
+                        }
+                }
+                if expanded {
+                    Button {
+                        togglePreview()
+                    } label: {
+                        Image(systemName: showPreview ? "eye.slash" : "eye")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 6)
+                    .disabled(!showPreview
+                        && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .help(showPreview ? "Back to editing" : "Preview as it will send")
+                }
                 Button(action: send) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 24))
@@ -190,7 +235,9 @@ struct ComposeBar: View {
                 .buttonStyle(.plain)
                 .disabled(!canSend)
                 .keyboardShortcut(.return, modifiers: .command)
-                .help("Send (Return; ⌥Return for a new line)")
+                .help(expanded
+                    ? "Send (⇧Return; Return for a new line)"
+                    : "Send (Return; ⌥Return for a new line)")
             }
         }
         .padding(.horizontal, 12)
@@ -254,6 +301,105 @@ struct ComposeBar: View {
                 }
             }
             updateSuggestions()
+        }
+    }
+
+    // MARK: Long-form mode
+
+    /// Resizes the editor: drag up to grow (height persists).
+    private var dragHandle: some View {
+        Capsule()
+            .fill(.quaternary)
+            .frame(width: 44, height: 4)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 2)
+            .contentShape(.rect)
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        let base = dragBaseHeight ?? editorHeight
+                        dragBaseHeight = base
+                        editorHeight = min(max(80, base - value.translation.height), 600)
+                    }
+                    .onEnded { _ in
+                        dragBaseHeight = nil
+                    })
+            .help("Drag to resize")
+    }
+
+    @ViewBuilder
+    private var expandedEditor: some View {
+        Group {
+            if showPreview {
+                ScrollView {
+                    Group {
+                        if let previewContent {
+                            MessageContentView(
+                                content: previewContent, connection: store.connection)
+                        } else {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                }
+            } else {
+                ZStack(alignment: .topLeading) {
+                    if text.isEmpty {
+                        Text(placeholder)
+                            .foregroundStyle(.tertiary)
+                            .padding(.top, 8)
+                            .padding(.leading, 10)
+                            .allowsHitTesting(false)
+                    }
+                    TextEditor(text: $text)
+                        .scrollContentBackground(.hidden)
+                        .font(.body)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .focused($messageFocused)
+                        .onKeyPress(.return, phases: .down) { press in
+                            // Long-form: Return newlines, ⇧Return sends.
+                            if press.modifiers.contains(.shift) {
+                                send()
+                                return .handled
+                            }
+                            if !suggestions.isEmpty {
+                                return acceptSelection()
+                            }
+                            return .ignored
+                        }
+                        .onKeyPress(.upArrow) { moveSelection(-1) }
+                        .onKeyPress(.downArrow) { moveSelection(1) }
+                        .onKeyPress(.tab) { acceptSelection() }
+                        .onKeyPress(.escape) {
+                            guard !suggestions.isEmpty else { return .ignored }
+                            suggestions = []
+                            return .handled
+                        }
+                }
+            }
+        }
+        .frame(height: editorHeight)
+        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// Server-rendered preview (POST /messages/render): exactly what will
+    /// send, through the production renderer.
+    private func togglePreview() {
+        showPreview.toggle()
+        previewTask?.cancel()
+        guard showPreview else { return }
+        previewContent = nil
+        let content = text
+        let connection = store.connection
+        previewTask = Task {
+            let html = (try? await connection.renderMessage(content: content)) ?? ""
+            guard !Task.isCancelled else { return }
+            previewContent = ContentParser.parse(
+                html: html.isEmpty
+                    ? "<p><em>Preview unavailable (offline?)</em></p>" : html)
         }
     }
 
@@ -444,6 +590,8 @@ struct ComposeBar: View {
     private func send() {
         guard suggestions.isEmpty else { return }
         guard canSend, let destination else { return }
+        showPreview = false
+        previewTask?.cancel()
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         store.send(content, to: destination)
         store.typingStopped(in: destination)
