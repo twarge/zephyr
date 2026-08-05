@@ -51,7 +51,7 @@ struct MainSplitView: View {
                 store: store, search: search, selection: $selection,
                 startDirectMessage: { newConversation = .directMessage(initialUsers: []) },
                 showsToolbarControls: columnVisibility != .detailOnly)
-                .navigationSplitViewColumnWidth(min: 156, ideal: 300, max: 400)
+                .navigationSplitViewColumnWidth(min: 156, ideal: 156, max: 400)
         } detail: {
             detailContent
                 // Files dropped anywhere in the conversation area upload via
