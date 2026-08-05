@@ -14,11 +14,6 @@ struct TranscriptView: View {
     @State private var cache = MessageContentCache()
     @State private var showAddPeople = false
 
-    private var isTopic: Bool {
-        if case .topic = conversation { return true }
-        return false
-    }
-
     /// The other people in this DM, seeding the "Add People…" sheet.
     private var dmParticipants: [User] {
         (conversation.dmParticipantIds ?? [])
@@ -30,39 +25,16 @@ struct TranscriptView: View {
         store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel"
     }
 
-    private func breadcrumb(streamId: Int, topic: String) -> some View {
-        // A flexible frame with a small minWidth keeps the toolbar from
-        // dropping the whole item in narrow windows — the texts truncate
-        // with ellipsis instead.
-        HStack(spacing: 5) {
-            Button {
-                selection = .channel(streamId: streamId)
-            } label: {
-                Text("#\(channelName(streamId))")
-                    .font(.headline)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            .buttonStyle(.plain)
-            .help("Show all messages in this channel")
-            Text("›")
-                .font(.headline)
-                .foregroundStyle(.tertiary)
-                .layoutPriority(1)
-            if TopicName.isResolved(topic) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.green)
-                    .layoutPriority(1)
-            }
-            Text(TopicName.displayName(topic).isEmpty
-                ? "general chat" : TopicName.displayName(topic))
-                .font(.headline)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .layoutPriority(2)
+    /// "#channel › topic" (with a resolved check where applicable); DMs use
+    /// their participant title.
+    private var windowTitle: String {
+        if case .topic(let streamId, let topic) = conversation {
+            let display = TopicName.displayName(topic)
+            let name = display.isEmpty ? "general chat" : display
+            let resolved = TopicName.isResolved(topic) ? "✓ " : ""
+            return "#\(channelName(streamId)) › \(resolved)\(name)"
         }
-        .frame(minWidth: 48, maxWidth: 480, alignment: .leading)
+        return conversation.displayTitle(in: store)
     }
 
     var body: some View {
@@ -76,7 +48,19 @@ struct TranscriptView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationTitle(isTopic ? "" : conversation.displayTitle(in: store))
+        .navigationTitle(windowTitle)
+        // The title is a real window title (system-truncated, never
+        // dropped); channel navigation lives in its title menu.
+        .toolbarTitleMenu {
+            if case .topic(let streamId, _) = conversation {
+                Button("All Messages in #\(channelName(streamId))", systemImage: "number") {
+                    selection = .channel(streamId: streamId)
+                }
+                Button("Topics in #\(channelName(streamId))", systemImage: "list.bullet") {
+                    selection = .channelTopics(streamId: streamId)
+                }
+            }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ComposeBar(
                 store: store,
@@ -85,22 +69,6 @@ struct TranscriptView: View {
                     placeholder: conversation.displayTitle(in: store)))
         }
         .toolbar {
-            // Topic transcripts title as a breadcrumb: "#channel › topic",
-            // where the channel segment opens the channel's full feed.
-            if case .topic(let streamId, let topic) = conversation {
-                if #available(macOS 26.0, iOS 26.0, *) {
-                    // No glass capsule around the breadcrumb — it's a title,
-                    // not a control.
-                    ToolbarItem(placement: .navigation) {
-                        breadcrumb(streamId: streamId, topic: topic)
-                    }
-                    .sharedBackgroundVisibility(.hidden)
-                } else {
-                    ToolbarItem(placement: .navigation) {
-                        breadcrumb(streamId: streamId, topic: topic)
-                    }
-                }
-            }
             // A DM can't change membership (Zulip semantics), so "Add
             // People" starts a new conversation pre-seeded with everyone
             // here.
