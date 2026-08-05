@@ -183,6 +183,14 @@ struct LoginView: View {
             let canonicalRealm = settings.realmURL ?? realm
             method = (settings.emailAuthEnabled ?? false) ? .password : .apiKey
             step = .credentials(settings, realm: canonicalRealm)
+            // One option and it's SSO: straight into the browser flow (a
+            // cancel lands on the credentials step to retry or go Back).
+            let external = settings.externalAuthenticationMethods ?? []
+            if !(settings.emailAuthEnabled ?? false), external.count == 1,
+               let only = external.first {
+                try await performWebSignIn(
+                    settings, realm: canonicalRealm, loginPath: only.loginUrl)
+            }
         }
     }
 
@@ -217,6 +225,13 @@ struct LoginView: View {
     /// XOR-encrypted with it. See docs/ARCHITECTURE.md §7.
     private func webSignIn(_ settings: ServerSettings, realm: URL, loginPath: String) {
         run {
+            try await performWebSignIn(settings, realm: realm, loginPath: loginPath)
+        }
+    }
+
+    private func performWebSignIn(
+        _ settings: ServerSettings, realm: URL, loginPath: String
+    ) async throws {
             let otp = WebAuth.generateOTP()
             guard let url = WebAuth.loginURL(realm: realm, loginPath: loginPath, otp: otp)
             else {
@@ -242,7 +257,6 @@ struct LoginView: View {
             await model.addAccount(
                 realm: realm, email: payload.email, apiKey: key,
                 userId: payload.userId, realmName: settings.realmName)
-        }
     }
 
     private func run(_ body: @escaping () async throws -> Void) {
