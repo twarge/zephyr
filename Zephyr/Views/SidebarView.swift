@@ -226,7 +226,7 @@ struct SidebarView: View {
                         "Recent", icon: "clock", tag: .recentConversations,
                         badge: 0)
                     viewRow(
-                        "Combined feed", icon: "line.3.horizontal", tag: .combinedFeed,
+                        "Combined", icon: "line.3.horizontal", tag: .combinedFeed,
                         badge: store.unreads.totalCount)
                     viewRow(
                         "Mentions", icon: "at", tag: .mentions,
