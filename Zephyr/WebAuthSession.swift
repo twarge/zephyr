@@ -11,7 +11,7 @@ final class WebAuthSession: NSObject, ASWebAuthenticationPresentationContextProv
     /// Captured on the main actor before the session starts —
     /// `presentationAnchor(for:)` arrives on the framework's own queue, so
     /// it must not touch NSApp/UIApplication (nor assumeIsolated: that
-    /// trapped, e.g. with JumpCloud SSO).
+    /// traps with some SSO identity providers).
     private nonisolated(unsafe) var anchor: ASPresentationAnchor?
 
     func authenticate(at url: URL) async throws -> URL {
