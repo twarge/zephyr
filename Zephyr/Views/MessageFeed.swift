@@ -134,8 +134,9 @@ struct MessageFeedList: View {
                 ScrollViewReader { proxy in
                     feedScrollView
                         .onAppear {
-                            // Open at the linked message, else the NEW
-                            // marker, else the newest message.
+                            // The binding (inner onAppear) has already put
+                            // the target at the viewport bottom; once layout
+                            // settles, nudge it up to the upper quarter.
                             let target: String?
                             if let highlight = keys.highlightMessageId,
                                model.messages.contains(where: { $0.id == highlight }) {
@@ -147,8 +148,10 @@ struct MessageFeedList: View {
                             }
                             guard let target else { return }
                             Task { @MainActor in
-                                try? await Task.sleep(for: .milliseconds(60))
-                                proxy.scrollTo(target, anchor: UnitPoint(x: 0.5, y: 0.25))
+                                try? await Task.sleep(for: .milliseconds(350))
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    proxy.scrollTo(target, anchor: UnitPoint(x: 0.5, y: 0.25))
+                                }
                             }
                             scheduleHighlightClear()
                         }
@@ -331,7 +334,7 @@ struct MessageFeedList: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
         }
-        .defaultScrollAnchor(model.firstUnreadMarkerId == nil ? .bottom : .top)
+        .defaultScrollAnchor(.bottom)
         .scrollPosition(id: $anchorId, anchor: .bottom)
         .onScrollGeometryChange(for: Bool.self) { geometry in
             geometry.contentSize.height - geometry.visibleRect.maxY < 60
@@ -339,7 +342,17 @@ struct MessageFeedList: View {
             nearBottom = isNear
         }
         .onAppear {
-            anchorId = items.last?.id
+            // One positioning mechanism: the scrollPosition binding. It
+            // always lands on real content — the racy scrollTo-on-appear
+            // could leave the lazy stack showing blank space.
+            if let highlight = keys.highlightMessageId,
+               model.messages.contains(where: { $0.id == highlight }) {
+                anchorId = "msg-\(highlight)"
+            } else if model.firstUnreadMarkerId != nil {
+                anchorId = "unread-marker"
+            } else {
+                anchorId = items.last?.id
+            }
         }
         .onChange(of: model.messages.last?.id) { _, newLastId in
             guard let newLastId else { return }
