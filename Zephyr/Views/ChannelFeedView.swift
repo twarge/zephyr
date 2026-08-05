@@ -24,7 +24,9 @@ struct ChannelFeedView: View {
                     onHeaderTap: { key in
                         selection = .conversation(key)
                     },
-                    onNewMessages: { store.markChannelRead(streamId) })
+                    // Only messages actually scrolled into view are marked
+                    // read — opening the channel doesn't clear its backlog.
+                    marksReadOnView: true)
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -40,7 +42,6 @@ struct ChannelFeedView: View {
             let list = MessageListModel(store: store, narrow: .channel(streamId: streamId))
             model = list
             await list.fetchInitial(count: 100)
-            store.markChannelRead(streamId)
         }
     }
 }
