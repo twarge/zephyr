@@ -789,18 +789,6 @@ private struct ChannelRow: View {
         store.unreads.unreadCount(inChannel: subscription.streamId)
     }
 
-    private var glyph: String {
-        let stream = store.channels[subscription.streamId]
-        if stream?.inviteOnly == true { return "lock.fill" }
-        if stream?.isWebPublic == true { return "globe" }
-        return "number"
-    }
-
-    private var color: Color {
-        subscription.color.flatMap(Color.init(zulipHex:))
-            ?? .stableColor(for: subscription.streamId)
-    }
-
     var body: some View {
         HStack(spacing: 8) {
             if let onToggle {
@@ -815,10 +803,13 @@ private struct ChannelRow: View {
                 .frame(width: 12)
                 .help(isExpanded ? "Hide topics" : "Show topics")
             }
-            Image(systemName: glyph)
-                .font(.callout.weight(.medium))
-                .foregroundStyle(color)
-                .frame(width: 18)
+            // No glyph column — compactness; a small lock still marks
+            // private channels.
+            if store.channels[subscription.streamId]?.inviteOnly == true {
+                Image(systemName: "lock.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             Text(subscription.name)
                 .font(.body.weight(unreadCount > 0 && !subscription.muted ? .semibold : .regular))
                 .lineLimit(1)
