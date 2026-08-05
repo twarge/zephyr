@@ -4,9 +4,10 @@ import ZulipModel
 @main
 struct ZephyrApp: App {
     @State private var model = AppModel()
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             RootView()
                 .environment(model)
         }
@@ -38,6 +39,12 @@ extension ZephyrApp {
                 model.pendingNewConversation = true
             }
             .keyboardShortcut("n", modifiers: .command)
+            #if os(macOS)
+            Button("New Window") {
+                openWindow(id: "main")
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+            #endif
         }
         CommandGroup(after: .sidebar) {
             Divider()
