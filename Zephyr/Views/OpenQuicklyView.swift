@@ -1,8 +1,8 @@
 import SwiftUI
 import ZulipModel
 
-/// ⌘⇧O "Open Quickly…": type a channel name, or pick from recently viewed
-/// and recently active channels. Return opens the channel's feed.
+/// ⌘⇧O "Open Quickly…": type a channel or view name, or pick from the
+/// special views and recently viewed/active channels. Return opens it.
 struct OpenQuicklyView: View {
     let store: PerAccountStore
     var open: (Destination) -> Void
@@ -13,48 +13,65 @@ struct OpenQuicklyView: View {
     @FocusState private var focused: Bool
 
     private struct Entry: Identifiable {
-        let streamId: Int
+        let destination: Destination
         let name: String
-        let subscribed: Bool
-        var id: Int { streamId }
+        let icon: String
+        var unsubscribed = false
+        var id: Destination { destination }
+    }
+
+    /// The sidebar's Views section, same names and icons.
+    private static let specialViews: [Entry] = [
+        Entry(destination: .recentConversations, name: "Recent", icon: "clock"),
+        Entry(destination: .combinedFeed, name: "Combined", icon: "line.3.horizontal"),
+        Entry(destination: .mentions, name: "Mentions", icon: "at"),
+        Entry(destination: .starred, name: "Starred", icon: "star"),
+        Entry(destination: .allChannels, name: "All Channels", icon: "square.grid.2x2"),
+    ]
+
+    private func channelEntry(_ id: Int, _ name: String, subscribed: Bool) -> Entry {
+        let channel = store.channels[id]
+        let icon = channel?.inviteOnly == true
+            ? "lock.fill" : channel?.isWebPublic == true ? "globe" : "number"
+        return Entry(
+            destination: .channel(streamId: id), name: name, icon: icon,
+            unsubscribed: !subscribed)
     }
 
     private var results: [Entry] {
         let subscribedIds = Set(store.subscriptions.keys)
-        func entry(_ id: Int, _ name: String) -> Entry {
-            Entry(streamId: id, name: name, subscribed: subscribedIds.contains(id))
-        }
         func name(_ id: Int) -> String? {
             store.channels[id]?.name ?? store.subscriptions[id]?.name
         }
         let typed = query.trimmingCharacters(in: .whitespaces)
         if typed.isEmpty {
-            // Recently viewed first, then channels by message activity.
+            // The special views, then recently viewed channels, then
+            // channels by message activity.
+            var out = Self.specialViews
             var seen = Set<Int>()
-            var out: [Entry] = []
             for id in AppStateStore.recentChannels(for: store.accountId) {
                 guard let name = name(id), seen.insert(id).inserted else { continue }
-                out.append(entry(id, name))
+                out.append(channelEntry(id, name, subscribed: subscribedIds.contains(id)))
             }
             for conversation in store.conversations.conversations {
                 guard case .topic(let id, _) = conversation.key,
                       let name = name(id), seen.insert(id).inserted else { continue }
-                out.append(entry(id, name))
+                out.append(channelEntry(id, name, subscribed: subscribedIds.contains(id)))
             }
-            return Array(out.prefix(10))
+            return Array(out.prefix(12))
         }
-        var candidates: [Entry] = []
+        var candidates = Self.specialViews
         var seen = Set<Int>()
         for (id, channel) in store.channels where seen.insert(id).inserted {
-            candidates.append(entry(id, channel.name))
+            candidates.append(channelEntry(id, channel.name, subscribed: subscribedIds.contains(id)))
         }
         for (id, subscription) in store.subscriptions where seen.insert(id).inserted {
-            candidates.append(entry(id, subscription.name))
+            candidates.append(channelEntry(id, subscription.name, subscribed: true))
         }
         let lowered = typed.lowercased()
         func rank(_ candidate: Entry) -> (Int, Int, String) {
             (candidate.name.lowercased().hasPrefix(lowered) ? 0 : 1,
-             candidate.subscribed ? 0 : 1,
+             candidate.unsubscribed ? 1 : 0,
              candidate.name.lowercased())
         }
         return Array(
@@ -69,7 +86,7 @@ struct OpenQuicklyView: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                TextField("Open channel…", text: $query)
+                TextField("Open channel or view…", text: $query)
                     .textFieldStyle(.plain)
                     .font(.title3)
                     .focused($focused)
@@ -80,7 +97,7 @@ struct OpenQuicklyView: View {
             .padding(12)
             Divider()
             if results.isEmpty {
-                Text(query.isEmpty ? "No channels yet" : "No matching channels")
+                Text("No matching channels or views")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 24)
@@ -103,14 +120,14 @@ struct OpenQuicklyView: View {
             openEntry(result)
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: glyph(result.streamId))
+                Image(systemName: result.icon)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(width: 18)
                 Text(result.name)
                     .lineLimit(1)
                 Spacer()
-                if !result.subscribed {
+                if result.unsubscribed {
                     Text("Not subscribed")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
@@ -127,13 +144,6 @@ struct OpenQuicklyView: View {
         .buttonStyle(.plain)
     }
 
-    private func glyph(_ streamId: Int) -> String {
-        let channel = store.channels[streamId]
-        if channel?.inviteOnly == true { return "lock.fill" }
-        if channel?.isWebPublic == true { return "globe" }
-        return "number"
-    }
-
     private func move(_ delta: Int) -> KeyPress.Result {
         guard !results.isEmpty else { return .ignored }
         selectedIndex = min(max(selectedIndex + delta, 0), results.count - 1)
@@ -146,7 +156,7 @@ struct OpenQuicklyView: View {
     }
 
     private func openEntry(_ result: Entry) {
-        open(.channel(streamId: result.streamId))
+        open(result.destination)
         dismiss()
     }
 }
