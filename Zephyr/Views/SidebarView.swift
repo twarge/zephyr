@@ -379,39 +379,11 @@ struct SidebarView: View {
         .onChange(of: collapsedSections) {
             AppStateStore.setCollapsedSections(collapsedSections, for: store.accountId)
         }
-        // The server switcher lives in the sidebar's toolbar area when more
-        // than one server is signed in (⌘1…⌘9 also switch).
+        // One menu covers it all: the window's server (label), switching
+        // servers (⌘1…⌘9), and account management.
         .toolbar {
-            if model.global.accounts.count > 1 {
-                ToolbarItem(placement: .automatic) {
-                    Menu {
-                        ForEach(
-                            Array(model.global.accounts.prefix(9).enumerated()),
-                            id: \.element.id
-                        ) { index, account in
-                            Button {
-                                selectedAccount = account.id
-                            } label: {
-                                if account.id == store.accountId {
-                                    Label(serverLabel(account), systemImage: "checkmark")
-                                } else {
-                                    Text(serverLabel(account))
-                                }
-                            }
-                            .keyboardShortcut(
-                                KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(store.realmName
-                                ?? store.connection.realmURL.host() ?? "Server")
-                                .font(.callout.weight(.medium))
-                            Image(systemName: "chevron.down")
-                                .font(.caption2)
-                        }
-                    }
-                    .help("Show another server in this window (⌘1–⌘\(min(model.global.accounts.count, 9)))")
-                }
+            ToolbarItem(placement: .automatic) {
+                serverMenu
             }
             if showsToolbarControls {
                 ToolbarItem(placement: .automatic) {
@@ -422,9 +394,6 @@ struct SidebarView: View {
                     }
                     .help("Browse and join channels")
                 }
-                ToolbarItem(placement: .automatic) {
-                    accountMenu
-                }
             }
         }
         .sheet(isPresented: $showSettings) {
@@ -433,36 +402,57 @@ struct SidebarView: View {
         }
     }
 
-    private var accountMenu: some View {
-                Menu {
-                    ForEach(model.global.accounts) { account in
-                        Button {
-                            selectedAccount = account.id
-                        } label: {
-                            if account.id == store.accountId {
-                                Label(accountLabel(account), systemImage: "checkmark")
-                            } else {
-                                Text(accountLabel(account))
-                            }
-                        }
-                    }
-                    Divider()
-                    #if os(macOS)
-                    SettingsLink {
-                        Text("Accounts & Settings…")
-                    }
-                    #else
-                    Button("Accounts & Settings…") {
-                        showSettings = true
-                    }
-                    #endif
-                    Button("Sign Out of This Server…") {
-                        Task { await model.signOut(accountId: store.accountId) }
-                    }
+    private var serverMenu: some View {
+        Menu {
+            ForEach(
+                Array(model.global.accounts.prefix(9).enumerated()), id: \.element.id
+            ) { index, account in
+                Button {
+                    selectedAccount = account.id
                 } label: {
-                    Image(systemName: "person.crop.circle")
+                    if account.id == store.accountId {
+                        Label(accountLabel(account), systemImage: "checkmark")
+                    } else {
+                        Text(accountLabel(account))
+                    }
                 }
-                .help("Accounts")
+                .keyboardShortcut(
+                    KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+            }
+            ForEach(model.global.accounts.dropFirst(9)) { account in
+                Button {
+                    selectedAccount = account.id
+                } label: {
+                    if account.id == store.accountId {
+                        Label(accountLabel(account), systemImage: "checkmark")
+                    } else {
+                        Text(accountLabel(account))
+                    }
+                }
+            }
+            Divider()
+            #if os(macOS)
+            SettingsLink {
+                Text("Accounts & Settings…")
+            }
+            #else
+            Button("Accounts & Settings…") {
+                showSettings = true
+            }
+            #endif
+            Button("Sign Out of This Server…") {
+                Task { await model.signOut(accountId: store.accountId) }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(store.realmName
+                    ?? store.connection.realmURL.host() ?? "Server")
+                    .font(.callout.weight(.medium))
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+            }
+        }
+        .help("Servers and accounts (⌘1–⌘9 switch this window)")
     }
 
     private func accountLabel(_ account: Account) -> String {
@@ -475,10 +465,6 @@ struct SidebarView: View {
         #else
         return .automatic
         #endif
-    }
-
-    private func serverLabel(_ account: Account) -> String {
-        account.realmName ?? account.realmURL.host() ?? account.email
     }
 
     /// Runs the current query. Return finalizes it: the query is recorded in
