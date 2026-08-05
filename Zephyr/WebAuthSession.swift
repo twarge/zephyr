@@ -15,12 +15,15 @@ final class WebAuthSession: NSObject, ASWebAuthenticationPresentationContextProv
     private nonisolated(unsafe) var anchor: ASPresentationAnchor?
 
     func authenticate(at url: URL) async throws -> URL {
+        // The fallback anchor is constructed HERE (main actor) —
+        // ASPresentationAnchor.init is main-isolated and the delegate
+        // callback below is not.
         #if canImport(AppKit)
-        anchor = NSApp.keyWindow ?? NSApp.windows.first
+        anchor = NSApp.keyWindow ?? NSApp.windows.first ?? ASPresentationAnchor()
         #else
         anchor = UIApplication.shared.connectedScenes
             .compactMap { ($0 as? UIWindowScene)?.keyWindow }
-            .first
+            .first ?? ASPresentationAnchor()
         #endif
         return try await withCheckedThrowingContinuation { continuation in
             // @Sendable: without it the closure inherits this class's
@@ -48,6 +51,7 @@ final class WebAuthSession: NSObject, ASWebAuthenticationPresentationContextProv
     nonisolated func presentationAnchor(
         for session: ASWebAuthenticationSession
     ) -> ASPresentationAnchor {
-        anchor ?? ASPresentationAnchor()
+        // Always set by authenticate() before the session starts.
+        anchor!
     }
 }
