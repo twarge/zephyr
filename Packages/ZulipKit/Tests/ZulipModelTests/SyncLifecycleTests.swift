@@ -28,6 +28,7 @@ struct SyncLifecycleTests {
             credentials: InMemoryCredentialStore(),
             transport: transport,
             enablePresencePings: false,  // pings would consume scripted responses
+            persistsToDisk: false,  // never touch the real Application Support
             sleep: { _ in })  // no real waiting in tests
         let account = try global.addAccount(
             realmURL: URL(string: "https://test.example")!,

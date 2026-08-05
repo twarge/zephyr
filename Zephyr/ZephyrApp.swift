@@ -12,6 +12,14 @@ struct ZephyrApp: App {
         }
         .commands { accountCommands }
         #if os(macOS)
+        // Double-clicked sidebar entries open standalone (no sidebar).
+        WindowGroup(for: DetachedWindow.self) { $window in
+            if let window {
+                DetachedWindowView(window: window)
+                    .environment(model)
+            }
+        }
+        .defaultSize(width: 720, height: 640)
         Settings {
             SettingsView()
                 .environment(model)

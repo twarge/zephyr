@@ -1,3 +1,4 @@
+import os
 import QuickLook
 import SwiftUI
 import ZulipAPI
@@ -80,6 +81,9 @@ struct BlockNodeView: View {
                     Button("Copy Raw HTML", systemImage: "doc.on.doc") {
                         Platform.copyToPasteboard(html)
                     }
+                }
+                .onAppear {
+                    ContentDiagnostics.logUnimplemented(html)
                 }
         }
     }
@@ -625,6 +629,20 @@ private struct MessageImageView: View {
     }
 }
 
+/// Rendering unsupported content logs the offending HTML, so a report of
+/// "⟨unsupported⟩" is diagnosable from `log show --predicate
+/// 'subsystem == "com.twarge.zephyr"'` without needing the message itself.
+enum ContentDiagnostics {
+    private static let logger = Logger(subsystem: "com.twarge.zephyr", category: "content")
+    @MainActor private static var logged: Set<String> = []
+
+    @MainActor static func logUnimplemented(_ html: String) {
+        // Once per distinct markup per session.
+        guard logged.insert(html).inserted else { return }
+        logger.error("unimplemented content: \(html, privacy: .public)")
+    }
+}
+
 /// Builds one AttributedString from an inline run, carrying style state
 /// through nesting (bold/italic/strike/code via presentation intents,
 /// links, mention tinting).
@@ -768,7 +786,8 @@ enum InlineRenderer {
                 var nested = style
                 nested.isSecondary = true
                 builder += styled("🕐\u{202f}\(display)", nested)
-            case .unimplemented:
+            case .unimplemented(let html):
+                ContentDiagnostics.logUnimplemented(html)
                 var nested = style
                 nested.isSecondary = true
                 builder += styled("⟨unsupported⟩", nested)

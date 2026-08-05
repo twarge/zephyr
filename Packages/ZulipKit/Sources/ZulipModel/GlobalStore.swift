@@ -42,18 +42,23 @@ public final class GlobalStore: UpdateMachineDelegate {
     private let logger = Logger(subsystem: "com.twarge.zephyr", category: "store")
 
     private let enablePresencePings: Bool
+    /// False in tests: no snapshot cache and no offline stores touch the real
+    /// filesystem (fixture data was polluting Application Support).
+    private let persistsToDisk: Bool
 
     public init(
         accountsStore: any AccountsStore,
         credentials: any CredentialStore,
         transport: any ApiTransport = URLSessionTransport.shared,
         enablePresencePings: Bool = true,
+        persistsToDisk: Bool = true,
         sleep: @escaping UpdateMachine.SleepFunction = { try await Task.sleep(for: $0) }
     ) throws {
         self.accountsStore = accountsStore
         self.credentials = credentials
         self.transport = transport
         self.enablePresencePings = enablePresencePings
+        self.persistsToDisk = persistsToDisk
         self.sleep = sleep
         accounts = try accountsStore.load()
     }
@@ -127,6 +132,7 @@ public final class GlobalStore: UpdateMachineDelegate {
     // MARK: Warm-launch snapshot cache
 
     private func snapshotCacheURL(for accountId: Account.ID) -> URL? {
+        guard persistsToDisk else { return nil }
         guard let base = try? FileManager.default.url(
             for: .applicationSupportDirectory, in: .userDomainMask,
             appropriateFor: nil, create: true)
@@ -157,7 +163,7 @@ public final class GlobalStore: UpdateMachineDelegate {
         connection.featureLevel = snapshot.zulipFeatureLevel
         let store = PerAccountStore(
             account: account, connection: connection, snapshot: snapshot,
-            offline: OfflineStore.forAccount(accountId))
+            offline: persistsToDisk ? OfflineStore.forAccount(accountId) : nil)
         store.messageRetentionDays = messageRetentionDays
         store.isRecoveringEventStream = true
         stores[accountId] = store
@@ -192,7 +198,7 @@ public final class GlobalStore: UpdateMachineDelegate {
         }
         let store = PerAccountStore(
             account: account, connection: connection, snapshot: snapshot,
-            offline: OfflineStore.forAccount(accountId))
+            offline: persistsToDisk ? OfflineStore.forAccount(accountId) : nil)
         installStore(store, for: accountId)
         return store
     }

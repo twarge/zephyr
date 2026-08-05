@@ -12,6 +12,10 @@ struct SidebarView: View {
     @Bindable var search: SidebarSearchModel
     @Binding var selection: Destination?
     var startDirectMessage: (() -> Void)?
+    /// False while the sidebar column is collapsed: its toolbar buttons
+    /// would otherwise migrate into the main toolbar.
+    var showsToolbarControls = true
+    @Environment(\.openWindow) private var openWindow
     @Environment(AppModel.self) private var model
     @Environment(KeyboardRouter.self) private var keys
     @FocusState private var searchFocused: Bool
@@ -25,16 +29,28 @@ struct SidebarView: View {
 
     init(
         store: PerAccountStore, search: SidebarSearchModel,
-        selection: Binding<Destination?>, startDirectMessage: (() -> Void)? = nil
+        selection: Binding<Destination?>, startDirectMessage: (() -> Void)? = nil,
+        showsToolbarControls: Bool = true
     ) {
         self.store = store
         self.search = search
         _selection = selection
         self.startDirectMessage = startDirectMessage
+        self.showsToolbarControls = showsToolbarControls
         _collapsedSections = State(
             initialValue: AppStateStore.collapsedSections(for: store.accountId))
         _expandedChannels = State(
             initialValue: AppStateStore.expandedChannels(for: store.accountId))
+    }
+
+    /// Double-clicking a sidebar entry opens it standalone in a new window.
+    private func detachGesture(_ destination: Destination) -> some Gesture {
+        TapGesture(count: 2).onEnded {
+            #if os(macOS)
+            openWindow(
+                value: DetachedWindow(accountId: store.accountId, destination: destination))
+            #endif
+        }
     }
 
     private static let maxInlineTopics = 10
@@ -200,13 +216,15 @@ struct SidebarView: View {
                 ForEach(dmRows) { conversation in
                     DirectMessageRow(store: store, conversation: conversation)
                         .tag(Destination.conversation(conversation.key))
+                        .simultaneousGesture(
+                            detachGesture(.conversation(conversation.key)))
                 }
                 ForEach(visibleDirectoryUsers) { user in
+                    let key = Unreads.dmKey(
+                        participantIds: [user.userId], selfUserId: store.selfUserId)
                     UserDirectMessageRow(store: store, user: user)
-                        .tag(Destination.conversation(
-                            Unreads.dmKey(
-                                participantIds: [user.userId],
-                                selfUserId: store.selfUserId)))
+                        .tag(Destination.conversation(key))
+                        .simultaneousGesture(detachGesture(.conversation(key)))
                 }
                 if hiddenDirectoryCount > 0 {
                     SidebarExpanderRow(
@@ -326,15 +344,27 @@ struct SidebarView: View {
                     .help("Switch server (⌘1–⌘\(min(model.global.accounts.count, 9)))")
                 }
             }
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    selection = .allChannels
-                } label: {
-                    Image(systemName: "plus")
+            if showsToolbarControls {
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        selection = .allChannels
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .help("Browse and join channels")
                 }
-                .help("Browse and join channels")
+                ToolbarItem(placement: .automatic) {
+                    accountMenu
+                }
             }
-            ToolbarItem(placement: .automatic) {
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .environment(model)
+        }
+    }
+
+    private var accountMenu: some View {
                 Menu {
                     ForEach(model.global.accounts) { account in
                         Button {
@@ -364,12 +394,6 @@ struct SidebarView: View {
                     Image(systemName: "person.crop.circle")
                 }
                 .help("Accounts")
-            }
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .environment(model)
-        }
     }
 
     private func accountLabel(_ account: Account) -> String {
@@ -437,6 +461,8 @@ struct SidebarView: View {
                         isExpanded: expandedChannels.contains(streamId),
                         onToggle: isFiltering ? nil : { toggleChannel(streamId) })
                         .tag(Destination.channel(streamId: streamId))
+                        .simultaneousGesture(
+                            detachGesture(.channel(streamId: streamId)))
                         .contextMenu {
                             Button(subscription.muted ? "Unmute Channel" : "Mute Channel") {
                                 store.setChannelMuted(streamId, muted: !subscription.muted)
@@ -450,6 +476,9 @@ struct SidebarView: View {
                             SidebarTopicRow(store: store, streamId: streamId, topic: topic)
                                 .tag(Destination.conversation(
                                     .topic(streamId: streamId, topic: topic.name)))
+                                .simultaneousGesture(
+                                    detachGesture(.conversation(
+                                        .topic(streamId: streamId, topic: topic.name))))
                         }
                     } else if expandedChannels.contains(streamId) {
                         topicRows(for: streamId)
@@ -476,6 +505,9 @@ struct SidebarView: View {
                 SidebarTopicRow(store: store, streamId: streamId, topic: topic)
                     .tag(Destination.conversation(
                         .topic(streamId: streamId, topic: topic.name)))
+                    .simultaneousGesture(
+                        detachGesture(.conversation(
+                            .topic(streamId: streamId, topic: topic.name))))
             }
             if topics.count > Self.maxInlineTopics {
                 Text("All topics…")
@@ -520,6 +552,7 @@ struct SidebarView: View {
             }
         }
         .tag(tag)
+        .simultaneousGesture(detachGesture(tag))
     }
 }
 

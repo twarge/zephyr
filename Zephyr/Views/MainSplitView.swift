@@ -24,6 +24,7 @@ struct MainSplitView: View {
     @State private var search: SidebarSearchModel
     @State private var newConversation: NewConversationMode?
     @State private var dropTargeted = false
+    @State private var columnVisibility = NavigationSplitViewVisibility.automatic
     @State private var keys = KeyboardRouter()
     #if os(iOS)
     @FocusState private var detailFocused: Bool
@@ -36,10 +37,11 @@ struct MainSplitView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
                 store: store, search: search, selection: $selection,
-                startDirectMessage: { newConversation = .directMessage(initialUsers: []) })
+                startDirectMessage: { newConversation = .directMessage(initialUsers: []) },
+                showsToolbarControls: columnVisibility != .detailOnly)
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 400)
         } detail: {
             detailContent
