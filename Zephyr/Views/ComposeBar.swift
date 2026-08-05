@@ -217,9 +217,11 @@ struct ComposeBar: View {
             if case .fixed(let destination, _) = mode {
                 text = DraftStore.shared.draft(for: destination)
             }
-            // The keyboard router's r / c shortcuts focus this compose box.
+            // The keyboard router's r / c shortcuts focus this compose box;
+            // media selection blurs it so Space can Quick Look.
             let focus = $messageFocused
             keys.focusCompose = { focus.wrappedValue = true }
+            keys.blurCompose = { focus.wrappedValue = false }
             // Files dropped anywhere in the conversation upload into here.
             keys.registerUpload(owner: uploadOwnerId) { urls in
                 for url in urls {

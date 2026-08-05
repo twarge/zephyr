@@ -337,9 +337,11 @@ struct SidebarView: View {
             runSearch(recordInRecents: true)
         }
         .onAppear {
-            // The keyboard router's / shortcut focuses the search field.
+            // The keyboard router's / shortcut focuses the search field;
+            // media selection blurs it so Space can Quick Look.
             let focus = $searchFocused
             keys.focusSearch = { focus.wrappedValue = true }
+            keys.blurSearch = { focus.wrappedValue = false }
         }
         .onChange(of: search.tokens) {
             if !search.tokens.isEmpty {

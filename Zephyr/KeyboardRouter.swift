@@ -47,9 +47,16 @@ final class KeyboardRouter {
     var selectedMediaId: String?
     @ObservationIgnored private var selectedMediaQuickLook: (() -> Void)?
 
+    /// Registered by the compose bar and sidebar: selecting media blurs text
+    /// inputs, so Space reaches the monitor instead of typing a space.
+    @ObservationIgnored var blurCompose: (() -> Void)?
+    @ObservationIgnored var blurSearch: (() -> Void)?
+
     func selectMedia(_ id: String, quickLook: @escaping () -> Void) {
         selectedMediaId = id
         selectedMediaQuickLook = quickLook
+        blurCompose?()
+        blurSearch?()
     }
 
     func clearMediaSelection() {
