@@ -9,6 +9,7 @@ struct TranscriptView: View {
     let conversation: ConversationKey
     @Binding var selection: Destination?
 
+    @Environment(KeyboardRouter.self) private var keys
     @State private var model: MessageListModel?
     @State private var cache = MessageContentCache()
     @State private var showAddPeople = false
@@ -114,8 +115,15 @@ struct TranscriptView: View {
         // stores), the list re-binds — otherwise it stays registered with a
         // dead store and never receives live events.
         .task(id: ObjectIdentifier(store)) {
+            // A message link opens anchored at its target.
+            var anchor: Int?
+            if let pending = keys.pendingNear, pending.key == conversation {
+                anchor = pending.messageId
+                keys.pendingNear = nil
+            }
             let list = MessageListModel(
-                store: store, narrow: conversation.narrow(selfUserId: store.selfUserId))
+                store: store, narrow: conversation.narrow(selfUserId: store.selfUserId),
+                anchorMessageId: anchor)
             model = list
             await list.fetchInitial()
             store.markConversationRead(conversation)

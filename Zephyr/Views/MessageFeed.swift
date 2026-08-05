@@ -60,12 +60,14 @@ struct MessageFeedList: View {
     private enum Item: Identifiable {
         case daySeparator(String)
         case conversationHeader(key: ConversationKey, firstMessageId: Int)
+        case unreadMarker
         case message(Message, showHeader: Bool)
 
         var id: String {
             switch self {
             case .daySeparator(let label): "day-\(label)"
             case .conversationHeader(_, let firstMessageId): "hdr-\(firstMessageId)"
+            case .unreadMarker: "unread-marker"
             case .message(let message, _): "msg-\(message.id)"
             }
         }
@@ -95,6 +97,10 @@ struct MessageFeedList: View {
                 lastKey = key
                 lastSender = nil
             }
+            if message.id == model.firstUnreadMarkerId {
+                out.append(.unreadMarker)
+                lastSender = nil  // The run restarts under the marker.
+            }
             let showHeader = message.senderId != lastSender || message.timestamp - lastTimestamp > 300
             out.append(.message(message, showHeader: showHeader))
             lastSender = message.senderId
@@ -120,7 +126,65 @@ struct MessageFeedList: View {
             } else {
                 // No scroll-follow on selection: programmatic scrolls were
                 // fighting image focus, and selection reads fine without it.
-                feedScrollView
+                ScrollViewReader { proxy in
+                    feedScrollView
+                        .onAppear {
+                            // Open at the linked message, else the NEW
+                            // marker, else the newest message.
+                            let target: String?
+                            if let highlight = keys.highlightMessageId,
+                               model.messages.contains(where: { $0.id == highlight }) {
+                                target = "msg-\(highlight)"
+                            } else if model.firstUnreadMarkerId != nil {
+                                target = "unread-marker"
+                            } else {
+                                target = nil
+                            }
+                            guard let target else { return }
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(60))
+                                proxy.scrollTo(target, anchor: UnitPoint(x: 0.5, y: 0.25))
+                            }
+                            scheduleHighlightClear()
+                        }
+                        .onChange(of: keys.highlightMessageId) { _, newId in
+                            // Same-conversation message links scroll live.
+                            guard let newId,
+                                  model.messages.contains(where: { $0.id == newId })
+                            else { return }
+                            proxy.scrollTo("msg-\(newId)", anchor: .center)
+                            scheduleHighlightClear()
+                        }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if !nearBottom || !model.haveNewest {
+                        Button {
+                            if model.haveNewest {
+                                anchorId = items.last?.id
+                            } else {
+                                Task {
+                                    await model.jumpToNewest()
+                                    anchorId = model.messages.last.map { "msg-\($0.id)" }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.system(size: 26))
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(.tint)
+                                .background(.bar, in: .circle)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(12)
+                        .help("Jump to latest messages")
+                    }
+                }
+                .onChange(of: outboxMessages.count) { old, new in
+                    // Sending while viewing history jumps to the newest
+                    // messages so the send is visible.
+                    guard new > old, !model.haveNewest else { return }
+                    Task { await model.jumpToNewest() }
+                }
             }
         }
         .environment(quickLook)
@@ -133,6 +197,19 @@ struct MessageFeedList: View {
             if keys.activeFeed === model {
                 keys.activeFeed = nil
                 keys.selectedMessageId = nil
+            }
+        }
+    }
+
+    /// The message-link flash fades after a beat.
+    private func scheduleHighlightClear() {
+        guard let target = keys.highlightMessageId else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            if keys.highlightMessageId == target {
+                withAnimation(.easeOut(duration: 0.6)) {
+                    keys.highlightMessageId = nil
+                }
             }
         }
     }
@@ -181,13 +258,33 @@ struct MessageFeedList: View {
                             store: store, conversationKey: key,
                             includeChannel: headerMode == .channelAndTopic,
                             onTap: onHeaderTap)
+                    case .unreadMarker:
+                        HStack(spacing: 8) {
+                            Rectangle()
+                                .fill(.red.opacity(0.45))
+                                .frame(height: 1)
+                            Text("NEW")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.red)
+                        }
+                        .padding(.vertical, 6)
                     case .message(let message, let showHeader):
                         MessageRow(
                             store: store, message: message,
                             showHeader: showHeader, cache: cache,
                             useMatchHighlights: useMatchHighlights,
-                            isKeySelected: keys.selectedMessageId == message.id)
+                            isKeySelected: keys.selectedMessageId == message.id,
+                            isLinkTarget: keys.highlightMessageId == message.id)
                     }
+                }
+                if !model.haveNewest && !model.messages.isEmpty {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .onAppear {
+                            Task { await model.fetchNewer() }
+                        }
                 }
                 if model.haveNewest {
                     ForEach(outboxMessages) { outboxMessage in
@@ -212,7 +309,7 @@ struct MessageFeedList: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
         }
-        .defaultScrollAnchor(.bottom)
+        .defaultScrollAnchor(model.firstUnreadMarkerId == nil ? .bottom : .top)
         .scrollPosition(id: $anchorId, anchor: .bottom)
         .onScrollGeometryChange(for: Bool.self) { geometry in
             geometry.contentSize.height - geometry.visibleRect.maxY < 60
@@ -329,6 +426,8 @@ struct MessageRow: View {
     let cache: MessageContentCache
     var useMatchHighlights = false
     var isKeySelected = false
+    /// A followed message link flashes its target.
+    var isLinkTarget = false
 
     @Environment(KeyboardRouter.self) private var keys
     @State private var hovering = false
@@ -435,7 +534,9 @@ struct MessageRow: View {
         .padding(.vertical, 1)
         .padding(.horizontal, 4)
         .background(
-            isKeySelected ? Self.selectionColor.opacity(0.14) : .clear,
+            isLinkTarget
+                ? Color.yellow.opacity(0.22)
+                : isKeySelected ? Self.selectionColor.opacity(0.14) : .clear,
             in: RoundedRectangle(cornerRadius: 6))
         // Click/tap selects (like the web app); simultaneous so links and
         // buttons inside the row keep working.

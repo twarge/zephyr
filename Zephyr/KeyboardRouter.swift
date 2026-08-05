@@ -38,6 +38,10 @@ final class KeyboardRouter {
     #endif
     /// Set to a message id to ask its row to enter edit mode; the row clears it.
     var editRequestId: Int?
+    /// Message-link (/near/) navigation: the conversation to open anchored
+    /// at a message, and the message to flash once visible.
+    @ObservationIgnored var pendingNear: (key: ConversationKey, messageId: Int)?
+    var highlightMessageId: Int?
     var showHelp = false
 
     /// Selected media (image/PDF) in the transcript. Router state rather than

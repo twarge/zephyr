@@ -104,8 +104,15 @@ struct MainSplitView: View {
                 switch link {
                 case .channel(let streamId):
                     selection = .channel(streamId: streamId)
-                case .topic(let streamId, let topic, _):
-                    selection = .conversation(.topic(streamId: streamId, topic: topic))
+                case .topic(let streamId, let topic, let near):
+                    let key = ConversationKey.topic(streamId: streamId, topic: topic)
+                    if let near {
+                        keys.highlightMessageId = near
+                        if selection != .conversation(key) {
+                            keys.pendingNear = (key, near)
+                        }
+                    }
+                    selection = .conversation(key)
                 }
                 return .handled
             })

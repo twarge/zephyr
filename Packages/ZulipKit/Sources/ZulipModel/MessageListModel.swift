@@ -54,13 +54,20 @@ public final class MessageListModel: Identifiable {
     /// True when `messages` came from the offline cache because the initial
     /// fetch failed; the list refetches when connectivity returns.
     public private(set) var isOfflineFallback = false
+    /// The first unread message at open time — the "NEW" marker's position.
+    /// Set once by the initial fetch and left stable as reading proceeds.
+    public private(set) var firstUnreadMarkerId: Int?
 
     private weak var store: PerAccountStore?
     private var generation = 0
+    /// A specific message to open at (message links); overrides the
+    /// first-unread anchor.
+    private let initialAnchorMessageId: Int?
 
-    public init(store: PerAccountStore, narrow: Narrow) {
+    public init(store: PerAccountStore, narrow: Narrow, anchorMessageId: Int? = nil) {
         self.store = store
         self.narrow = narrow
+        initialAnchorMessageId = anchorMessageId
         store.register(self)
     }
 
@@ -77,6 +84,81 @@ public final class MessageListModel: Identifiable {
         isFetching = true
         let gen = generation
         defer { isFetching = false }
+        // Zulip semantics: open at the first unread (or a linked message),
+        // with history in both directions. Search narrows can't ask for
+        // first_unread; they open at the newest results.
+        let anchor: MessageAnchor
+        var anchoredMidHistory = true
+        if let initialAnchorMessageId {
+            anchor = .id(initialAnchorMessageId)
+        } else if case .custom = narrow {
+            anchor = .newest
+            anchoredMidHistory = false
+        } else {
+            anchor = .firstUnread
+        }
+        do {
+            let result = try await store.connection.getMessages(
+                anchor: anchor, numBefore: count,
+                numAfter: anchoredMidHistory ? count : 0,
+                narrow: narrow.apiElements)
+            guard generation == gen else { return }
+            store.reconcileFetchedMessages(result.messages)
+            messages = result.messages
+                .sorted { $0.id < $1.id }
+                .map { store.messages[$0.id] ?? $0 }
+            haveNewest = result.foundNewest ?? !anchoredMidHistory
+            haveOldest = result.foundOldest ?? false
+            // The marker is the oldest fetched message still unread.
+            firstUnreadMarkerId = messages.first { message in
+                !(message.flags ?? []).contains("read")
+            }?.id
+            fetchError = nil
+            didInitialFetch = true
+            isOfflineFallback = false
+        } catch is CancellationError {
+        } catch {
+            guard generation == gen else { return }
+            fetchError = error
+            didInitialFetch = true
+            populateOfflineFallback()
+        }
+    }
+
+    /// Pages forward from the newest fetched message (the list opened
+    /// mid-history at an unread or linked anchor).
+    public func fetchNewer(count: Int = 100) async {
+        guard let store, !isFetching, !haveNewest, let last = messages.last else { return }
+        isFetching = true
+        let gen = generation
+        defer { isFetching = false }
+        do {
+            let result = try await store.connection.getMessages(
+                anchor: .id(last.id), numBefore: 0, numAfter: count,
+                narrow: narrow.apiElements)
+            guard generation == gen else { return }
+            store.reconcileFetchedMessages(result.messages)
+            let newer = result.messages
+                .filter { $0.id > last.id }
+                .sorted { $0.id < $1.id }
+                .map { store.messages[$0.id] ?? $0 }
+            messages.append(contentsOf: newer)
+            haveNewest = result.foundNewest ?? false
+        } catch is CancellationError {
+        } catch {
+            guard generation == gen else { return }
+            fetchError = error
+        }
+    }
+
+    /// Abandons the current window and reloads at the newest messages
+    /// (the jump-to-latest control).
+    public func jumpToNewest(count: Int = 60) async {
+        guard let store else { return }
+        generation += 1  // Invalidate any in-flight page.
+        let gen = generation
+        isFetching = true
+        defer { isFetching = false }
         do {
             let result = try await store.connection.getMessages(
                 anchor: .newest, numBefore: count, numAfter: 0, narrow: narrow.apiElements)
@@ -88,14 +170,10 @@ public final class MessageListModel: Identifiable {
             haveNewest = result.foundNewest ?? true
             haveOldest = result.foundOldest ?? false
             fetchError = nil
-            didInitialFetch = true
-            isOfflineFallback = false
         } catch is CancellationError {
         } catch {
             guard generation == gen else { return }
             fetchError = error
-            didInitialFetch = true
-            populateOfflineFallback()
         }
     }
 
