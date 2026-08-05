@@ -88,7 +88,6 @@ struct ComposeBar: View {
         var progress: Double = 0
     }
     @State private var uploads: [UploadItem] = []
-    @State private var showFileImporter = false
     @FocusState private var messageFocused: Bool
     @Environment(KeyboardRouter.self) private var keys
     @State private var uploadOwnerId = UUID()
@@ -170,25 +169,16 @@ struct ComposeBar: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 Button {
-                    showFileImporter = true
-                } label: {
-                    Image(systemName: "paperclip")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .padding(.bottom, 6)
-                .help("Attach a file (or drop one on the message field)")
-                Button {
                     withAnimation(.snappy) {
                         expanded.toggle()
                     }
                     showPreview = false
                     previewTask?.cancel()
                 } label: {
-                    Image(systemName: expanded ? "chevron.down" : "chevron.up")
+                    Image(systemName: "chevron.right")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(expanded ? -90 : 0))
                 }
                 .buttonStyle(.plain)
                 .padding(.bottom, 7)
@@ -244,15 +234,6 @@ struct ComposeBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.bar)
-        .fileImporter(
-            isPresented: $showFileImporter,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: true
-        ) { result in
-            for url in (try? result.get()) ?? [] {
-                upload(fileURL: url, securityScoped: true)
-            }
-        }
         .dropDestination(for: URL.self) { urls, _ in
             let fileURLs = urls.filter(\.isFileURL)
             guard !fileURLs.isEmpty else { return false }
