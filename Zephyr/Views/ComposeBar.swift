@@ -411,7 +411,10 @@ struct ComposeBar: View {
                     Task { @MainActor in updateProgress(fraction) }
                 })
             else { return }
-            let reference = "[\(filename)](\(path))"
+            // Any spaces the server kept in the path would break the
+            // markdown link (and the server's inline preview of it).
+            let linkPath = path.replacingOccurrences(of: " ", with: "%20")
+            let reference = "[\(filename)](\(linkPath))"
             text = text.isEmpty ? reference : "\(text)\n\(reference)"
         }
     }
