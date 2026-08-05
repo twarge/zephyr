@@ -62,6 +62,12 @@ struct LoginView: View {
             TextField("Organization URL (e.g. chat.zulip.org)", text: $realmText)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 320)
+                .textContentType(.URL)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                #endif
                 .onSubmit { discoverRealm() }
             Button("Continue") { discoverRealm() }
                 .keyboardShortcut(.defaultAction)
@@ -126,11 +132,19 @@ struct LoginView: View {
                 TextField("Email", text: $email)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 320)
+                    // Keychain/Passwords AutoFill offers saved credentials.
+                    .textContentType(.username)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    #endif
                 switch method {
                 case .password:
                     SecureField("Password", text: $password)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 320)
+                        .textContentType(.password)
                         .onSubmit { signIn(settings, realm: realm) }
                 case .apiKey:
                     SecureField("API key (Personal settings → Account & privacy)", text: $apiKey)
