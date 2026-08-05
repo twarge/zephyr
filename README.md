@@ -7,8 +7,8 @@ topics, views) rendered natively. The name honors Zulip's ancestry in MIT's
 Zephyr messaging system — and a zephyr is a soft, fast breeze, which is the feel the app
 aims for. Zephyr is an independent project, not affiliated with the Zulip organization.
 
-**Status: feature-complete through M4** (minus scheduled messages and server draft
-sync, deferred deliberately). Everything in M2's messaging core plus: notifications with
+**Status: feature-complete through M4** (minus scheduled messages, deferred
+deliberately). Everything in M2's messaging core plus: notifications with
 inline reply (DMs + mentions, while running — Zulip has no desktop push), dock badge and
 send sounds (configurable in Settings ⌘,), multi-account with switching, a channel
 browser with subscribe/unsubscribe and muting, warm launch from a cached snapshot

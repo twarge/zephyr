@@ -53,6 +53,17 @@ public final class PerAccountStore {
     }
     private var messageLists: [UUID: WeakMessageList] = [:]
 
+    /// Server-synced drafts by id (the /drafts API); the app-layer sync
+    /// engine reconciles these with the local draft store.
+    public private(set) var serverDrafts: [Int: ServerDraft] = [:]
+    /// Draft change notifications for the sync engine.
+    public enum DraftChange: Sendable {
+        case added([ServerDraft])
+        case updated(ServerDraft)
+        case removed(Int)
+    }
+    @ObservationIgnored public var draftEventObserver: ((DraftChange) -> Void)?
+
     /// Optimistically-sent messages awaiting their server echo event.
     public private(set) var outbox: [OutboxMessage] = []
     /// Idempotent mutations recorded while offline, replayed on reconnect.
@@ -128,6 +139,11 @@ public final class PerAccountStore {
         conversations = ConversationList(snapshot: snapshot, selfUserId: account.userId)
         channelFolders = (snapshot.channelFolders ?? []).sorted { $0.order < $1.order }
         realmEmoji = snapshot.realmEmoji ?? [:]
+        for draft in snapshot.drafts ?? [] {
+            if let id = draft.id {
+                serverDrafts[id] = draft
+            }
+        }
         for item in snapshot.userTopics ?? [] {
             let policy = TopicVisibilityPolicy(rawValue: item.visibilityPolicy) ?? .none
             if policy != .none {
@@ -856,6 +872,24 @@ public final class PerAccountStore {
             messages[e.messageId] = message
             forEachMessageList { $0.handleChangedMessages(ids: [e.messageId]) }
             scheduleMessageCacheSave([e.messageId])
+
+        case .draftsAdd(let drafts):
+            for draft in drafts {
+                if let id = draft.id {
+                    serverDrafts[id] = draft
+                }
+            }
+            draftEventObserver?(.added(drafts))
+
+        case .draftsUpdate(let draft):
+            if let id = draft.id {
+                serverDrafts[id] = draft
+            }
+            draftEventObserver?(.updated(draft))
+
+        case .draftsRemove(let draftId):
+            serverDrafts.removeValue(forKey: draftId)
+            draftEventObserver?(.removed(draftId))
 
         case .userTopic(let item):
             let key = TopicKey(streamId: item.streamId, topic: item.topicName)

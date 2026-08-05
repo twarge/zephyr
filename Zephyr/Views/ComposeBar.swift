@@ -5,38 +5,105 @@ import ZulipContent
 import ZulipModel
 
 /// Per-conversation draft persistence: survives switching conversations AND
-/// app relaunches (UserDefaults-backed; local-only — server draft sync is
-/// deliberately deferred). Drafts are inherently offline-safe: composing
-/// needs no network, and the text stays until sent or cleared.
+/// app relaunches (UserDefaults-backed), and syncs with the server's /drafts
+/// API via DraftSyncEngine — drafts follow you across devices. Composing
+/// needs no network; the text stays until sent or cleared.
 @MainActor
 @Observable
 final class DraftStore {
+    /// One draft: the text, when it was last edited locally, and the
+    /// server-side draft id once synced.
+    struct Entry: Codable, Equatable {
+        var text: String
+        var updatedAt: Date
+        var serverId: Int?
+    }
+
     static let shared = DraftStore()
     /// Observable so the sidebar's Drafts section tracks edits live.
-    private(set) var drafts: [SendDestination: String]
+    /// Keyed per account: server draft ids are realm-scoped.
+    private(set) var byAccount: [UUID: [SendDestination: Entry]]
+    /// Sync hook (set by AppModel): local edits notify the account's engine.
+    @ObservationIgnored var onLocalChange: ((UUID, SendDestination, String) -> Void)?
 
-    private static let key = "composeDrafts"
+    private static let key = "composeDrafts.v2"
+    private static let legacyKey = "composeDrafts"
 
     init() {
         if let data = UserDefaults.standard.data(forKey: Self.key),
-           let saved = try? JSONDecoder().decode([SendDestination: String].self, from: data) {
-            drafts = saved
+           let saved = try? JSONDecoder().decode(
+            [UUID: [SendDestination: Entry]].self, from: data) {
+            byAccount = saved
         } else {
-            drafts = [:]
+            byAccount = [:]
         }
     }
 
-    func draft(for destination: SendDestination) -> String {
-        drafts[destination] ?? ""
+    /// One-time adoption of the pre-sync flat format, attached to the
+    /// last-active account (the best available guess).
+    func migrateLegacy(to accountId: UUID) {
+        guard let data = UserDefaults.standard.data(forKey: Self.legacyKey),
+              let old = try? JSONDecoder().decode([SendDestination: String].self, from: data)
+        else { return }
+        UserDefaults.standard.removeObject(forKey: Self.legacyKey)
+        for (destination, text) in old where !text.isEmpty {
+            if byAccount[accountId]?[destination] == nil {
+                byAccount[accountId, default: [:]][destination] =
+                    Entry(text: text, updatedAt: .now)
+            }
+        }
+        persist()
     }
 
-    func setDraft(_ text: String, for destination: SendDestination) {
-        if text.isEmpty {
-            drafts.removeValue(forKey: destination)
+    func draft(for destination: SendDestination, account: UUID) -> String {
+        byAccount[account]?[destination]?.text ?? ""
+    }
+
+    func entries(account: UUID) -> [SendDestination: Entry] {
+        byAccount[account] ?? [:]
+    }
+
+    func setDraft(_ text: String, for destination: SendDestination, account: UUID) {
+        var entry = byAccount[account]?[destination] ?? Entry(text: "", updatedAt: .now)
+        guard entry.text != text else { return }
+        entry.text = text
+        entry.updatedAt = .now
+        if text.isEmpty && entry.serverId == nil {
+            byAccount[account]?[destination] = nil
         } else {
-            drafts[destination] = text
+            // Emptied-but-synced entries stay (invisible) until the engine
+            // deletes the server draft and removes them.
+            byAccount[account, default: [:]][destination] = entry
         }
-        if let data = try? JSONEncoder().encode(drafts) {
+        persist()
+        onLocalChange?(account, destination, text)
+    }
+
+    // MARK: Sync-engine mutations (no local-change notification)
+
+    func adoptServer(
+        _ text: String, serverId: Int, updatedAt: Date,
+        for destination: SendDestination, account: UUID
+    ) {
+        byAccount[account, default: [:]][destination] =
+            Entry(text: text, updatedAt: updatedAt, serverId: serverId)
+        persist()
+    }
+
+    func setServerId(_ id: Int?, for destination: SendDestination, account: UUID) {
+        guard var entry = byAccount[account]?[destination] else { return }
+        entry.serverId = id
+        byAccount[account]?[destination] = entry
+        persist()
+    }
+
+    func removeEntry(for destination: SendDestination, account: UUID) {
+        byAccount[account]?[destination] = nil
+        persist()
+    }
+
+    private func persist() {
+        if let data = try? JSONEncoder().encode(byAccount) {
             UserDefaults.standard.set(data, forKey: Self.key)
         }
     }
@@ -246,7 +313,7 @@ struct ComposeBar: View {
         }
         .onAppear {
             if case .fixed(let destination, _) = mode {
-                text = DraftStore.shared.draft(for: destination)
+                text = DraftStore.shared.draft(for: destination, account: store.accountId)
             }
             // The keyboard router's r / c shortcuts focus this compose box;
             // media selection blurs it so Space can Quick Look.
@@ -279,7 +346,7 @@ struct ComposeBar: View {
         }
         .onChange(of: text) {
             if case .fixed(let destination, _) = mode {
-                DraftStore.shared.setDraft(text, for: destination)
+                DraftStore.shared.setDraft(text, for: destination, account: store.accountId)
             }
             if let destination {
                 if text.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -611,7 +678,7 @@ struct ComposeBar: View {
         store.send(content, to: destination)
         store.typingStopped(in: destination)
         text = ""
-        DraftStore.shared.setDraft("", for: destination)
+        DraftStore.shared.setDraft("", for: destination, account: store.accountId)
         if UserDefaults.standard.object(forKey: "playSendSound") as? Bool ?? true {
             Platform.playSendSound()
         }

@@ -30,6 +30,8 @@ public struct InitialSnapshot: Decodable, Sendable {
     public var channelFolders: [ChannelFolder]?
     /// Per-topic visibility overrides (muted/unmuted/followed).
     public var userTopics: [UserTopicItem]?
+    /// Server-synced compose drafts.
+    public var drafts: [ServerDraft]?
     /// Custom emoji, keyed by emoji id (reaction `emoji_code` for
     /// `realm_emoji` reactions).
     public var realmEmoji: [String: RealmEmojiItem]?
@@ -63,4 +65,27 @@ public enum TopicVisibilityPolicy: Int, Sendable {
     case muted = 1
     case unmuted = 2
     case followed = 3
+}
+
+/// One server-side draft (the /drafts API). `to` is [streamId] for channel
+/// drafts, recipient user ids for DMs.
+public struct ServerDraft: Codable, Sendable, Equatable {
+    public var id: Int?
+    public var type: String
+    public var to: [Int]
+    public var topic: String
+    public var content: String
+    public var timestamp: Double?
+
+    public init(
+        id: Int? = nil, type: String, to: [Int], topic: String,
+        content: String, timestamp: Double? = nil
+    ) {
+        self.id = id
+        self.type = type
+        self.to = to
+        self.topic = topic
+        self.content = content
+        self.timestamp = timestamp
+    }
 }

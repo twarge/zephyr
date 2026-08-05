@@ -26,12 +26,12 @@ extension ApiConnection {
     public static let subscribedEventTypes = [
         "message", "update_message", "delete_message", "update_message_flags",
         "reaction", "typing", "realm_user", "subscription", "stream",
-        "channel_folder", "realm_emoji", "submessage", "user_topic", "heartbeat",
+        "channel_folder", "realm_emoji", "submessage", "user_topic", "drafts", "heartbeat",
     ]
     public static let fetchedEventTypes = [
         "realm", "realm_user", "stream", "subscription", "message",
         "update_message_flags", "recent_private_conversations", "channel_folders",
-        "realm_emoji", "user_topic",
+        "realm_emoji", "user_topic", "drafts",
     ]
 
     /// POST /register — creates the event queue and returns the initial

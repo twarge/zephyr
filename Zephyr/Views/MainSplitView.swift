@@ -163,6 +163,7 @@ struct MainSplitView: View {
         // by account id) survives; keep the router pointed at the live one.
         .onChange(of: ObjectIdentifier(store)) {
             keys.store = store
+            model.ensureDraftSync(store.accountId)
         }
         .onChange(of: selection) {
             if case .conversation(let key) = selection {

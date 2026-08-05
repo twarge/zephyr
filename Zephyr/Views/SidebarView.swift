@@ -148,9 +148,9 @@ struct SidebarView: View {
     /// lands here; selecting resumes composing (the transcript's compose bar
     /// restores its draft). Only drafts resolvable in this account show.
     private var draftRows: [(destination: SendDestination, key: ConversationKey, text: String)] {
-        DraftStore.shared.drafts
-            .compactMap { destination, text -> (SendDestination, ConversationKey, String)? in
-                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        DraftStore.shared.entries(account: store.accountId)
+            .compactMap { destination, entry -> (SendDestination, ConversationKey, String)? in
+                let trimmed = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else { return nil }
                 let key: ConversationKey
                 switch destination {
@@ -264,7 +264,9 @@ struct SidebarView: View {
                             .tag(Destination.conversation(row.key))
                             .contextMenu {
                                 Button("Discard Draft", role: .destructive) {
-                                    DraftStore.shared.setDraft("", for: row.destination)
+                                    DraftStore.shared.setDraft(
+                                        "", for: row.destination,
+                                        account: store.accountId)
                                 }
                             }
                     }

@@ -66,6 +66,9 @@ final class AppModel {
         // Delegate + categories must exist before any notification response
         // arrives — including one that launches the app.
         NotificationManager.shared.attach(appModel: self)
+        DraftStore.shared.onLocalChange = { [weak self] account, destination, text in
+            self?.draftSyncers[account]?.localEdited(destination, text: text)
+        }
         global.messageRetentionDays = Self.retentionDays(
             forYears: UserDefaults.standard.object(forKey: "messageRetentionYears") as? Int ?? 5)
     }
@@ -89,6 +92,7 @@ final class AppModel {
         // Restore the server that was front last time.
         let active = accounts.first(where: { $0.id == AppStateStore.lastActiveAccount })
             ?? accounts[0]
+        DraftStore.shared.migrateLegacy(to: active.id)
         await load(accountId: active.id)
         // Connect the other servers in the background so their notifications
         // and badge counts stay live while not front.
@@ -96,8 +100,25 @@ final class AppModel {
             Task {
                 _ = try? await global.perAccountStore(for: account.id)
                 await global.stores[account.id]?.seedConversations()
+                self.ensureDraftSync(account.id)
             }
         }
+    }
+
+    // MARK: Server draft sync
+
+    private var draftSyncers: [Account.ID: DraftSyncEngine] = [:]
+    private var draftSyncStores: [Account.ID: ObjectIdentifier] = [:]
+
+    /// (Re)creates the account's draft sync engine when its live store
+    /// appears or is replaced; idempotent per store instance.
+    func ensureDraftSync(_ accountId: Account.ID) {
+        guard global.hasLiveStore(accountId),
+              let store = global.stores[accountId] else { return }
+        let identity = ObjectIdentifier(store)
+        guard draftSyncStores[accountId] != identity else { return }
+        draftSyncStores[accountId] = identity
+        draftSyncers[accountId] = DraftSyncEngine(accountId: accountId, store: store)
     }
 
     func load(accountId: Account.ID) async {
@@ -117,6 +138,7 @@ final class AppModel {
             let store = try await global.perAccountStore(for: accountId)
             phase = .ready(accountId)
             AppStateStore.lastActiveAccount = accountId
+            ensureDraftSync(accountId)
             await store.seedConversations()
         } catch {
             // Offline launch: if the cached snapshot is rendering, keep it
@@ -144,6 +166,7 @@ final class AppModel {
                 try? await Task.sleep(for: .seconds(15))
                 if (try? await self.global.perAccountStore(for: accountId)) != nil {
                     await self.global.stores[accountId]?.seedConversations()
+                    self.ensureDraftSync(accountId)
                     return
                 }
             }
@@ -173,6 +196,7 @@ final class AppModel {
                     guard let self else { return }
                     if (try? await self.global.perAccountStore(for: account.id)) != nil {
                         await self.global.stores[account.id]?.seedConversations()
+                        self.ensureDraftSync(account.id)
                     }
                 }
             }

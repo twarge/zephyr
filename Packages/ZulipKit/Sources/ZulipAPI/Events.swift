@@ -25,6 +25,9 @@ public struct Event: Sendable {
         case subscriptionUpdate(SubscriptionUpdateEvent)
         case userTopic(UserTopicItem)
         case submessage(SubmessageEvent)
+        case draftsAdd([ServerDraft])
+        case draftsUpdate(ServerDraft)
+        case draftsRemove(draftId: Int)
         case streamCreate([ZulipStream])
         case streamDelete(streamIds: [Int])
         case unexpected(type: String, op: String?)
@@ -204,6 +207,12 @@ extension Event: Decodable {
             kind = .userTopic(try UserTopicItem(from: decoder))
         case ("submessage", _):
             kind = .submessage(try SubmessageEvent(from: decoder))
+        case ("drafts", "add"):
+            kind = .draftsAdd(try DraftsEnvelope(from: decoder).drafts)
+        case ("drafts", "update"):
+            kind = .draftsUpdate(try DraftEnvelope(from: decoder).draft)
+        case ("drafts", "remove"):
+            kind = .draftsRemove(draftId: try DraftIdEnvelope(from: decoder).draftId)
         default:
             kind = .unexpected(type: type, op: op)
         }
@@ -217,4 +226,16 @@ public struct SubmessageEvent: Decodable, Sendable {
     public var content: String
     public var messageId: Int
     public var senderId: Int
+}
+
+private struct DraftsEnvelope: Decodable {
+    var drafts: [ServerDraft]
+}
+
+private struct DraftEnvelope: Decodable {
+    var draft: ServerDraft
+}
+
+private struct DraftIdEnvelope: Decodable {
+    var draftId: Int
 }
