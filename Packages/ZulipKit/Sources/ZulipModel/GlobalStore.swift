@@ -3,6 +3,13 @@ import Observation
 import ZulipAPI
 import os
 
+extension Duration {
+    /// Whole milliseconds, for timing logs.
+    var ms: Int {
+        Int(components.seconds) * 1000 + Int(components.attoseconds / 1_000_000_000_000_000)
+    }
+}
+
 /// Account-independent root: the account list plus one `PerAccountStore` +
 /// `UpdateMachine` pair per loaded account. Owns the rebuild path — when a
 /// machine reports queue death, the old store is discarded and a fresh
@@ -148,15 +155,26 @@ public final class GlobalStore: UpdateMachineDelegate {
     /// Builds a provisional store from the last register's cached snapshot,
     /// so launch renders instantly ("stale → live", zulip-mobile
     /// realtime.md). Returns false when there's nothing cached.
-    public func installCachedStore(for accountId: Account.ID) -> Bool {
+    public func installCachedStore(for accountId: Account.ID) async -> Bool {
         guard stores[accountId] == nil,
               let account = accounts.first(where: { $0.id == accountId }),
               let apiKey = try? credentials.apiKey(
                 realmURL: account.realmURL, email: account.email),
-              let url = snapshotCacheURL(for: accountId),
-              let data = try? Data(contentsOf: url),
-              let snapshot = try? ZulipJSON.decoder.decode(InitialSnapshot.self, from: data)
+              let url = snapshotCacheURL(for: accountId)
         else { return false }
+        // The cached register payload runs to many MB on big realms
+        // (~230 ms to decode at 60k users); read + decode off the main
+        // actor so launch stays responsive.
+        let clock = ContinuousClock()
+        let start = clock.now
+        let snapshot = await Task.detached(priority: .userInitiated) {
+            (try? Data(contentsOf: url)).flatMap {
+                try? ZulipJSON.decoder.decode(InitialSnapshot.self, from: $0)
+            }
+        }.value
+        // The live register may have finished while we decoded.
+        guard let snapshot, stores[accountId] == nil else { return false }
+        logger.info("cached snapshot decoded in \((clock.now - start).ms, privacy: .public) ms")
         let connection = ApiConnection(
             realmURL: account.realmURL, email: account.email, apiKey: apiKey,
             transport: transport)
@@ -169,6 +187,7 @@ public final class GlobalStore: UpdateMachineDelegate {
         stores[accountId] = store
         provisionalStores.insert(accountId)
         storeGeneration += 1
+        Task { await store.restoreOfflineCache() }
         return true
     }
 
@@ -190,7 +209,10 @@ public final class GlobalStore: UpdateMachineDelegate {
         connection.featureLevel = featureLevel
         // Desktop clients poll persistently; a long idle timeout (12h, like
         // the mobile apps) makes expiry rare. Expiry is still handled.
+        let clock = ContinuousClock()
+        let registerStart = clock.now
         let result = try await connection.registerQueue(idleQueueTimeoutSeconds: 12 * 60 * 60)
+        logger.info("register round-trip: \((clock.now - registerStart).ms, privacy: .public) ms, payload \(result.rawData.count / 1024) KB")
         let snapshot = result.snapshot
         connection.featureLevel = snapshot.zulipFeatureLevel
         if let cacheURL = snapshotCacheURL(for: accountId) {
@@ -217,6 +239,7 @@ public final class GlobalStore: UpdateMachineDelegate {
         machines[accountId] = machine
         machine.start()
         storeGeneration += 1
+        Task { await store.restoreOfflineCache() }
     }
 
     public func updateMachineNeedsRebuild(_ machine: UpdateMachine, reason: UpdateMachine.RebuildReason) {

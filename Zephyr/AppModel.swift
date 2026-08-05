@@ -149,7 +149,7 @@ final class AppModel {
         }
         // Warm launch: render the cached snapshot instantly while the fresh
         // register runs; the live store replaces it when it arrives.
-        if global.installCachedStore(for: accountId) {
+        if await global.installCachedStore(for: accountId) {
             phase = .ready(accountId)
         } else {
             phase = .loading
@@ -198,7 +198,7 @@ final class AppModel {
     /// launch phase, so other windows keep rendering.
     func ensureStore(_ accountId: Account.ID) async {
         guard !global.hasLiveStore(accountId) else { return }
-        _ = global.installCachedStore(for: accountId)
+        _ = await global.installCachedStore(for: accountId)
         if (try? await global.perAccountStore(for: accountId)) != nil {
             ensureDraftSync(accountId)
             await global.stores[accountId]?.seedConversations()

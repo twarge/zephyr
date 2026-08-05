@@ -131,7 +131,7 @@ struct OfflineTests {
         }
     }
 
-    @Test func legacyJSONCacheMigratesIntoDatabase() throws {
+    @Test func legacyJSONCacheMigratesIntoDatabase() async throws {
         let offline = tempOfflineStore()
         defer { try? FileManager.default.removeItem(at: offline.directory) }
         let legacy = try (1...5).map { try fixtureMessage(id: $0) }
@@ -139,6 +139,7 @@ struct OfflineTests {
             .write(to: offline.directory.appendingPathComponent("messages.json"))
 
         let (store, _) = try makeStore(script: [], offline: offline)
+        await store.restoreOfflineCache()
         #expect(store.messages.count == 5)
         #expect(try store.database?.messageCount() == 5)
         // The JSON file is consumed by the import.
@@ -304,6 +305,7 @@ struct OfflineTests {
             .upsert(try (1...5).map { try fixtureMessage(id: $0) }, selfUserId: 1)
 
         let (store, _) = try makeStore(script: [.networkError], offline: offline)
+        await store.restoreOfflineCache()
         #expect(store.messages.count == 5)
         // Cached history also seeds sidebar recency.
         #expect(store.conversations.conversations.contains {
@@ -326,6 +328,7 @@ struct OfflineTests {
         // Restore loads the newest 50 (ids 11–60); the rest live only on disk.
         let (store, _) = try makeStore(
             script: [.networkError, .networkError], offline: offline)
+        await store.restoreOfflineCache()
         #expect(store.messages.count == 50)
 
         let list = MessageListModel(store: store, narrow: .topic(streamId: 10, topic: "greetings"))
@@ -355,13 +358,14 @@ struct OfflineTests {
         }
     }
 
-    @Test func fetchedCopyBeatsCachedCopy() throws {
+    @Test func fetchedCopyBeatsCachedCopy() async throws {
         let offline = tempOfflineStore()
         defer { try? FileManager.default.removeItem(at: offline.directory) }
         try #require(offline.openDatabase())
             .upsert([try fixtureMessage(id: 1)], selfUserId: 1)
 
         let (store, _) = try makeStore(script: [], offline: offline)
+        await store.restoreOfflineCache()
         var fresh = try fixtureMessage(id: 1)
         fresh.content = "<p>edited while we were away</p>"
         store.reconcileFetchedMessages([fresh])

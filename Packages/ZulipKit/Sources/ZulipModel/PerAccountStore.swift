@@ -151,26 +151,13 @@ public final class PerAccountStore {
             }
         }
 
-        // Offline restore: recent transcripts from the SQLite store (also
-        // seeding sidebar recency), the unsent outbox, and any actions
-        // recorded offline last session.
+        // Offline restore: the unsent outbox and actions recorded offline
+        // last session load here (small files); the SQLite transcript
+        // hydration is `restoreOfflineCache()`, kicked by the GlobalStore
+        // after install — it decodes thousands of payloads and must not
+        // block the main actor.
         if let offline {
             database = offline.openDatabase()
-            if let database {
-                // One-time import of the pre-SQLite JSON cache.
-                let legacy = offline.loadLegacyMessages()
-                if !legacy.isEmpty {
-                    try? database.upsert(legacy, selfUserId: account.userId)
-                    offline.removeLegacyMessages()
-                }
-                let cached = (try? database.recentPerConversation(
-                    OfflineStore.messagesPerConversation)) ?? []
-                for message in cached {
-                    messages[message.id] = message
-                    cachedMessageIds.insert(message.id)
-                }
-                conversations.seed(messages: cached, selfUserId: account.userId)
-            }
             outbox = offline.loadOutbox().map { entry in
                 var restored = entry
                 restored.state = entry.restoredState
@@ -178,6 +165,34 @@ public final class PerAccountStore {
             }
             pendingActions = offline.loadPendingActions()
         }
+    }
+
+    /// Hydrates recent transcripts from the SQLite store (also seeding
+    /// sidebar recency). The read + payload decode (~130 ms for a few
+    /// hundred cached conversations) runs off the main actor; only the
+    /// dictionary merge happens here.
+    public func restoreOfflineCache() async {
+        guard let offline, let database else { return }
+        let selfId = selfUserId
+        let clock = ContinuousClock()
+        let start = clock.now
+        let cached = await Task.detached(priority: .userInitiated) { () -> [Message] in
+            // One-time import of the pre-SQLite JSON cache.
+            let legacy = offline.loadLegacyMessages()
+            if !legacy.isEmpty {
+                try? database.upsert(legacy, selfUserId: selfId)
+                offline.removeLegacyMessages()
+            }
+            return (try? database.recentPerConversation(
+                OfflineStore.messagesPerConversation)) ?? []
+        }.value
+        // Live data may have landed while we read; never clobber it.
+        for message in cached where messages[message.id] == nil {
+            messages[message.id] = message
+            cachedMessageIds.insert(message.id)
+        }
+        conversations.seed(messages: cached, selfUserId: selfId)
+        logger.info("offline restore: \(cached.count) messages in \((clock.now - start).ms, privacy: .public) ms")
     }
 
     // MARK: Message-list fan-out
