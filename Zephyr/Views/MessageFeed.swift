@@ -347,6 +347,15 @@ struct MessageRow: View {
         return cache.content(for: message)
     }
 
+    /// The system selection highlight (follows the user's accent setting).
+    static var selectionColor: Color {
+        #if os(macOS)
+        Color(nsColor: .selectedContentBackgroundColor)
+        #else
+        Color(uiColor: .tintColor)
+        #endif
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             if showHeader {
@@ -422,15 +431,8 @@ struct MessageRow: View {
         .padding(.vertical, 1)
         .padding(.horizontal, 4)
         .background(
-            isKeySelected ? Color.accentColor.opacity(0.08) : .clear,
+            isKeySelected ? Self.selectionColor.opacity(0.14) : .clear,
             in: RoundedRectangle(cornerRadius: 6))
-        .overlay(alignment: .leading) {
-            if isKeySelected {
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Color.accentColor.opacity(0.7))
-                    .frame(width: 3)
-            }
-        }
         // Click/tap selects (like the web app); simultaneous so links and
         // buttons inside the row keep working.
         .simultaneousGesture(TapGesture().onEnded {

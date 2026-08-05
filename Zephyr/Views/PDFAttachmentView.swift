@@ -102,7 +102,7 @@ struct PDFAttachmentView: View {
             .frame(maxWidth: displaySize.width)
         }
         .onTapGesture(count: 2) { openInDefaultViewer() }
-        .onTapGesture {
+        .simultaneousGesture(TapGesture().onEnded {
             #if os(macOS)
             keys?.selectMedia(mediaId) {
                 Task { quickLookURL = await download() }
@@ -110,7 +110,7 @@ struct PDFAttachmentView: View {
             #else
             isSelected = true
             #endif
-        }
+        })
         #if os(iOS)
         .focusable()
         .focused($isSelected)

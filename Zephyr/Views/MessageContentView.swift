@@ -422,7 +422,7 @@ private struct MediaAttachmentChip: View {
                 }
             }
         }
-        .onTapGesture {
+        .simultaneousGesture(TapGesture().onEnded {
             #if os(macOS)
             keys?.selectMedia(mediaId) {
                 Task { quickLookURL = await download() }
@@ -430,7 +430,7 @@ private struct MediaAttachmentChip: View {
             #else
             isSelected = true
             #endif
-        }
+        })
         #if os(iOS)
         .focusable()
         .focused($isSelected)
@@ -668,13 +668,15 @@ private struct MessageImageView: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(Color.accentColor, lineWidth: showsSelection ? 3 : 0))
         .onTapGesture(count: 2) { openInDefaultViewer() }
-        .onTapGesture {
+        // Simultaneous: fires on the first click immediately — a plain tap
+        // gesture would wait out the double-click window.
+        .simultaneousGesture(TapGesture().onEnded {
             #if os(macOS)
             keys?.selectMedia(mediaId) { quickLook() }
             #else
             isSelected = true
             #endif
-        }
+        })
         #if os(iOS)
         .focusable()
         .focused($isSelected)
