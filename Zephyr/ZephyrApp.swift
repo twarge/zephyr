@@ -30,10 +30,34 @@ struct ZephyrApp: App {
     }
 }
 
+/// ⌘1…⌘9 switch the key window's server (ordered as in Settings →
+/// Accounts) — other windows keep showing theirs. Disabled when no main
+/// window is focused.
+struct AccountSwitchCommands: Commands {
+    let model: AppModel
+    @FocusedValue(\.windowAccount) private var windowAccount
+
+    var body: some Commands {
+        CommandGroup(after: .sidebar) {
+            Divider()
+            ForEach(
+                Array(model.global.accounts.prefix(9).enumerated()), id: \.element.id
+            ) { index, account in
+                Button(account.realmName ?? account.realmURL.host() ?? "Server \(index + 1)") {
+                    windowAccount?.wrappedValue = account.id
+                }
+                .keyboardShortcut(
+                    KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                .disabled(windowAccount == nil)
+            }
+        }
+    }
+}
+
 extension ZephyrApp {
-    /// ⌘1…⌘9 switch servers, in the order set in Settings → Accounts.
     @CommandsBuilder
     var accountCommands: some Commands {
+        AccountSwitchCommands(model: model)
         CommandGroup(replacing: .newItem) {
             Button("New Conversation") {
                 model.pendingNewConversation = true
@@ -53,18 +77,6 @@ extension ZephyrApp {
                 .keyboardShortcut("i", modifiers: .command)
             Button("Link") { model.pendingFormat = .link }
                 .keyboardShortcut("k", modifiers: .command)
-        }
-        CommandGroup(after: .sidebar) {
-            Divider()
-            ForEach(
-                Array(model.global.accounts.prefix(9).enumerated()), id: \.element.id
-            ) { index, account in
-                Button(account.realmName ?? account.realmURL.host() ?? "Server \(index + 1)") {
-                    Task { await model.switchAccount(account.id) }
-                }
-                .keyboardShortcut(
-                    KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
-            }
         }
     }
 }
@@ -110,16 +122,9 @@ struct RootView: View {
                 }
                 .padding(40)
                 .frame(minWidth: 480, minHeight: 340)
-            case .ready(let accountId):
-                if let store = model.global.stores[accountId] {
-                    // Per-account view state (selection, sidebar expansion)
-                    // re-initializes from persistence on server switch.
-                    MainSplitView(store: store)
-                        .id(accountId)
-                } else {
-                    ProgressView()
-                        .frame(minWidth: 400, minHeight: 300)
-                }
+            case .ready:
+                // Each window picks (and restores) its own server.
+                AccountWindowView()
             }
         }
         .task { await model.start() }

@@ -120,10 +120,6 @@ private struct AccountsSettings: View {
                         } else {
                             Color.clear.frame(width: 30, height: 1)
                         }
-                        Image(systemName: account.id == model.activeAccountId
-                            ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(account.id == model.activeAccountId
-                                ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
                         VStack(alignment: .leading, spacing: 1) {
                             Text(account.realmName ?? account.realmURL.host() ?? "?")
                                 .font(.body.weight(.medium))
@@ -132,12 +128,6 @@ private struct AccountsSettings: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        if account.id != model.activeAccountId {
-                            Button("Switch") {
-                                Task { await model.switchAccount(account.id) }
-                            }
-                            .controlSize(.small)
-                        }
                         Button("Sign Out") {
                             Task { await model.signOut(accountId: account.id) }
                         }
@@ -150,7 +140,7 @@ private struct AccountsSettings: View {
                 }
             }
             .frame(minHeight: 160)
-            Text("Drag to reorder — the order sets the ⌘1…⌘9 switching shortcuts.")
+            Text("Drag to reorder — ⌘1…⌘9 show a server in the front window. Every window can show a different server.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Button("Add Account…") {

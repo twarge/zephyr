@@ -10,24 +10,17 @@ struct DetachedWindow: Hashable, Codable {
 }
 
 #if os(macOS)
-/// Resolves the account's live store, then shows an ordinary MainSplitView —
-/// a full app window, just starting with the sidebar closed.
+/// An ordinary account window pinned to the double-clicked destination —
+/// full app window, just starting with the sidebar closed. Its server can
+/// be switched like any other window's.
 struct DetachedRootView: View {
-    @Environment(AppModel.self) private var model
     let window: DetachedWindow
 
     var body: some View {
-        if let store = model.global.stores[window.accountId] {
-            MainSplitView(
-                store: store, initialSelection: window.destination,
-                startsWithSidebarClosed: true)
-                .id(window.accountId)
-        } else {
-            ContentUnavailableView(
-                "Not Connected", systemImage: "wifi.exclamationmark",
-                description: Text("This account isn't loaded."))
-                .frame(minWidth: 420, minHeight: 360)
-        }
+        AccountWindowView(
+            defaultAccount: window.accountId,
+            initialSelection: window.destination,
+            startsWithSidebarClosed: true)
     }
 }
 #endif

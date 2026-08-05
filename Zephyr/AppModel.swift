@@ -12,6 +12,20 @@ enum ComposeFormat {
     case link
 }
 
+/// A navigation request (notification click), scoped to its account: the
+/// key window hops servers first if it shows a different one.
+struct PendingDestination: Equatable {
+    var account: Account.ID
+    var destination: Destination
+}
+
+/// The conversation being read in some window; banners for it are
+/// suppressed while the app is active.
+struct ActiveConversation: Equatable {
+    var account: Account.ID
+    var key: ConversationKey
+}
+
 /// App-level state: owns the GlobalStore (real backends: accounts file +
 /// Keychain), the launch/login phase, and notification routing.
 @MainActor
@@ -21,8 +35,10 @@ final class AppModel {
         case launching
         case needsAccount
         case loading
-        /// Resolve the store via `global.stores[id]` at render time — the
-        /// GlobalStore replaces stores on event-queue rebuild.
+        /// At least one account is up; the payload is only the launch
+        /// account (each window picks its own server). Resolve stores via
+        /// `global.stores[id]` at render time — the GlobalStore replaces
+        /// them on event-queue rebuild.
         case ready(Account.ID)
         case failed(String)
     }
@@ -33,15 +49,19 @@ final class AppModel {
 
     /// Set by MainSplitView; used to suppress banners for the conversation
     /// being read.
-    var activeConversation: ConversationKey?
-    /// Set by notification clicks; MainSplitView consumes it as navigation.
-    var pendingDestination: Destination?
+    var activeConversation: ActiveConversation?
+    /// Set by notification clicks; the key window consumes it as navigation
+    /// (switching servers first if needed).
+    var pendingDestination: PendingDestination?
+    /// Set after adding an account: the first window to see the request
+    /// switches to it.
+    var pendingAccountFocus: Account.ID?
     /// Set by File → New Conversation (⌘N); MainSplitView opens the sheet.
     var pendingNewConversation = false
     /// Set by the Format menu; the key window's compose applies it.
     var pendingFormat: ComposeFormat?
 
-    var activeAccountId: Account.ID? {
+    private var defaultAccountId: Account.ID? {
         if case .ready(let id) = phase { return id }
         return nil
     }
@@ -173,6 +193,20 @@ final class AppModel {
         }
     }
 
+    /// Brings an account's store up for a window that wants to show it —
+    /// cached snapshot first, live register after — without touching the
+    /// launch phase, so other windows keep rendering.
+    func ensureStore(_ accountId: Account.ID) async {
+        guard !global.hasLiveStore(accountId) else { return }
+        _ = global.installCachedStore(for: accountId)
+        if (try? await global.perAccountStore(for: accountId)) != nil {
+            ensureDraftSync(accountId)
+            await global.stores[accountId]?.seedConversations()
+        } else {
+            scheduleReconnect(accountId)
+        }
+    }
+
     func retry() async {
         guard let account = global.accounts.first else {
             phase = .needsAccount
@@ -191,7 +225,7 @@ final class AppModel {
         for account in global.accounts {
             if global.hasLiveStore(account.id) {
                 global.stores[account.id]?.flushPending()
-            } else if global.stores[account.id] != nil || activeAccountId == account.id {
+            } else {
                 Task { [weak self] in
                     guard let self else { return }
                     if (try? await self.global.perAccountStore(for: account.id)) != nil {
@@ -229,39 +263,40 @@ final class AppModel {
         }
     }
 
-    func switchAccount(_ accountId: Account.ID) async {
-        guard accountId != activeAccountId else { return }
-        await load(accountId: accountId)
-    }
-
-    /// Called by LoginView with a validated API key; becomes active.
+    /// Called by LoginView with a validated API key. During launch/login it
+    /// drives the phase; afterwards it only connects the account and asks a
+    /// window to reveal it.
     func addAccount(realm: URL, email: String, apiKey: String, userId: Int, realmName: String?) async {
         do {
             let account = try global.addAccount(
                 realmURL: realm, email: email, apiKey: apiKey,
                 userId: userId, realmName: realmName)
             NotificationManager.shared.setup(appModel: self)
-            await load(accountId: account.id)
+            if case .ready = phase {
+                await ensureStore(account.id)
+                pendingAccountFocus = account.id
+            } else {
+                await load(accountId: account.id)
+            }
         } catch {
             phase = .failed(error.localizedDescription)
         }
     }
 
-    /// Signs out one account; switches to another or back to login.
+    /// Signs out one account; windows showing it fall back on their own.
     func signOut(accountId: Account.ID) async {
         try? await global.removeAccount(accountId)
-        if activeAccountId == accountId || global.accounts.isEmpty {
-            if let next = global.accounts.first {
-                await load(accountId: next.id)
-            } else {
-                phase = .needsAccount
-            }
+        if global.accounts.isEmpty {
+            phase = .needsAccount
+        } else if defaultAccountId == accountId, let next = global.accounts.first {
+            phase = .ready(next.id)
         }
     }
 
+    /// The failure screen's escape hatch (no account is renderable there).
     func signOutCurrent() async {
-        if let activeAccountId {
-            await signOut(accountId: activeAccountId)
+        if let defaultAccountId {
+            await signOut(accountId: defaultAccountId)
         } else {
             for account in global.accounts {
                 try? await global.removeAccount(account.id)

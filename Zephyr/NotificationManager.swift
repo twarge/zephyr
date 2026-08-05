@@ -80,7 +80,8 @@ final class NotificationManager: NSObject {
         guard let key = Unreads.conversationKey(for: message, selfUserId: store.selfUserId)
         else { return }
         // No banner for the conversation you're actively reading.
-        if Platform.isActive, appModel?.activeConversation == key {
+        if Platform.isActive,
+           appModel?.activeConversation == ActiveConversation(account: accountId, key: key) {
             return
         }
 
@@ -176,7 +177,8 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             }
         default:
             // Clicking the banner opens the conversation.
-            appModel.pendingDestination = .conversation(key)
+            appModel.pendingDestination = PendingDestination(
+                account: accountId, destination: .conversation(key))
             Platform.activate()
         }
     }

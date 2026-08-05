@@ -11,6 +11,9 @@ struct SidebarView: View {
     let store: PerAccountStore
     @Bindable var search: SidebarSearchModel
     @Binding var selection: Destination?
+    /// The enclosing window's account: the server switcher and ⌘1…⌘9
+    /// change only this window.
+    @Binding var selectedAccount: Account.ID?
     var startDirectMessage: (() -> Void)?
     /// False while the sidebar column is collapsed: its toolbar buttons
     /// would otherwise migrate into the main toolbar.
@@ -29,12 +32,15 @@ struct SidebarView: View {
 
     init(
         store: PerAccountStore, search: SidebarSearchModel,
-        selection: Binding<Destination?>, startDirectMessage: (() -> Void)? = nil,
+        selection: Binding<Destination?>,
+        selectedAccount: Binding<Account.ID?>,
+        startDirectMessage: (() -> Void)? = nil,
         showsToolbarControls: Bool = true
     ) {
         self.store = store
         self.search = search
         _selection = selection
+        _selectedAccount = selectedAccount
         self.startDirectMessage = startDirectMessage
         self.showsToolbarControls = showsToolbarControls
         _collapsedSections = State(
@@ -384,7 +390,7 @@ struct SidebarView: View {
                             id: \.element.id
                         ) { index, account in
                             Button {
-                                Task { await model.switchAccount(account.id) }
+                                selectedAccount = account.id
                             } label: {
                                 if account.id == store.accountId {
                                     Label(serverLabel(account), systemImage: "checkmark")
@@ -404,7 +410,7 @@ struct SidebarView: View {
                                 .font(.caption2)
                         }
                     }
-                    .help("Switch server (⌘1–⌘\(min(model.global.accounts.count, 9)))")
+                    .help("Show another server in this window (⌘1–⌘\(min(model.global.accounts.count, 9)))")
                 }
             }
             if showsToolbarControls {
@@ -431,9 +437,9 @@ struct SidebarView: View {
                 Menu {
                     ForEach(model.global.accounts) { account in
                         Button {
-                            Task { await model.switchAccount(account.id) }
+                            selectedAccount = account.id
                         } label: {
-                            if account.id == model.activeAccountId {
+                            if account.id == store.accountId {
                                 Label(accountLabel(account), systemImage: "checkmark")
                             } else {
                                 Text(accountLabel(account))
@@ -450,8 +456,8 @@ struct SidebarView: View {
                         showSettings = true
                     }
                     #endif
-                    Button("Sign Out…") {
-                        Task { await model.signOutCurrent() }
+                    Button("Sign Out of This Server…") {
+                        Task { await model.signOut(accountId: store.accountId) }
                     }
                 } label: {
                     Image(systemName: "person.crop.circle")

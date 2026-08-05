@@ -20,6 +20,9 @@ enum Destination: Hashable, Codable {
 struct MainSplitView: View {
     @Environment(AppModel.self) private var model
     let store: PerAccountStore
+    /// The enclosing window's account — the sidebar's server switcher
+    /// writes here, changing only this window.
+    @Binding var selectedAccount: Account.ID?
     @State private var selection: Destination?
     @State private var search: SidebarSearchModel
     @State private var newConversation: NewConversationMode?
@@ -43,10 +46,12 @@ struct MainSplitView: View {
     /// windows (double-clicked sidebar entries): same window, sidebar
     /// collapsed until reopened.
     init(
-        store: PerAccountStore, initialSelection: Destination? = nil,
+        store: PerAccountStore, selectedAccount: Binding<Account.ID?>,
+        initialSelection: Destination? = nil,
         startsWithSidebarClosed: Bool = false
     ) {
         self.store = store
+        _selectedAccount = selectedAccount
         _search = State(initialValue: SidebarSearchModel(store: store))
         _selection = State(
             initialValue: initialSelection ?? AppStateStore.selection(for: store.accountId))
@@ -58,6 +63,7 @@ struct MainSplitView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
                 store: store, search: search, selection: $selection,
+                selectedAccount: $selectedAccount,
                 startDirectMessage: { newConversation = .directMessage(initialUsers: []) },
                 showsToolbarControls: columnVisibility != .detailOnly)
                 .navigationSplitViewColumnWidth(min: 156, ideal: 156, max: 400)
@@ -170,6 +176,9 @@ struct MainSplitView: View {
             #if os(macOS)
             keys.installMonitor()
             #endif
+            // A notification click that hopped this window to another
+            // server lands here after the account switch.
+            consumePendingDestination()
         }
         .onDisappear {
             #if os(macOS)
@@ -184,8 +193,9 @@ struct MainSplitView: View {
         }
         .onChange(of: selection) {
             if case .conversation(let key) = selection {
-                model.activeConversation = key
-            } else {
+                model.activeConversation =
+                    ActiveConversation(account: store.accountId, key: key)
+            } else if model.activeConversation?.account == store.accountId {
                 model.activeConversation = nil
             }
             keys.currentDestination = selection
@@ -202,10 +212,7 @@ struct MainSplitView: View {
             }
         }
         .onChange(of: model.pendingDestination) {
-            if let destination = model.pendingDestination {
-                selection = destination
-                model.pendingDestination = nil
-            }
+            consumePendingDestination()
         }
         .onChange(of: badgeCount, initial: true) {
             Platform.setAppBadge(badgeCount)
@@ -236,6 +243,19 @@ struct MainSplitView: View {
                 total
             }
         }
+    }
+
+    /// Notification-click navigation: only for this window's account, and
+    /// only in the key window (unless no window is key — a click that
+    /// arrives while the app is inactive — where the first taker wins).
+    private func consumePendingDestination() {
+        guard let pending = model.pendingDestination,
+              pending.account == store.accountId else { return }
+        #if os(macOS)
+        if keys.hostWindow?.isKeyWindow == false && NSApp.keyWindow != nil { return }
+        #endif
+        model.pendingDestination = nil
+        selection = pending.destination
     }
 
     #if os(iOS)
