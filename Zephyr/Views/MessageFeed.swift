@@ -102,14 +102,30 @@ struct MessageFeedList: View {
         return out
     }
 
+    /// Empty enough to replace the transcript with a centered placeholder
+    /// (a typing indicator still counts as content).
+    private var isEmptyFeed: Bool {
+        model.messages.isEmpty && outboxMessages.isEmpty
+            && (typistNames?.isEmpty ?? true)
+    }
+
     var body: some View {
-        ScrollViewReader { proxy in
-            feedScrollView
-                .onChange(of: keys.selectedMessageId) { _, newId in
-                    guard let newId else { return }
-                    // nil anchor: scroll the minimum needed for visibility.
-                    proxy.scrollTo("msg-\(newId)", anchor: nil)
+        Group {
+            if isEmptyFeed {
+                // Outside the bottom-anchored scroll view, so it centers in
+                // the full height instead of hugging the bottom.
+                ContentUnavailableView("No Messages", systemImage: "bubble")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollViewReader { proxy in
+                    feedScrollView
+                        .onChange(of: keys.selectedMessageId) { _, newId in
+                            guard let newId else { return }
+                            // nil anchor: scroll the minimum needed for visibility.
+                            proxy.scrollTo("msg-\(newId)", anchor: nil)
+                        }
                 }
+            }
         }
         .onAppear {
             keys.activeFeed = model
@@ -172,10 +188,6 @@ struct MessageFeedList: View {
                     .font(.callout)
                     .padding(.vertical, 6)
                     .padding(.leading, 42)
-                }
-                if model.messages.isEmpty && outboxMessages.isEmpty {
-                    ContentUnavailableView("No Messages", systemImage: "bubble")
-                        .padding(.top, 60)
                 }
             }
             .scrollTargetLayout()
