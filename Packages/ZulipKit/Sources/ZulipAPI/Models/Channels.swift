@@ -33,6 +33,8 @@ public struct Subscription: Decodable, Sendable, Hashable, Identifiable {
     public var isMuted: Bool?
     public var pinToTop: Bool?
     public var inviteOnly: Bool?
+    /// Per-channel "notify for all messages" (nil = realm default off).
+    public var desktopNotifications: Bool?
 
     public var id: Int { streamId }
     public var muted: Bool { isMuted ?? false }

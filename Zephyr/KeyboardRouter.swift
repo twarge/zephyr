@@ -108,6 +108,9 @@ final class KeyboardRouter {
         insertIntoCompose = nil
     }
 
+    /// Format-menu actions (⌘B/⌘I/⌘K) applied by the visible compose bar.
+    @ObservationIgnored var applyFormat: ((ComposeFormat) -> Void)?
+
     private var selectedMessage: Message? {
         guard let selectedMessageId else { return nil }
         return store?.messages[selectedMessageId]

@@ -46,6 +46,14 @@ extension ZephyrApp {
             .keyboardShortcut("n", modifiers: [.command, .shift])
             #endif
         }
+        CommandMenu("Format") {
+            Button("Bold") { model.pendingFormat = .bold }
+                .keyboardShortcut("b", modifiers: .command)
+            Button("Italic") { model.pendingFormat = .italic }
+                .keyboardShortcut("i", modifiers: .command)
+            Button("Link") { model.pendingFormat = .link }
+                .keyboardShortcut("k", modifiers: .command)
+        }
         CommandGroup(after: .sidebar) {
             Divider()
             ForEach(

@@ -610,6 +610,80 @@ private struct SpoilerView: View {
 /// An inline image: thumbnail loaded with the connection's auth header.
 /// Single click selects (accent ring); Space quick-looks the full-size
 /// original; double-click opens it in the default viewer (Preview).
+/// Multi-frame image (GIF, animated WebP/PNG) decoded for native playback.
+struct AnimatedFrames {
+    let images: [CGImage]
+    let delays: [Double]
+    let totalDuration: Double
+
+    static func load(_ data: Data) -> AnimatedFrames? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetCount(source) > 1 else { return nil }
+        var images: [CGImage] = []
+        var delays: [Double] = []
+        for index in 0..<CGImageSourceGetCount(source) {
+            guard let cgImage = CGImageSourceCreateImageAtIndex(source, index, nil)
+            else { continue }
+            images.append(cgImage)
+            delays.append(Self.delay(source, index))
+        }
+        guard images.count > 1 else { return nil }
+        return AnimatedFrames(
+            images: images, delays: delays,
+            totalDuration: max(delays.reduce(0, +), 0.1))
+    }
+
+    private static func delay(_ source: CGImageSource, _ index: Int) -> Double {
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil)
+            as? [CFString: Any]
+        else { return 0.1 }
+        for dictionaryKey in [
+            kCGImagePropertyGIFDictionary, kCGImagePropertyWebPDictionary,
+            kCGImagePropertyPNGDictionary,
+        ] {
+            guard let sub = properties[dictionaryKey] as? [CFString: Any] else { continue }
+            let value = sub[kCGImagePropertyGIFUnclampedDelayTime]
+                ?? sub[kCGImagePropertyWebPUnclampedDelayTime]
+                ?? sub[kCGImagePropertyAPNGUnclampedDelayTime]
+                ?? sub[kCGImagePropertyGIFDelayTime]
+                ?? sub[kCGImagePropertyWebPDelayTime]
+                ?? sub[kCGImagePropertyAPNGDelayTime]
+            if let delay = value as? Double, delay > 0.011 {
+                return delay
+            }
+            return 0.1
+        }
+        return 0.1
+    }
+
+    func frame(at time: Double) -> CGImage {
+        var remaining = time.truncatingRemainder(dividingBy: totalDuration)
+        for (index, delay) in delays.enumerated() {
+            if remaining < delay {
+                return images[index]
+            }
+            remaining -= delay
+        }
+        return images[0]
+    }
+}
+
+/// Plays an AnimatedFrames sequence, honoring per-frame delays.
+struct AnimatedImageView: View {
+    let frames: AnimatedFrames
+    private let start = Date()
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            Image(
+                decorative: frames.frame(at: context.date.timeIntervalSince(start)),
+                scale: 1)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+        }
+    }
+}
+
 private struct MessageImageView: View {
     let node: ImageNode
     let connection: ApiConnection
@@ -618,6 +692,7 @@ private struct MessageImageView: View {
     @Environment(FeedQuickLook.self) private var feedQuickLook: FeedQuickLook?
     @Environment(KeyboardRouter.self) private var keys: KeyboardRouter?
     @State private var image: PlatformImage?
+    @State private var animation: AnimatedFrames?
     @State private var localFileURL: URL?
     @State private var quickLookURL: URL?
     @FocusState private var isSelected: Bool
@@ -649,7 +724,9 @@ private struct MessageImageView: View {
 
     var body: some View {
         Group {
-            if let image {
+            if let animation {
+                AnimatedImageView(frames: animation)
+            } else if let image {
                 Image(platform: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -700,6 +777,7 @@ private struct MessageImageView: View {
            let (data, _) = await fetchMedia(path: node.src, connection: connection),
            let decoded = PlatformImage(data: data) {
             image = decoded
+            animation = AnimatedFrames.load(data)
             return
         }
         // Thumbnail missing or undecodable: fall back to the original.
@@ -709,6 +787,7 @@ private struct MessageImageView: View {
            let (data, _) = await fetchMedia(path: original, connection: connection),
            let decoded = PlatformImage(data: data) {
             image = decoded
+            animation = AnimatedFrames.load(data)
         }
     }
 

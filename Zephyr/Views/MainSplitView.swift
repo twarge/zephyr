@@ -122,6 +122,14 @@ struct MainSplitView: View {
         .sheet(isPresented: Bindable(keys).showHelp) {
             ShortcutsHelpView()
         }
+        .onChange(of: model.pendingFormat) {
+            guard let format = model.pendingFormat else { return }
+            #if os(macOS)
+            guard keys.hostWindow?.isKeyWindow != false else { return }
+            #endif
+            model.pendingFormat = nil
+            keys.applyFormat?(format)
+        }
         // File → New Conversation (⌘N) arrives via the app commands; with
         // several main windows open, only the key window's copy takes it.
         .onChange(of: model.pendingNewConversation) {

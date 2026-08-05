@@ -4,6 +4,14 @@ import SwiftUI
 import ZulipAPI
 import ZulipModel
 
+/// Markdown formatting actions from the Format menu, routed to the
+/// key window's compose bar.
+enum ComposeFormat {
+    case bold
+    case italic
+    case link
+}
+
 /// App-level state: owns the GlobalStore (real backends: accounts file +
 /// Keychain), the launch/login phase, and notification routing.
 @MainActor
@@ -30,6 +38,8 @@ final class AppModel {
     var pendingDestination: Destination?
     /// Set by File → New Conversation (⌘N); MainSplitView opens the sheet.
     var pendingNewConversation = false
+    /// Set by the Format menu; the key window's compose applies it.
+    var pendingFormat: ComposeFormat?
 
     var activeAccountId: Account.ID? {
         if case .ready(let id) = phase { return id }

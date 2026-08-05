@@ -97,6 +97,7 @@ struct ComposeBar: View {
     @AppStorage("composeExpanded") private var expanded = false
     @AppStorage("composeEditorHeight") private var editorHeight = 140.0
     @State private var dragBaseHeight: CGFloat?
+    @State private var editorSelection: TextSelection?
     @State private var showPreview = false
     @State private var previewContent: MessageContent?
     @State private var previewTask: Task<Void, Never>?
@@ -259,6 +260,10 @@ struct ComposeBar: View {
                 }
                 focus.wrappedValue = true
             }
+            // Format menu (⌘B/⌘I/⌘K) wraps the selection or appends.
+            keys.applyFormat = { format in
+                applyFormat(format)
+            }
             // Quote-and-reply appends to the draft.
             keys.registerComposeInsertion(owner: uploadOwnerId) { snippet in
                 if text.isEmpty {
@@ -336,7 +341,7 @@ struct ComposeBar: View {
                             .padding(.leading, 10)
                             .allowsHitTesting(false)
                     }
-                    TextEditor(text: $text)
+                    TextEditor(text: $text, selection: $editorSelection)
                         .scrollContentBackground(.hidden)
                         .autocorrectionDisabled(false)
                         .font(.body)
@@ -385,6 +390,26 @@ struct ComposeBar: View {
                 html: html.isEmpty
                     ? "<p><em>Preview unavailable (offline?)</em></p>" : html)
         }
+    }
+
+    /// ⌘B/⌘I/⌘K: wraps the long-form editor's selection in markdown, or
+    /// appends an empty pair when nothing is selected (compact field has no
+    /// selection API).
+    private func applyFormat(_ format: ComposeFormat) {
+        let wrappers: (String, String)
+        switch format {
+        case .bold: wrappers = ("**", "**")
+        case .italic: wrappers = ("*", "*")
+        case .link: wrappers = ("[", "](url)")
+        }
+        if expanded, !showPreview, let selection = editorSelection,
+           case .selection(let range) = selection.indices, !range.isEmpty {
+            let selected = String(text[range])
+            text.replaceSubrange(range, with: wrappers.0 + selected + wrappers.1)
+        } else {
+            text += wrappers.0 + wrappers.1
+        }
+        messageFocused = true
     }
 
     // MARK: Suggestions

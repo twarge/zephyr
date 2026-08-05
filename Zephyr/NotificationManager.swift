@@ -64,8 +64,18 @@ final class NotificationManager: NSObject {
             "mentioned", "wildcard_mentioned", "stream_wildcard_mentioned",
             "topic_wildcard_mentioned",
         ])
-        // Policy (v1): every DM, and channel messages that mention you.
-        guard message.type == .private || isMention else { return }
+        // Policy: every DM, channel messages that mention you, and all
+        // messages in channels with per-channel notifications on — except
+        // muted topics.
+        let channelNotifies = message.streamId.map {
+            store.subscriptions[$0]?.desktopNotifications == true
+        } ?? false
+        guard message.type == .private || isMention || channelNotifies else { return }
+        if let streamId = message.streamId,
+           store.topicVisibility(streamId: streamId, topic: message.subject) == .muted,
+           !isMention {
+            return
+        }
 
         guard let key = Unreads.conversationKey(for: message, selfUserId: store.selfUserId)
         else { return }
