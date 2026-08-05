@@ -15,8 +15,9 @@ struct TopicAutocompleteField: View {
     var prompt = "Topic"
     /// ComposeBar's capsule look; sheets use .roundedBorder.
     var plainStyle = false
-    /// Card above the field (compose bar sits at the window bottom) or
-    /// below it (sheets, where above would clip at the window edge).
+    /// In-layout card above the field (the compose bar grows upward — an
+    /// overlay floated over neighboring rows) vs. an overlay dropping
+    /// below the field (sheets, where growth would jump the layout).
     var dropUp = false
     /// Return with no selection, and every accept, land here (e.g. focus
     /// the message field).
@@ -49,15 +50,24 @@ struct TopicAutocompleteField: View {
     }
 
     var body: some View {
-        styledField
-            .overlay(alignment: dropUp ? .topLeading : .bottomLeading) {
-                if !suggestions.isEmpty {
-                    card
-                        .alignmentGuide(dropUp ? .top : .bottom) { d in
-                            dropUp ? d[.bottom] + 6 : d[.top] - 6
-                        }
+        Group {
+            if dropUp {
+                VStack(alignment: .leading, spacing: 6) {
+                    if !suggestions.isEmpty {
+                        card
+                    }
+                    styledField
                 }
+            } else {
+                styledField
+                    .overlay(alignment: .bottomLeading) {
+                        if !suggestions.isEmpty {
+                            card
+                                .alignmentGuide(.bottom) { d in d[.top] - 6 }
+                        }
+                    }
             }
+        }
             .onChange(of: topic) {
                 if accepting {
                     accepting = false
