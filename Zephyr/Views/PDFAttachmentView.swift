@@ -43,6 +43,18 @@ struct PDFAttachmentView: View {
 
     private var mediaId: String { "pdf:\(href)" }
 
+    /// The card takes the first page's real aspect ratio (the rendered
+    /// thumbnail preserves it), fit within bounds; portrait-ish placeholder
+    /// until the page loads.
+    private var displaySize: CGSize {
+        guard let thumbnail, thumbnail.size.width > 0, thumbnail.size.height > 0 else {
+            return CGSize(width: 200, height: 260)
+        }
+        let scale = min(300 / thumbnail.size.width, 300 / thumbnail.size.height)
+        return CGSize(
+            width: thumbnail.size.width * scale, height: thumbnail.size.height * scale)
+    }
+
     private var showsSelection: Bool {
         #if os(macOS)
         keys?.selectedMediaId == mediaId
@@ -67,7 +79,7 @@ struct PDFAttachmentView: View {
                     }
                 }
             }
-            .frame(width: 200, height: 260)
+            .frame(width: displaySize.width, height: displaySize.height)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
@@ -87,7 +99,7 @@ struct PDFAttachmentView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(maxWidth: 200)
+            .frame(maxWidth: displaySize.width)
         }
         .onTapGesture(count: 2) { openInDefaultViewer() }
         .onTapGesture {
