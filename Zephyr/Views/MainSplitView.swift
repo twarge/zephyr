@@ -26,6 +26,15 @@ struct MainSplitView: View {
     @State private var dropTargeted = false
     @State private var columnVisibility = NavigationSplitViewVisibility.automatic
     @State private var keys = KeyboardRouter()
+    /// Per-window navigation state, restored with the window by the system
+    /// (frames and window existence restore automatically; this brings the
+    /// in-window destination along).
+    @SceneStorage("windowDestination") private var storedDestination = ""
+
+    private struct StoredWindowState: Codable {
+        var account: UUID
+        var destination: Destination
+    }
     #if os(iOS)
     @FocusState private var detailFocused: Bool
     #endif
@@ -146,6 +155,14 @@ struct MainSplitView: View {
         })
         #endif
         .onAppear {
+            // A system-restored window resumes at its last destination
+            // (fresh windows have no stored state and keep their initial
+            // selection).
+            if let data = storedDestination.data(using: .utf8),
+               let stored = try? JSONDecoder().decode(StoredWindowState.self, from: data),
+               stored.account == store.accountId {
+                selection = stored.destination
+            }
             keys.store = store
             keys.currentDestination = selection
             keys.navigate = { destination in selection = destination }
@@ -177,6 +194,12 @@ struct MainSplitView: View {
             detailFocused = true
             #endif
             AppStateStore.setSelection(selection, for: store.accountId)
+            if let selection,
+               let data = try? JSONEncoder().encode(
+                StoredWindowState(account: store.accountId, destination: selection)),
+               let string = String(data: data, encoding: .utf8) {
+                storedDestination = string
+            }
         }
         .onChange(of: model.pendingDestination) {
             if let destination = model.pendingDestination {
