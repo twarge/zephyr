@@ -40,6 +40,29 @@ struct MessageFeedList: View {
     @State private var pendingReadIds: Set<Int> = []
     @State private var readFlushTask: Task<Void, Never>?
 
+    init(
+        store: PerAccountStore, model: MessageListModel, cache: MessageContentCache,
+        headerMode: HeaderMode = .hidden, useMatchHighlights: Bool = false,
+        onHeaderTap: ((ConversationKey) -> Void)? = nil,
+        onNewMessages: (() -> Void)? = nil,
+        marksReadOnView: Bool = false
+    ) {
+        self.store = store
+        self.model = model
+        self.cache = cache
+        self.headerMode = headerMode
+        self.useMatchHighlights = useMatchHighlights
+        self.onHeaderTap = onHeaderTap
+        self.onNewMessages = onNewMessages
+        self.marksReadOnView = marksReadOnView
+        // The scroll target must be known BEFORE the first layout pass:
+        // an onAppear write lands after it, re-targeting the lazy stack
+        // mid-estimation — which could park the viewport in unrealized
+        // space (a blank transcript until a resize forced re-layout).
+        _anchorId = State(initialValue:
+            model.firstUnreadMarkerId != nil ? "unread-marker" : Self.bottomAnchorId)
+    }
+
     private var outboxMessages: [OutboxMessage] {
         store.outbox.filter {
             $0.destination.matches(narrow: model.narrow, selfUserId: store.selfUserId)
@@ -350,17 +373,29 @@ struct MessageFeedList: View {
         } action: { _, isNear in
             nearBottom = isNear
         }
+        // The blank-view failure mode: the viewport parked outside the
+        // content bounds (offset never re-clamped). Detect it from scroll
+        // geometry and re-assert the anchor instead of waiting for a
+        // window resize to force the re-layout.
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentSize.height > 0
+                && (geometry.visibleRect.minY >= geometry.contentSize.height - 1
+                    || geometry.visibleRect.maxY <= 0)
+        } action: { wasLost, isLost in
+            guard isLost, !wasLost else { return }
+            let target = anchorId ?? Self.bottomAnchorId
+            anchorId = nil
+            Task { @MainActor in
+                anchorId = target
+            }
+        }
         .onAppear {
-            // One positioning mechanism: the scrollPosition binding. It
-            // always lands on real content — the racy scrollTo-on-appear
-            // could leave the lazy stack showing blank space.
+            // Marker/bottom targets are the @State initial value (set in
+            // init, before the first layout); only a message-link
+            // highlight overrides here.
             if let highlight = keys.highlightMessageId,
                model.messages.contains(where: { $0.id == highlight }) {
                 anchorId = "msg-\(highlight)"
-            } else if model.firstUnreadMarkerId != nil {
-                anchorId = "unread-marker"
-            } else {
-                anchorId = Self.bottomAnchorId
             }
         }
         .onChange(of: model.messages.last?.id) { _, newLastId in
