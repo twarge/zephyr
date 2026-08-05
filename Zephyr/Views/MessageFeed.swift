@@ -150,6 +150,37 @@ struct MessageFeedList: View {
         return out
     }
 
+    /// One pinnable run of the feed: a conversation header plus the rows
+    /// under it. The header sticks to the top while its rows scroll and is
+    /// pushed out by the next section's header (LazyVStack pinnedViews).
+    private struct FeedSection: Identifiable {
+        var headerKey: ConversationKey?
+        var headerFirstMessageId: Int?
+        var items: [Item] = []
+        var id: String { headerFirstMessageId.map { "sec-\($0)" } ?? "sec-lead" }
+    }
+
+    /// `items` split at conversation headers; header-less feeds (topic/DM
+    /// transcripts) collapse to one anonymous section.
+    private var sections: [FeedSection] {
+        var out: [FeedSection] = []
+        var current = FeedSection()
+        for item in items {
+            if case .conversationHeader(let key, let firstMessageId) = item {
+                if current.headerKey != nil || !current.items.isEmpty {
+                    out.append(current)
+                }
+                current = FeedSection(headerKey: key, headerFirstMessageId: firstMessageId)
+            } else {
+                current.items.append(item)
+            }
+        }
+        if current.headerKey != nil || !current.items.isEmpty {
+            out.append(current)
+        }
+        return out
+    }
+
     /// Empty enough to replace the transcript with a centered placeholder
     /// (a typing indicator still counts as content).
     private var isEmptyFeed: Bool {
@@ -275,6 +306,49 @@ struct MessageFeedList: View {
         }
     }
 
+    @ViewBuilder
+    private func feedRow(_ item: Item) -> some View {
+        switch item {
+        case .daySeparator(let label):
+            Text(label)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+        case .conversationHeader(let key, _):
+            // Headers are hoisted into section headers by `sections`; this
+            // case is unreachable but keeps the switch exhaustive.
+            ConversationHeaderRow(
+                store: store, conversationKey: key,
+                includeChannel: headerMode == .channelAndTopic,
+                onTap: onHeaderTap)
+        case .unreadMarker:
+            HStack(spacing: 8) {
+                Rectangle()
+                    .fill(.red.opacity(0.45))
+                    .frame(height: 1)
+                Text("NEW")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.red)
+            }
+            .padding(.vertical, 6)
+        case .message(let message, let showHeader):
+            MessageRow(
+                store: store, message: message,
+                showHeader: showHeader, cache: cache,
+                useMatchHighlights: useMatchHighlights,
+                isKeySelected: keys.selectedMessageId == message.id,
+                isLinkTarget: keys.highlightMessageId == message.id)
+                // Actual viewport visibility, not lazy-stack realization
+                // (which includes off-screen rows). The low threshold lets
+                // rows taller than the window still count once a fifth is
+                // shown.
+                .onScrollVisibilityChange(threshold: 0.2) { visible in
+                    if visible { noteSeen(message) }
+                }
+        }
+    }
+
     /// Pins the feed to the true bottom. Lazy row heights are estimates
     /// until rows realize, so the binding's scroll can land short —
     /// corrective passes after layout settles converge on the real bottom.
@@ -341,7 +415,7 @@ struct MessageFeedList: View {
 
     private var feedScrollView: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                 if !model.haveOldest && !model.messages.isEmpty {
                     ProgressView()
                         .controlSize(.small)
@@ -351,43 +425,24 @@ struct MessageFeedList: View {
                             Task { await model.fetchOlder() }
                         }
                 }
-                ForEach(items) { item in
-                    switch item {
-                    case .daySeparator(let label):
-                        Text(label)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                    case .conversationHeader(let key, _):
-                        ConversationHeaderRow(
-                            store: store, conversationKey: key,
-                            includeChannel: headerMode == .channelAndTopic,
-                            onTap: onHeaderTap)
-                    case .unreadMarker:
-                        HStack(spacing: 8) {
-                            Rectangle()
-                                .fill(.red.opacity(0.45))
-                                .frame(height: 1)
-                            Text("NEW")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(.red)
+                ForEach(sections) { section in
+                    Section {
+                        ForEach(section.items) { item in
+                            feedRow(item)
                         }
-                        .padding(.vertical, 6)
-                    case .message(let message, let showHeader):
-                        MessageRow(
-                            store: store, message: message,
-                            showHeader: showHeader, cache: cache,
-                            useMatchHighlights: useMatchHighlights,
-                            isKeySelected: keys.selectedMessageId == message.id,
-                            isLinkTarget: keys.highlightMessageId == message.id)
-                            // Actual viewport visibility, not lazy-stack
-                            // realization (which includes off-screen rows).
-                            // The low threshold lets rows taller than the
-                            // window still count once a fifth is shown.
-                            .onScrollVisibilityChange(threshold: 0.2) { visible in
-                                if visible { noteSeen(message) }
-                            }
+                    } header: {
+                        if let key = section.headerKey,
+                           let firstMessageId = section.headerFirstMessageId {
+                            ConversationHeaderRow(
+                                store: store, conversationKey: key,
+                                includeChannel: headerMode == .channelAndTopic,
+                                onTap: onHeaderTap)
+                                // Opaque backing while pinned: the header's
+                                // own tint is translucent, and rows would
+                                // ghost through it.
+                                .background(.bar)
+                                .id("hdr-\(firstMessageId)")
+                        }
                     }
                 }
                 if !model.haveNewest && !model.messages.isEmpty {
