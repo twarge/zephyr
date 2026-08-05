@@ -145,10 +145,12 @@ struct NewConversationSheet: View {
                 .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
             }
 
-            if selectedChannel != nil {
-                TextField("Topic", text: $topicText)
-                    .textFieldStyle(.roundedBorder)
+            if let channel = selectedChannel {
+                TopicAutocompleteField(
+                    store: store, streamId: channel.streamId, topic: $topicText)
                     .frame(maxWidth: 280)
+                    // The suggestion card overlays the fields below it.
+                    .zIndex(1)
             }
 
             TextField("Message", text: $messageText, axis: .vertical)

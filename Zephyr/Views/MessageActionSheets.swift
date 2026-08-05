@@ -16,8 +16,9 @@ struct MoveTopicSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Move to Topic")
                 .font(.headline)
-            TextField("Topic", text: $topic)
-                .textFieldStyle(.roundedBorder)
+            TopicAutocompleteField(store: store, streamId: message.streamId, topic: $topic)
+                // The suggestion card overlays the picker below it.
+                .zIndex(1)
             Picker("Apply to:", selection: $propagateMode) {
                 Text("This message only").tag("change_one")
                 Text("This and later messages").tag("change_later")

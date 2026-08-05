@@ -205,13 +205,11 @@ struct ComposeBar: View {
             if !suggestions.isEmpty {
                 suggestionsCard
             }
-            if case .channel = mode {
-                TextField("Topic", text: $topicText)
-                    .textFieldStyle(.plain)
-                    .font(.callout)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+            if case .channel(let streamId) = mode {
+                TopicAutocompleteField(
+                    store: store, streamId: streamId, topic: $topicText,
+                    plainStyle: true, dropUp: true,
+                    onCommit: { messageFocused = true })
                     .frame(maxWidth: 260)
             }
             if !uploads.isEmpty {
