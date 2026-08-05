@@ -31,28 +31,38 @@ struct TranscriptView: View {
     }
 
     private func breadcrumb(streamId: Int, topic: String) -> some View {
+        // A flexible frame with a small minWidth keeps the toolbar from
+        // dropping the whole item in narrow windows — the texts truncate
+        // with ellipsis instead.
         HStack(spacing: 5) {
             Button {
                 selection = .channel(streamId: streamId)
             } label: {
                 Text("#\(channelName(streamId))")
                     .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
             .buttonStyle(.plain)
             .help("Show all messages in this channel")
             Text("›")
                 .font(.headline)
                 .foregroundStyle(.tertiary)
+                .layoutPriority(1)
             if TopicName.isResolved(topic) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.subheadline)
                     .foregroundStyle(.green)
+                    .layoutPriority(1)
             }
             Text(TopicName.displayName(topic).isEmpty
                 ? "general chat" : TopicName.displayName(topic))
                 .font(.headline)
                 .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(2)
         }
+        .frame(minWidth: 48, maxWidth: 480, alignment: .leading)
     }
 
     var body: some View {
