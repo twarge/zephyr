@@ -22,8 +22,13 @@ returns (see ARCHITECTURE §9). Full Zulip-style keyboard navigation on both pla
 (hardware keyboards on iPad/iPhone included): j/k message selection, r reply,
 s/S narrowing, n/p unread navigation, +/\* reactions and stars — press ? for
 the complete map. A Recent Conversations view (t) mirrors the web app's:
-recency-ordered conversations with participants, unread counts, and
-include-DMs/unread/participated filters. The Xcode target is now multiplatform — the same
+recency-ordered conversations with unread counts and
+include-DMs/unread/participated filters. Conversations open at the first
+unread with a NEW marker and jump-to-latest; message links (/near/) land on
+and highlight their target. Sign-in supports SSO (Google/GitHub/SAML) via
+the mobile web-auth flow, plus password and manual API key. Topics can be
+muted/followed, polls and to-do lists are interactive, GIFs animate, and a
+Format menu (⌘B/⌘I/⌘K) wraps compose selections in markdown. The Xcode target is now multiplatform — the same
 scheme builds and runs on iOS 18+/iPadOS (Simulator-verified); AppKit-specific
 behavior (Quick Look, popover search, Settings scene, dock badge) is gated behind
 a small `Platform` shim. Remaining before public beta: Developer ID
