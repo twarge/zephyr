@@ -162,6 +162,9 @@ struct SidebarView: View {
                     guard userIds.contains(where: { store.users[$0] != nil }) else { return nil }
                     key = Unreads.dmKey(participantIds: userIds, selfUserId: store.selfUserId)
                 }
+                // The conversation being typed in isn't a "draft" yet —
+                // its row appears once you navigate away.
+                guard selection != .conversation(key) else { return nil }
                 guard matchesFilter(key.displayTitle(in: store)) || matchesFilter(trimmed)
                 else { return nil }
                 return (destination, key, trimmed)
