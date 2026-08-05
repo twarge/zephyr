@@ -241,7 +241,7 @@ public enum ContentParser {
             // Tolerant of wrapper variation: the anchor need not be the
             // first child, nor the img a direct child of the anchor.
             guard let anchor = element.children().first(where: { $0.tagName() == "a" }),
-                  let img = try2({ try anchor.select("img").first() }) ?? nil
+                  let img = try? anchor.select("img").first()
             else {
                 return .unimplemented(html: outerHTML(element))
             }
