@@ -30,6 +30,7 @@ struct PDFAttachmentView: View {
     let href: String
     let connection: ApiConnection
 
+    @Environment(KeyboardRouter.self) private var keys: KeyboardRouter?
     @State private var thumbnail: PlatformImage?
     @State private var pageCount = 0
     @State private var localFileURL: URL?
@@ -38,6 +39,16 @@ struct PDFAttachmentView: View {
 
     private var filename: String {
         (href as NSString).lastPathComponent.removingPercentEncoding ?? "PDF"
+    }
+
+    private var mediaId: String { "pdf:\(href)" }
+
+    private var showsSelection: Bool {
+        #if os(macOS)
+        keys?.selectedMediaId == mediaId
+        #else
+        isSelected
+        #endif
     }
 
     var body: some View {
@@ -61,8 +72,8 @@ struct PDFAttachmentView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .strokeBorder(
-                        isSelected ? Color.accentColor : Color.secondary.opacity(0.3),
-                        lineWidth: isSelected ? 3 : 1))
+                        showsSelection ? Color.accentColor : Color.secondary.opacity(0.3),
+                        lineWidth: showsSelection ? 3 : 1))
             HStack(spacing: 5) {
                 Image(systemName: "doc.richtext")
                     .font(.caption)
@@ -78,16 +89,26 @@ struct PDFAttachmentView: View {
             }
             .frame(maxWidth: 200)
         }
+        .onTapGesture(count: 2) { openInDefaultViewer() }
+        .onTapGesture {
+            #if os(macOS)
+            keys?.selectMedia(mediaId) {
+                Task { quickLookURL = await download() }
+            }
+            #else
+            isSelected = true
+            #endif
+        }
+        #if os(iOS)
         .focusable()
         .focused($isSelected)
         .focusEffectDisabled()
-        .onTapGesture(count: 2) { openInDefaultViewer() }
-        .onTapGesture { isSelected = true }
         .onKeyPress(.space) {
             guard isSelected else { return .ignored }
             Task { quickLookURL = await download() }
             return .handled
         }
+        #endif
         .quickLookPreview($quickLookURL)
         .task(id: href) { await loadThumbnail() }
         .accessibilityLabel("PDF attachment: \(filename)")

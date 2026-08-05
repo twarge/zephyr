@@ -40,6 +40,23 @@ final class KeyboardRouter {
     var editRequestId: Int?
     var showHelp = false
 
+    /// Selected media (image/PDF) in the transcript. Router state rather than
+    /// FocusState: focus dies when the row re-renders (message selection
+    /// lands a beat after the click); plain state survives. Space routes
+    /// through the key monitor to the registered Quick Look action.
+    var selectedMediaId: String?
+    @ObservationIgnored private var selectedMediaQuickLook: (() -> Void)?
+
+    func selectMedia(_ id: String, quickLook: @escaping () -> Void) {
+        selectedMediaId = id
+        selectedMediaQuickLook = quickLook
+    }
+
+    func clearMediaSelection() {
+        selectedMediaId = nil
+        selectedMediaQuickLook = nil
+    }
+
     @ObservationIgnored var currentDestination: Destination?
     @ObservationIgnored var navigate: ((Destination) -> Void)?
     @ObservationIgnored var focusCompose: (() -> Void)?
@@ -119,11 +136,21 @@ final class KeyboardRouter {
             showHelp = false
             return true
         }
+        if selectedMediaId != nil {
+            clearMediaSelection()
+            return true
+        }
         if selectedMessageId != nil {
             selectedMessageId = nil
             return true
         }
         return false
+    }
+
+    func handleSpace() -> Bool {
+        guard let selectedMediaQuickLook else { return false }
+        selectedMediaQuickLook()
+        return true
     }
 
     // MARK: Selection
@@ -138,6 +165,7 @@ final class KeyboardRouter {
             index = ids.count - 1  // First press selects the newest message.
         }
         selectedMessageId = ids[index]
+        clearMediaSelection()
         if index == 0 && delta < 0 {
             Task { await feed.fetchOlder() }
         }
@@ -274,6 +302,7 @@ final class KeyboardRouter {
         case 125: return handleDownArrow()
         case 36, 76: return handleReturn()
         case 53: return handleEscape()
+        case 49: return handleSpace()
         default:
             guard let character else { return false }
             return handleCharacter(character)

@@ -376,12 +376,23 @@ private struct MediaAttachmentChip: View {
     let icon: String
     let kind: String
 
+    @Environment(KeyboardRouter.self) private var keys: KeyboardRouter?
     @State private var localFileURL: URL?
     @State private var quickLookURL: URL?
     @FocusState private var isSelected: Bool
 
     private var filename: String {
         (path as NSString).lastPathComponent.removingPercentEncoding ?? kind
+    }
+
+    private var mediaId: String { "chip:\(path)" }
+
+    private var showsSelection: Bool {
+        #if os(macOS)
+        keys?.selectedMediaId == mediaId
+        #else
+        isSelected
+        #endif
     }
 
     var body: some View {
@@ -403,10 +414,7 @@ private struct MediaAttachmentChip: View {
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color.accentColor, lineWidth: isSelected ? 3 : 0))
-        .focusable()
-        .focused($isSelected)
-        .focusEffectDisabled()
+                .strokeBorder(Color.accentColor, lineWidth: showsSelection ? 3 : 0))
         .onTapGesture(count: 2) {
             Task {
                 if let url = await download(), !Platform.openFile(url) {
@@ -414,12 +422,25 @@ private struct MediaAttachmentChip: View {
                 }
             }
         }
-        .onTapGesture { isSelected = true }
+        .onTapGesture {
+            #if os(macOS)
+            keys?.selectMedia(mediaId) {
+                Task { quickLookURL = await download() }
+            }
+            #else
+            isSelected = true
+            #endif
+        }
+        #if os(iOS)
+        .focusable()
+        .focused($isSelected)
+        .focusEffectDisabled()
         .onKeyPress(.space) {
             guard isSelected else { return .ignored }
             Task { quickLookURL = await download() }
             return .handled
         }
+        #endif
         .quickLookPreview($quickLookURL)
     }
 
@@ -595,10 +616,23 @@ private struct MessageImageView: View {
     var compact = false
 
     @Environment(FeedQuickLook.self) private var feedQuickLook: FeedQuickLook?
+    @Environment(KeyboardRouter.self) private var keys: KeyboardRouter?
     @State private var image: PlatformImage?
     @State private var localFileURL: URL?
     @State private var quickLookURL: URL?
     @FocusState private var isSelected: Bool
+
+    private var mediaId: String { "img:\(node.src)|\(node.originalSrc ?? "")" }
+
+    /// macOS selection lives in the router (survives row re-renders, which
+    /// were killing FocusState a beat after each click); iOS keeps focus.
+    private var showsSelection: Bool {
+        #if os(macOS)
+        keys?.selectedMediaId == mediaId
+        #else
+        isSelected
+        #endif
+    }
 
     private var displaySize: CGSize {
         if compact {
@@ -632,17 +666,25 @@ private struct MessageImageView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color.accentColor, lineWidth: isSelected ? 3 : 0))
+                .strokeBorder(Color.accentColor, lineWidth: showsSelection ? 3 : 0))
+        .onTapGesture(count: 2) { openInDefaultViewer() }
+        .onTapGesture {
+            #if os(macOS)
+            keys?.selectMedia(mediaId) { quickLook() }
+            #else
+            isSelected = true
+            #endif
+        }
+        #if os(iOS)
         .focusable()
         .focused($isSelected)
         .focusEffectDisabled()
-        .onTapGesture(count: 2) { openInDefaultViewer() }
-        .onTapGesture { isSelected = true }
         .onKeyPress(.space) {
             guard isSelected else { return .ignored }
             quickLook()
             return .handled
         }
+        #endif
         .quickLookPreview($quickLookURL)
         .task(id: node.src) { await load() }
         .accessibilityLabel(node.alt ?? "Image")
