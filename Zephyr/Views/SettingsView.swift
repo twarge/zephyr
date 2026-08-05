@@ -73,9 +73,12 @@ private struct GeneralSettings: View {
                     Text(order.label).tag(order.rawValue)
                 }
             }
-            Stepper(
-                "Recent searches kept: \(recentSearchLimit)",
-                value: $recentSearchLimit, in: 0...20)
+            // LabeledContent splits the row like the pickers: caption in
+            // the label column, value + arrows inline with the controls.
+            LabeledContent("Recent searches kept:") {
+                Stepper("\(recentSearchLimit)", value: $recentSearchLimit, in: 0...20)
+                    .monospacedDigit()
+            }
             Text("0 hides the Recent Searches section.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
