@@ -165,9 +165,14 @@ private struct AccountsSettings: View {
                     Button("Cancel") { showAddAccount = false }
                         .padding([.top, .trailing], 12)
                 }
-                LoginView()
+                // Scrollable with a real height: the sign-in form (SSO
+                // buttons + fields) outgrew a content-sized sheet, cutting
+                // off the bottom buttons.
+                ScrollView {
+                    LoginView()
+                }
             }
-            .frame(width: 480)
+            .frame(width: 500, height: 560)
         }
         .onChange(of: model.global.accounts.count) {
             showAddAccount = false
