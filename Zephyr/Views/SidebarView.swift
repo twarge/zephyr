@@ -390,9 +390,17 @@ struct SidebarView: View {
                     Button {
                         selection = .allChannels
                     } label: {
-                        Image(systemName: "plus")
+                        addGlyph("number")
                     }
                     .help("Browse and join channels")
+                }
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        startDirectMessage?()
+                    } label: {
+                        addGlyph("person")
+                    }
+                    .help("New direct message")
                 }
             }
         }
@@ -444,15 +452,21 @@ struct SidebarView: View {
                 Task { await model.signOut(accountId: store.accountId) }
             }
         } label: {
-            HStack(spacing: 4) {
-                Text(store.realmName
-                    ?? store.connection.realmURL.host() ?? "Server")
-                    .font(.callout.weight(.medium))
-                Image(systemName: "chevron.down")
-                    .font(.caption2)
-            }
+            Text(store.realmName
+                ?? store.connection.realmURL.host() ?? "Server")
+                .font(.callout.weight(.medium))
         }
         .help("Servers and accounts (⌘1–⌘9 switch this window)")
+    }
+
+    /// "+#" / "+person" — a small leading plus beside the subject glyph.
+    private func addGlyph(_ base: String) -> some View {
+        HStack(spacing: 1) {
+            Image(systemName: "plus")
+                .font(.system(size: 8, weight: .bold))
+            Image(systemName: base)
+                .font(.system(size: 13))
+        }
     }
 
     private func accountLabel(_ account: Account) -> String {

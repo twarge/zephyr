@@ -217,13 +217,21 @@ struct MainSplitView: View {
         .onChange(of: badgeCount, initial: true) {
             Platform.setAppBadge(badgeCount)
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
+        .toolbar {
             if store.isRecoveringEventStream {
-                Label("Connecting…", systemImage: "wifi.exclamationmark")
-                    .font(.callout)
-                    .padding(.vertical, 4)
-                    .frame(maxWidth: .infinity)
-                    .background(.yellow.opacity(0.2), in: .rect)
+                ToolbarItem(placement: .automatic) {
+                    // "Broken link" — SF Symbols has no link.slash, so the
+                    // slash is drawn over the link glyph.
+                    Image(systemName: "link")
+                        .foregroundStyle(.yellow)
+                        .overlay {
+                            Rectangle()
+                                .fill(.yellow)
+                                .frame(width: 1.5, height: 17)
+                                .rotationEffect(.degrees(45))
+                        }
+                        .help("Connection lost — reconnecting…")
+                }
             }
         }
     }
