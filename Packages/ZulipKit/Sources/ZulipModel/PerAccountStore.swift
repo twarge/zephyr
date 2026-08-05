@@ -27,6 +27,19 @@ public final class PerAccountStore {
     public private(set) var subscriptions: [Int: Subscription] = [:]
     /// Sidebar channel groupings (Zulip 12+), in display order.
     public private(set) var channelFolders: [ChannelFolder] = []
+    /// Per-topic visibility overrides (muted/unmuted/followed), keyed by
+    /// (streamId, case-folded topic).
+    public private(set) var topicVisibility: [TopicKey: TopicVisibilityPolicy] = [:]
+
+    public struct TopicKey: Hashable, Sendable {
+        public var streamId: Int
+        public var topic: String
+
+        public init(streamId: Int, topic: String) {
+            self.streamId = streamId
+            self.topic = topic.lowercased()
+        }
+    }
     /// Custom emoji by id (reaction `emoji_code`).
     public private(set) var realmEmoji: [String: RealmEmojiItem] = [:]
     /// Canonical map of every message we've seen (fetched or via events).
@@ -115,6 +128,12 @@ public final class PerAccountStore {
         conversations = ConversationList(snapshot: snapshot, selfUserId: account.userId)
         channelFolders = (snapshot.channelFolders ?? []).sorted { $0.order < $1.order }
         realmEmoji = snapshot.realmEmoji ?? [:]
+        for item in snapshot.userTopics ?? [] {
+            let policy = TopicVisibilityPolicy(rawValue: item.visibilityPolicy) ?? .none
+            if policy != .none {
+                topicVisibility[TopicKey(streamId: item.streamId, topic: item.topicName)] = policy
+            }
+        }
 
         // Offline restore: recent transcripts from the SQLite store (also
         // seeding sidebar recency), the unsent outbox, and any actions
@@ -546,6 +565,28 @@ public final class PerAccountStore {
         }
     }
 
+    public func topicVisibility(streamId: Int, topic: String) -> TopicVisibilityPolicy {
+        topicVisibility[TopicKey(streamId: streamId, topic: topic)] ?? .none
+    }
+
+    /// Sets a topic's visibility (mute/unmute/follow) optimistically; the
+    /// user_topic event confirms.
+    public func setTopicVisibility(
+        streamId: Int, topic: String, policy: TopicVisibilityPolicy
+    ) {
+        let key = TopicKey(streamId: streamId, topic: topic)
+        if policy == .none {
+            topicVisibility.removeValue(forKey: key)
+        } else {
+            topicVisibility[key] = policy
+        }
+        let connection = connection
+        Task {
+            try? await connection.setTopicVisibility(
+                streamId: streamId, topic: topic, policy: policy.rawValue)
+        }
+    }
+
     public func subscribe(toChannel name: String) {
         let connection = connection
         Task {
@@ -765,6 +806,15 @@ public final class PerAccountStore {
             for id in streamIds {
                 channels.removeValue(forKey: id)
                 subscriptions.removeValue(forKey: id)
+            }
+
+        case .userTopic(let item):
+            let key = TopicKey(streamId: item.streamId, topic: item.topicName)
+            let policy = TopicVisibilityPolicy(rawValue: item.visibilityPolicy) ?? .none
+            if policy == .none {
+                topicVisibility.removeValue(forKey: key)
+            } else {
+                topicVisibility[key] = policy
             }
 
         case .unexpected(let type, let op):

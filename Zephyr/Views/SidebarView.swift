@@ -851,8 +851,17 @@ private struct SidebarTopicRow: View {
         return !ids.isDisjoint(with: store.unreads.mentionIds)
     }
 
+    private var visibility: TopicVisibilityPolicy {
+        store.topicVisibility(streamId: streamId, topic: topic.name)
+    }
+
     var body: some View {
         HStack(spacing: 6) {
+            if visibility == .followed {
+                Image(systemName: "plus.message.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.tint)
+            }
             if TopicName.isResolved(topic.name) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.caption2)
@@ -875,6 +884,19 @@ private struct SidebarTopicRow: View {
         }
         .padding(.leading, 26)
         .padding(.vertical, 1)
+        .opacity(visibility == .muted ? 0.5 : 1)
+        .contextMenu {
+            Button(visibility == .muted ? "Unmute Topic" : "Mute Topic") {
+                store.setTopicVisibility(
+                    streamId: streamId, topic: topic.name,
+                    policy: visibility == .muted ? .none : .muted)
+            }
+            Button(visibility == .followed ? "Unfollow Topic" : "Follow Topic") {
+                store.setTopicVisibility(
+                    streamId: streamId, topic: topic.name,
+                    policy: visibility == .followed ? .none : .followed)
+            }
+        }
     }
 }
 

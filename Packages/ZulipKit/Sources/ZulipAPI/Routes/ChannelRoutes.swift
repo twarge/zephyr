@@ -68,4 +68,17 @@ extension ApiConnection {
             .replacingOccurrences(of: "\"", with: "\\\"")
         return "\"\(escaped)\""
     }
+
+    /// POST /user_topics — per-topic visibility (0 none, 1 muted, 2 unmuted,
+    /// 3 followed).
+    public func setTopicVisibility(streamId: Int, topic: String, policy: Int) async throws {
+        _ = try await send(
+            ApiRequest(
+                method: .post, path: "/api/v1/user_topics",
+                params: [
+                    Param("stream_id", String(streamId)),
+                    Param("topic", topic),
+                    Param("visibility_policy", String(policy)),
+                ]))
+    }
 }

@@ -28,6 +28,8 @@ public struct InitialSnapshot: Decodable, Sendable {
     public var unreadMsgs: UnreadMessagesSnapshot?
     public var recentPrivateConversations: [RecentPrivateConversation]?
     public var channelFolders: [ChannelFolder]?
+    /// Per-topic visibility overrides (muted/unmuted/followed).
+    public var userTopics: [UserTopicItem]?
     /// Custom emoji, keyed by emoji id (reaction `emoji_code` for
     /// `realm_emoji` reactions).
     public var realmEmoji: [String: RealmEmojiItem]?
@@ -45,4 +47,20 @@ public struct RealmEmojiItem: Decodable, Sendable {
 public struct RecentPrivateConversation: Decodable, Sendable {
     public var maxMessageId: Int
     public var userIds: [Int]
+}
+
+/// One `user_topics` entry: a per-topic visibility override.
+public struct UserTopicItem: Decodable, Sendable, Equatable {
+    public var streamId: Int
+    public var topicName: String
+    public var visibilityPolicy: Int
+    public var lastUpdated: Int?
+}
+
+/// `visibility_policy` values (api: user_topics).
+public enum TopicVisibilityPolicy: Int, Sendable {
+    case none = 0
+    case muted = 1
+    case unmuted = 2
+    case followed = 3
 }

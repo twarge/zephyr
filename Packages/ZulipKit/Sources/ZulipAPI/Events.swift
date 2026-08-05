@@ -23,6 +23,7 @@ public struct Event: Sendable {
         case subscriptionAdd([Subscription])
         case subscriptionRemove(streamIds: [Int])
         case subscriptionUpdate(SubscriptionUpdateEvent)
+        case userTopic(UserTopicItem)
         case streamCreate([ZulipStream])
         case streamDelete(streamIds: [Int])
         case unexpected(type: String, op: String?)
@@ -198,6 +199,8 @@ extension Event: Decodable {
             kind = .streamCreate(try StreamsEnvelope(from: decoder).streams)
         case ("stream", "delete"):
             kind = .streamDelete(streamIds: try DeletedStreamsEnvelope(from: decoder).allIds)
+        case ("user_topic", _):
+            kind = .userTopic(try UserTopicItem(from: decoder))
         default:
             kind = .unexpected(type: type, op: op)
         }
