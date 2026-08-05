@@ -552,13 +552,25 @@ public enum ContentParser {
     /// Drops pure-whitespace leading/trailing text runs (the server emits
     /// `\n` between elements).
     private static func trimInlines(_ inlines: [InlineNode]) -> [InlineNode] {
+        // Leading/trailing line breaks trim like whitespace: a paragraph
+        // ending in <br> (e.g. an image hoisted out of "<p><img><br></p>")
+        // would otherwise leave a break-only paragraph rendering as a
+        // phantom empty line.
+        func isBlank(_ node: InlineNode?) -> Bool {
+            switch node {
+            case .text(let text):
+                return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            case .lineBreak:
+                return true
+            default:
+                return false
+            }
+        }
         var result = inlines
-        while case .text(let text)? = result.first,
-              text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        while isBlank(result.first) {
             result.removeFirst()
         }
-        while case .text(let text)? = result.last,
-              text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        while isBlank(result.last) {
             result.removeLast()
         }
         return result
