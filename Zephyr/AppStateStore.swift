@@ -41,6 +41,22 @@ enum AppStateStore {
         defaults.set(Array(channels), forKey: "expandedChannels-\(accountId.uuidString)")
     }
 
+    /// Most-recently-viewed channels, newest first (Open Quickly's
+    /// zero-query suggestions).
+    static func recentChannels(for accountId: UUID) -> [Int] {
+        defaults.array(forKey: "recentChannels-\(accountId.uuidString)") as? [Int] ?? []
+    }
+
+    static func noteChannelVisit(_ streamId: Int, for accountId: UUID) {
+        var recents = recentChannels(for: accountId)
+        recents.removeAll { $0 == streamId }
+        recents.insert(streamId, at: 0)
+        if recents.count > 20 {
+            recents.removeLast(recents.count - 20)
+        }
+        defaults.set(recents, forKey: "recentChannels-\(accountId.uuidString)")
+    }
+
     static func collapsedSections(for accountId: UUID) -> Set<String> {
         Set(defaults.stringArray(forKey: "collapsedSections-\(accountId.uuidString)") ?? [])
     }

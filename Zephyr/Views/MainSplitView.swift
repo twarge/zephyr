@@ -26,6 +26,7 @@ struct MainSplitView: View {
     @State private var selection: Destination?
     @State private var search: SidebarSearchModel
     @State private var newConversation: NewConversationMode?
+    @State private var showOpenQuickly = false
     @State private var dropTargeted = false
     @State private var columnVisibility = NavigationSplitViewVisibility.automatic
     /// True while the narrow-window watcher hid the sidebar (so growing
@@ -175,6 +176,19 @@ struct MainSplitView: View {
             model.pendingNewConversation = false
             newConversation = .general
         }
+        .onChange(of: model.pendingOpenQuickly) {
+            guard model.pendingOpenQuickly else { return }
+            #if os(macOS)
+            guard keys.hostWindow?.isKeyWindow != false else { return }
+            #endif
+            model.pendingOpenQuickly = false
+            showOpenQuickly = true
+        }
+        .sheet(isPresented: $showOpenQuickly) {
+            OpenQuicklyView(store: store) { destination in
+                selection = destination
+            }
+        }
         #if os(macOS)
         .background(WindowReader { window in
             keys.hostWindow = window
@@ -223,6 +237,16 @@ struct MainSplitView: View {
             #if os(iOS)
             detailFocused = true
             #endif
+            // Open Quickly's recency: any channel-scoped destination counts
+            // as a visit.
+            let visitedChannel: Int? = switch selection {
+            case .channel(let id), .channelTopics(let id): id
+            case .conversation(.topic(let id, _)): id
+            default: nil
+            }
+            if let visitedChannel {
+                AppStateStore.noteChannelVisit(visitedChannel, for: store.accountId)
+            }
             AppStateStore.setSelection(selection, for: store.accountId)
             if let selection,
                let data = try? JSONEncoder().encode(

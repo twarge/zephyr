@@ -69,6 +69,11 @@ extension ZephyrApp {
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
             #endif
+            Divider()
+            Button("Open Quickly…") {
+                model.pendingOpenQuickly = true
+            }
+            .keyboardShortcut("o", modifiers: [.command, .shift])
         }
         CommandMenu("Format") {
             Button("Bold") { model.pendingFormat = .bold }

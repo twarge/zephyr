@@ -58,6 +58,8 @@ final class AppModel {
     var pendingAccountFocus: Account.ID?
     /// Set by File → New Conversation (⌘N); MainSplitView opens the sheet.
     var pendingNewConversation = false
+    /// Set by File → Open Quickly… (⌘⇧O); the key window shows the palette.
+    var pendingOpenQuickly = false
     /// Set by the Format menu; the key window's compose applies it.
     var pendingFormat: ComposeFormat?
 
