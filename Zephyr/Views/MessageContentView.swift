@@ -1,6 +1,7 @@
 import os
 import QuickLook
 import SwiftUI
+import Synchronization
 import ZulipAPI
 import ZulipContent
 import ZulipMath
@@ -435,9 +436,17 @@ func fetchMedia(path: String, connection: ApiConnection) async -> (Data, URLResp
     return try? await ApiConnection.mediaSession.data(for: request)
 }
 
+/// Downloaded media files by source path, so gallery navigation and repeat
+/// previews don't re-fetch.
+private let mediaFileCache = Mutex<[String: URL]>([:])
+
 /// Downloads media to a temp file with its real filename (so Preview/Quick
-/// Look title it sensibly).
+/// Look title it sensibly). Cached per source path.
 func downloadMediaFile(path: String, connection: ApiConnection) async -> URL? {
+    if let cached = mediaFileCache.withLock({ $0[path] }),
+       FileManager.default.fileExists(atPath: cached.path) {
+        return cached
+    }
     guard let (data, _) = await fetchMedia(path: path, connection: connection) else { return nil }
     let filename = (path as NSString).lastPathComponent.removingPercentEncoding
         .flatMap { $0.isEmpty ? nil : $0 } ?? "file"
@@ -448,9 +457,53 @@ func downloadMediaFile(path: String, connection: ApiConnection) async -> URL? {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let fileURL = directory.appendingPathComponent(filename)
         try data.write(to: fileURL)
+        mediaFileCache.withLock { $0[path] = fileURL }
         return fileURL
     } catch {
         return nil
+    }
+}
+
+/// Feed-wide Quick Look: one preview session per transcript, holding every
+/// nearby image so the panel's arrow keys navigate between them.
+@MainActor
+@Observable
+final class FeedQuickLook {
+    var items: [URL] = []
+    var selection: URL?
+    /// Supplied by the feed: all image nodes in transcript order.
+    @ObservationIgnored var orderedNodes: () -> [ImageNode] = { [] }
+
+    /// Downloads the focused image plus up to 20 neighbors on each side,
+    /// then presents with the panel focused on the requested image.
+    func present(_ node: ImageNode, connection: ApiConnection) async {
+        let all = orderedNodes()
+        let focusIndex = all.firstIndex {
+            $0.src == node.src && $0.originalSrc == node.originalSrc
+        }
+        let window: [ImageNode]
+        if let focusIndex {
+            window = Array(all[max(0, focusIndex - 20)...min(all.count - 1, focusIndex + 20)])
+        } else {
+            window = [node]
+        }
+        let paths = window.map { $0.originalSrc ?? $0.src }
+        var downloaded: [Int: URL] = [:]
+        await withTaskGroup(of: (Int, URL?).self) { group in
+            for (index, path) in paths.enumerated() {
+                group.addTask {
+                    (index, await downloadMediaFile(path: path, connection: connection))
+                }
+            }
+            for await (index, url) in group {
+                downloaded[index] = url
+            }
+        }
+        let ordered = paths.indices.compactMap { downloaded[$0] }
+        guard !ordered.isEmpty else { return }
+        let focusPath = node.originalSrc ?? node.src
+        items = ordered
+        selection = paths.firstIndex(of: focusPath).flatMap { downloaded[$0] } ?? ordered.first
     }
 }
 
@@ -531,6 +584,7 @@ private struct MessageImageView: View {
     let connection: ApiConnection
     var compact = false
 
+    @Environment(FeedQuickLook.self) private var feedQuickLook: FeedQuickLook?
     @State private var image: PlatformImage?
     @State private var localFileURL: URL?
     @State private var quickLookURL: URL?
@@ -613,6 +667,12 @@ private struct MessageImageView: View {
     }
 
     private func quickLook() {
+        // Feed-provided session: the panel gets neighbors too, so its
+        // arrow keys move between the view's images.
+        if let feedQuickLook {
+            Task { await feedQuickLook.present(node, connection: connection) }
+            return
+        }
         Task {
             quickLookURL = await downloadOriginal()
         }

@@ -33,6 +33,7 @@ struct MessageFeedList: View {
     @Environment(KeyboardRouter.self) private var keys
     @State private var anchorId: String?
     @State private var nearBottom = true
+    @State private var quickLook = FeedQuickLook()
 
     private var outboxMessages: [OutboxMessage] {
         store.outbox.filter {
@@ -120,15 +121,21 @@ struct MessageFeedList: View {
                 ScrollViewReader { proxy in
                     feedScrollView
                         .onChange(of: keys.selectedMessageId) { _, newId in
-                            guard let newId else { return }
+                            // Follow keyboard movement only; click-selection
+                            // must not scroll (it would steal image focus).
+                            guard let newId, keys.selectionMovedByKeyboard else { return }
+                            keys.selectionMovedByKeyboard = false
                             // nil anchor: scroll the minimum needed for visibility.
                             proxy.scrollTo("msg-\(newId)", anchor: nil)
                         }
                 }
             }
         }
+        .environment(quickLook)
+        .quickLookPreview(Bindable(quickLook).selection, in: quickLook.items)
         .onAppear {
             keys.activeFeed = model
+            quickLook.orderedNodes = { orderedImageNodes() }
         }
         .onDisappear {
             if keys.activeFeed === model {
@@ -136,6 +143,25 @@ struct MessageFeedList: View {
                 keys.selectedMessageId = nil
             }
         }
+    }
+
+    /// Every image in the transcript, in message order — the Quick Look
+    /// session's navigation set.
+    private func orderedImageNodes() -> [ImageNode] {
+        var nodes: [ImageNode] = []
+        for message in model.messages {
+            for block in cache.content(for: message).blocks {
+                switch block {
+                case .image(let node):
+                    nodes.append(node)
+                case .imageGallery(let gallery):
+                    nodes.append(contentsOf: gallery)
+                default:
+                    break
+                }
+            }
+        }
+        return nodes
     }
 
     private var feedScrollView: some View {
