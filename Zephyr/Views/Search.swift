@@ -87,7 +87,6 @@ final class SidebarSearchModel {
     private(set) var recentSearches: [SearchQuery] = []
 
     private static let recentSearchesKey = "recentSearches"
-    private static let maxRecentSearches = 5
 
     /// Submit hook installed by SidebarView (called on Return via the key
     /// monitor).
@@ -103,12 +102,17 @@ final class SidebarSearchModel {
 
     // MARK: Recent searches
 
+    /// User-set cap (Settings); 0 disables recording and hides the section.
+    private var recentSearchLimit: Int {
+        UserDefaults.standard.object(forKey: "recentSearchLimit") as? Int ?? 5
+    }
+
     func recordSearch(_ query: SearchQuery) {
-        guard !query.isEmpty else { return }
+        guard !query.isEmpty, recentSearchLimit > 0 else { return }
         recentSearches.removeAll { $0 == query }
         recentSearches.insert(query, at: 0)
-        if recentSearches.count > Self.maxRecentSearches {
-            recentSearches.removeLast(recentSearches.count - Self.maxRecentSearches)
+        if recentSearches.count > recentSearchLimit {
+            recentSearches.removeLast(recentSearches.count - recentSearchLimit)
         }
         persistRecents()
     }

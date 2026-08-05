@@ -133,6 +133,35 @@ struct SidebarView: View {
         }
     }
 
+    /// Unsent compose text, one row per conversation: typing and moving away
+    /// lands here; selecting resumes composing (the transcript's compose bar
+    /// restores its draft). Only drafts resolvable in this account show.
+    private var draftRows: [(destination: SendDestination, key: ConversationKey, text: String)] {
+        DraftStore.shared.drafts
+            .compactMap { destination, text -> (SendDestination, ConversationKey, String)? in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                let key: ConversationKey
+                switch destination {
+                case .topic(let streamId, let topic):
+                    guard store.channels[streamId] != nil
+                        || store.subscriptions[streamId] != nil else { return nil }
+                    key = .topic(streamId: streamId, topic: topic)
+                case .dm(let userIds):
+                    guard userIds.contains(where: { store.users[$0] != nil }) else { return nil }
+                    key = Unreads.dmKey(participantIds: userIds, selfUserId: store.selfUserId)
+                }
+                guard matchesFilter(key.displayTitle(in: store)) || matchesFilter(trimmed)
+                else { return nil }
+                return (destination, key, trimmed)
+            }
+            .sorted {
+                $0.1.displayTitle(in: store)
+                    .localizedCaseInsensitiveCompare($1.1.displayTitle(in: store))
+                    == .orderedAscending
+            }
+    }
+
     /// The no-conversation directory splits at presence: offline users hide
     /// behind "More conversations…" (filtering searches everyone).
     private var visibleDirectoryUsers: [User] {
@@ -176,11 +205,29 @@ struct SidebarView: View {
         }
     }
 
+    @AppStorage("recentSearchLimit") private var recentSearchLimit = 5
+
     var body: some View {
         List(selection: $selection) {
-            if !isFiltering, !search.recentSearches.isEmpty {
+            if !isFiltering {
+                Section("Views", isExpanded: expansion("views")) {
+                    viewRow(
+                        "Recent", icon: "clock", tag: .recentConversations,
+                        badge: 0)
+                    viewRow(
+                        "Combined feed", icon: "line.3.horizontal", tag: .combinedFeed,
+                        badge: store.unreads.totalCount)
+                    viewRow(
+                        "Mentions", icon: "at", tag: .mentions,
+                        badge: store.unreads.mentionIds.count)
+                    viewRow("Starred", icon: "star", tag: .starred, badge: 0)
+                    viewRow(
+                        "All channels", icon: "rectangle.stack", tag: .allChannels, badge: 0)
+                }
+            }
+            if !isFiltering, recentSearchLimit > 0, !search.recentSearches.isEmpty {
                 Section("Recent Searches", isExpanded: expansion("recents")) {
-                    ForEach(search.recentSearches, id: \.self) { query in
+                    ForEach(search.recentSearches.prefix(recentSearchLimit), id: \.self) { query in
                         RecentSearchRow(query: query) {
                             search.removeRecentSearch(query)
                         }
@@ -196,20 +243,17 @@ struct SidebarView: View {
                     }
                 }
             }
-            if !isFiltering {
-                Section("Views", isExpanded: expansion("views")) {
-                    viewRow(
-                        "Recent", icon: "clock", tag: .recentConversations,
-                        badge: 0)
-                    viewRow(
-                        "Combined feed", icon: "line.3.horizontal", tag: .combinedFeed,
-                        badge: store.unreads.totalCount)
-                    viewRow(
-                        "Mentions", icon: "at", tag: .mentions,
-                        badge: store.unreads.mentionIds.count)
-                    viewRow("Starred", icon: "star", tag: .starred, badge: 0)
-                    viewRow(
-                        "All channels", icon: "rectangle.stack", tag: .allChannels, badge: 0)
+            if !draftRows.isEmpty {
+                Section("Drafts", isExpanded: expansion("drafts")) {
+                    ForEach(draftRows, id: \.destination) { row in
+                        DraftRow(store: store, conversationKey: row.key, text: row.text)
+                            .tag(Destination.conversation(row.key))
+                            .contextMenu {
+                                Button("Discard Draft", role: .destructive) {
+                                    DraftStore.shared.setDraft("", for: row.destination)
+                                }
+                            }
+                    }
                 }
             }
             Section(isExpanded: expansion("dms")) {
@@ -585,6 +629,43 @@ private struct RecentSearchRow: View {
 
 /// Compact one-line DM row: presence dot (placeholder until M2), name(s),
 /// bot marker, unread badge.
+/// An unsent draft: conversation title over a one-line text snippet.
+private struct DraftRow: View {
+    let store: PerAccountStore
+    let conversationKey: ConversationKey
+    let text: String
+
+    private var title: String {
+        if case .topic(let streamId, let topic) = conversationKey {
+            let channel = store.channels[streamId]?.name
+                ?? store.subscriptions[streamId]?.name ?? "?"
+            let display = TopicName.displayName(topic)
+            return "#\(channel) › \(display.isEmpty ? "general chat" : display)"
+        }
+        return conversationKey.displayTitle(in: store)
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "pencil.line")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.callout)
+                    .lineLimit(1)
+                Text(text)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 1)
+    }
+}
+
 /// A quiet disclosure row ("More conversations…", "Inactive channels…").
 private struct SidebarExpanderRow: View {
     let title: String

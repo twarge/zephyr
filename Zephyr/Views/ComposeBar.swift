@@ -7,9 +7,11 @@ import ZulipModel
 /// deliberately deferred). Drafts are inherently offline-safe: composing
 /// needs no network, and the text stays until sent or cleared.
 @MainActor
+@Observable
 final class DraftStore {
     static let shared = DraftStore()
-    private var drafts: [SendDestination: String]
+    /// Observable so the sidebar's Drafts section tracks edits live.
+    private(set) var drafts: [SendDestination: String]
 
     private static let key = "composeDrafts"
 

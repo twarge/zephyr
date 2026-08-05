@@ -51,6 +51,7 @@ private struct GeneralSettings: View {
     @AppStorage("playSendSound") private var playSendSound = true
     @AppStorage("messageRetentionYears") private var messageRetentionYears = 5
     @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
+    @AppStorage("recentSearchLimit") private var recentSearchLimit = 5
 
     var body: some View {
         Form {
@@ -72,6 +73,12 @@ private struct GeneralSettings: View {
                     Text(order.label).tag(order.rawValue)
                 }
             }
+            Stepper(
+                "Recent searches kept: \(recentSearchLimit)",
+                value: $recentSearchLimit, in: 0...20)
+            Text("0 hides the Recent Searches section.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Divider()
                 .padding(.vertical, 4)
             Picker("Keep message history for:", selection: $messageRetentionYears) {
