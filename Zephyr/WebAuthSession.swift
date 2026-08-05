@@ -8,9 +8,21 @@ import Foundation
 @MainActor
 final class WebAuthSession: NSObject, ASWebAuthenticationPresentationContextProviding {
     private var session: ASWebAuthenticationSession?
+    /// Captured on the main actor before the session starts —
+    /// `presentationAnchor(for:)` arrives on the framework's own queue, so
+    /// it must not touch NSApp/UIApplication (nor assumeIsolated: that
+    /// trapped, e.g. with JumpCloud SSO).
+    private nonisolated(unsafe) var anchor: ASPresentationAnchor?
 
     func authenticate(at url: URL) async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
+        #if canImport(AppKit)
+        anchor = NSApp.keyWindow ?? NSApp.windows.first
+        #else
+        anchor = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            .first
+        #endif
+        return try await withCheckedThrowingContinuation { continuation in
             let session = ASWebAuthenticationSession(
                 url: url, callbackURLScheme: "zulip"
             ) { callback, error in
@@ -33,14 +45,6 @@ final class WebAuthSession: NSObject, ASWebAuthenticationPresentationContextProv
     nonisolated func presentationAnchor(
         for session: ASWebAuthenticationSession
     ) -> ASPresentationAnchor {
-        MainActor.assumeIsolated {
-            #if canImport(AppKit)
-            NSApp.keyWindow ?? NSApp.windows.first ?? ASPresentationAnchor()
-            #else
-            UIApplication.shared.connectedScenes
-                .compactMap { ($0 as? UIWindowScene)?.keyWindow }
-                .first ?? ASPresentationAnchor()
-            #endif
-        }
+        anchor ?? ASPresentationAnchor()
     }
 }
