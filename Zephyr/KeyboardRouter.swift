@@ -271,16 +271,61 @@ final class KeyboardRouter {
     /// monitor fires on the main thread; assumeIsolated hops back safely).
     private nonisolated static func makeMonitor(router: KeyboardRouter) -> Any? {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            let plain = event.modifierFlags
-                .intersection([.command, .option, .control]).isEmpty
+            let modifiers = event.modifierFlags
+                .intersection([.command, .option, .control])
             let keyCode = event.keyCode
             let character = event.charactersIgnoringModifiers?.first
-            guard plain else { return event }
+            // ⌘V with media on the pasteboard uploads into the compose bar;
+            // plain-text pastes stay native.
+            if modifiers == .command, character == "v" {
+                let consumed = MainActor.assumeIsolated {
+                    router.handlePasteMedia()
+                }
+                return consumed ? nil : event
+            }
+            guard modifiers.isEmpty else { return event }
             let consumed = MainActor.assumeIsolated {
                 router.handleMonitorKey(keyCode: keyCode, character: character)
             }
             return consumed ? nil : event
         }
+    }
+
+    /// Pasted files upload directly; pasted image *data* (screenshots,
+    /// browser images) lands in a temp PNG first, then rides the same
+    /// upload-and-link path as a drop.
+    private func handlePasteMedia() -> Bool {
+        guard let keyWindow = NSApp.keyWindow, keyWindow == hostWindow,
+              let uploadFiles else { return false }
+        let pasteboard = NSPasteboard.general
+        if let urls = pasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           !urls.isEmpty {
+            uploadFiles(urls)
+            return true
+        }
+        let pngData = pasteboard.data(forType: .png)
+            ?? pasteboard.data(forType: .tiff).flatMap {
+                NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:])
+            }
+        guard let pngData else { return false }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ZephyrPaste", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileURL = directory
+            .appendingPathComponent("Pasted \(formatter.string(from: .now)).png")
+        do {
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+            try pngData.write(to: fileURL)
+        } catch {
+            return false
+        }
+        uploadFiles([fileURL])
+        return true
     }
 
     private func handleMonitorKey(keyCode: UInt16, character: Character?) -> Bool {
