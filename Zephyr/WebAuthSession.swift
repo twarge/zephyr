@@ -23,9 +23,12 @@ final class WebAuthSession: NSObject, ASWebAuthenticationPresentationContextProv
             .first
         #endif
         return try await withCheckedThrowingContinuation { continuation in
+            // @Sendable: without it the closure inherits this class's
+            // MainActor isolation and traps when AuthenticationServices
+            // invokes it on its XPC reply queue (the post-login crash).
             let session = ASWebAuthenticationSession(
                 url: url, callbackURLScheme: "zulip"
-            ) { callback, error in
+            ) { @Sendable callback, error in
                 if let callback {
                     continuation.resume(returning: callback)
                 } else {
