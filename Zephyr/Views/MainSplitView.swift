@@ -30,10 +30,19 @@ struct MainSplitView: View {
     @FocusState private var detailFocused: Bool
     #endif
 
-    init(store: PerAccountStore) {
+    /// `initialSelection`/`startsWithSidebarClosed` configure secondary
+    /// windows (double-clicked sidebar entries): same window, sidebar
+    /// collapsed until reopened.
+    init(
+        store: PerAccountStore, initialSelection: Destination? = nil,
+        startsWithSidebarClosed: Bool = false
+    ) {
         self.store = store
         _search = State(initialValue: SidebarSearchModel(store: store))
-        _selection = State(initialValue: AppStateStore.selection(for: store.accountId))
+        _selection = State(
+            initialValue: initialSelection ?? AppStateStore.selection(for: store.accountId))
+        _columnVisibility = State(
+            initialValue: startsWithSidebarClosed ? .detailOnly : .automatic)
     }
 
     var body: some View {
@@ -42,7 +51,7 @@ struct MainSplitView: View {
                 store: store, search: search, selection: $selection,
                 startDirectMessage: { newConversation = .directMessage(initialUsers: []) },
                 showsToolbarControls: columnVisibility != .detailOnly)
-                .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 400)
+                .navigationSplitViewColumnWidth(min: 156, ideal: 300, max: 400)
         } detail: {
             detailContent
                 // Files dropped anywhere in the conversation area upload via
@@ -106,13 +115,21 @@ struct MainSplitView: View {
         .sheet(isPresented: Bindable(keys).showHelp) {
             ShortcutsHelpView()
         }
-        // File → New Conversation (⌘N) arrives via the app commands.
+        // File → New Conversation (⌘N) arrives via the app commands; with
+        // several main windows open, only the key window's copy takes it.
         .onChange(of: model.pendingNewConversation) {
-            if model.pendingNewConversation {
-                model.pendingNewConversation = false
-                newConversation = .general
-            }
+            guard model.pendingNewConversation else { return }
+            #if os(macOS)
+            guard keys.hostWindow?.isKeyWindow != false else { return }
+            #endif
+            model.pendingNewConversation = false
+            newConversation = .general
         }
+        #if os(macOS)
+        .background(WindowReader { window in
+            keys.hostWindow = window
+        })
+        #endif
         .onAppear {
             keys.store = store
             keys.currentDestination = selection

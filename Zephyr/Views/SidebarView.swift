@@ -520,6 +520,9 @@ struct SidebarView: View {
             ProgressView()
                 .controlSize(.small)
                 .padding(.leading, 26)
+                // Channels restored as expanded from last session reach here
+                // without a disclosure click — kick the fetch ourselves.
+                .onAppear { search.refreshTopics(streamId) }
         }
     }
 

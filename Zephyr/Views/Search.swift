@@ -133,12 +133,21 @@ final class SidebarSearchModel {
         !filterText.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    /// Refreshes one channel's topics (sidebar disclosure expands).
+    @ObservationIgnored private var refreshingTopics: Set<Int> = []
+
+    /// Refreshes one channel's topics (sidebar disclosure expands, or a
+    /// session-restored expansion appears). A failed fetch resolves to an
+    /// empty list rather than leaving the disclosure spinning forever.
     func refreshTopics(_ streamId: Int) {
+        guard !refreshingTopics.contains(streamId) else { return }
+        refreshingTopics.insert(streamId)
         let connection = store.connection
         Task {
+            defer { refreshingTopics.remove(streamId) }
             if let topics = try? await connection.getTopics(streamId: streamId) {
                 channelTopics[streamId] = topics
+            } else if channelTopics[streamId] == nil {
+                channelTopics[streamId] = []
             }
         }
     }

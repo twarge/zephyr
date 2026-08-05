@@ -12,10 +12,11 @@ struct ZephyrApp: App {
         }
         .commands { accountCommands }
         #if os(macOS)
-        // Double-clicked sidebar entries open standalone (no sidebar).
+        // Double-clicked sidebar entries open a fresh main window with the
+        // sidebar collapsed.
         WindowGroup(for: DetachedWindow.self) { $window in
             if let window {
-                DetachedWindowView(window: window)
+                DetachedRootView(window: window)
                     .environment(model)
             }
         }

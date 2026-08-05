@@ -31,6 +31,11 @@ final class KeyboardRouter {
     weak var store: PerAccountStore?
     weak var activeFeed: MessageListModel?
     var selectedMessageId: Int?
+    #if canImport(AppKit)
+    /// The window this router serves — with multiple main windows open,
+    /// each router handles keys only while its own window is key.
+    @ObservationIgnored weak var hostWindow: NSWindow?
+    #endif
     /// Set to a message id to ask its row to enter edit mode; the row clears it.
     var editRequestId: Int?
     var showHelp = false
@@ -251,8 +256,9 @@ final class KeyboardRouter {
     }
 
     private func handleMonitorKey(keyCode: UInt16, character: Character?) -> Bool {
-        // Only for the main window (not Settings, sheets, or popovers).
-        guard let keyWindow = NSApp.keyWindow, keyWindow == NSApp.mainWindow
+        // Only for this router's own window (not other main windows,
+        // Settings, sheets, or popovers).
+        guard let keyWindow = NSApp.keyWindow, keyWindow == hostWindow
         else { return false }
         if let responder = keyWindow.firstResponder {
             // Never steal keys from text editing.
@@ -275,6 +281,27 @@ final class KeyboardRouter {
     }
     #endif
 }
+
+#if canImport(AppKit)
+/// Reports the hosting NSWindow of the view it's placed behind.
+struct WindowReader: NSViewRepresentable {
+    var onWindow: @MainActor (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            onWindow(view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            onWindow(nsView.window)
+        }
+    }
+}
+#endif
 
 /// The `?` overlay: the keymap, in Zulip web's grouping.
 struct ShortcutsHelpView: View {
