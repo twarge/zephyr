@@ -176,7 +176,10 @@ public final class PerAccountStore {
         let selfId = selfUserId
         let clock = ContinuousClock()
         let start = clock.now
-        let cached = await Task.detached(priority: .userInitiated) { () -> [Message] in
+        // Utility priority: at launch this runs alongside the live-snapshot
+        // apply and first render — competing at high priority starved the
+        // UI (354 ms cold vs 4.4 s measured mid-launch).
+        let cached = await Task.detached(priority: .utility) { () -> [Message] in
             // One-time import of the pre-SQLite JSON cache.
             let legacy = offline.loadLegacyMessages()
             if !legacy.isEmpty {

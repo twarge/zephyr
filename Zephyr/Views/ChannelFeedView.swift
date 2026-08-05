@@ -40,8 +40,15 @@ struct ChannelFeedView: View {
         // (warm-launch swap, queue rebuild).
         .task(id: ObjectIdentifier(store)) {
             let list = MessageListModel(store: store, narrow: .channel(streamId: streamId))
-            model = list
-            await list.fetchInitial(count: 100)
+            if model == nil {
+                model = list
+                await list.fetchInitial(count: 100)
+            } else {
+                // Store swap: keep rendering the old window until the
+                // replacement has content.
+                await list.fetchInitial(count: 100)
+                model = list
+            }
         }
     }
 }

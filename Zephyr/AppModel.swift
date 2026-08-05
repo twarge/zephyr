@@ -147,15 +147,17 @@ final class AppModel {
             AppStateStore.lastActiveAccount = accountId
             return
         }
-        // Warm launch: render the cached snapshot instantly while the fresh
-        // register runs; the live store replaces it when it arrives.
+        // Warm launch: the fresh register starts FIRST (it dominates — 5s+
+        // on big realms), and the cached-snapshot decode rides inside it;
+        // the stale store renders as soon as the decode lands.
+        let liveStore = Task { try await global.perAccountStore(for: accountId) }
         if await global.installCachedStore(for: accountId) {
             phase = .ready(accountId)
         } else {
             phase = .loading
         }
         do {
-            let store = try await global.perAccountStore(for: accountId)
+            let store = try await liveStore.value
             phase = .ready(accountId)
             AppStateStore.lastActiveAccount = accountId
             ensureDraftSync(accountId)

@@ -102,8 +102,17 @@ struct TranscriptView: View {
             let list = MessageListModel(
                 store: store, narrow: conversation.narrow(selfUserId: store.selfUserId),
                 anchorMessageId: anchor)
-            model = list
-            await list.fetchInitial()
+            if model == nil {
+                // First open: show the fetch in progress.
+                model = list
+                await list.fetchInitial()
+            } else {
+                // Store swap (provisional → live at launch, queue rebuild):
+                // the rendered transcript stays up until the replacement
+                // has content — no blank flash mid-read.
+                await list.fetchInitial()
+                model = list
+            }
             store.markConversationRead(conversation)
         }
     }

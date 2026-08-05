@@ -42,8 +42,15 @@ struct NarrowFeedView: View {
         // (warm-launch swap, queue rebuild).
         .task(id: ObjectIdentifier(store)) {
             let list = MessageListModel(store: store, narrow: narrow)
-            model = list
-            await list.fetchInitial(count: 100)
+            if model == nil {
+                model = list
+                await list.fetchInitial(count: 100)
+            } else {
+                // Store swap: keep rendering the old feed until the
+                // replacement has content.
+                await list.fetchInitial(count: 100)
+                model = list
+            }
         }
     }
 }
