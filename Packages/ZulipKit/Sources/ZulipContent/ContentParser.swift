@@ -245,7 +245,7 @@ public enum ContentParser {
                   )     else {
                 return .unimplemented(html: outerHTML(element))
             }
-            let dimensions = (try2 { try img.attr("data-orieginal-dimensions") } ?? "")
+            let dimensions = (try2 { try img.attr("data-original-dimensions") } ?? "")
                 .split(separator: "x").compactMap { Int($0) }
             return .image(
                 ImageNode(
