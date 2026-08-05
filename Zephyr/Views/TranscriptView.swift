@@ -12,14 +12,6 @@ struct TranscriptView: View {
     @Environment(KeyboardRouter.self) private var keys
     @State private var model: MessageListModel?
     @State private var cache = MessageContentCache()
-    @State private var showAddPeople = false
-
-    /// The other people in this DM, seeding the "Add People…" sheet.
-    private var dmParticipants: [User] {
-        (conversation.dmParticipantIds ?? [])
-            .filter { $0 != store.selfUserId }
-            .compactMap { store.users[$0] }
-    }
 
     private func channelName(_ streamId: Int) -> String {
         store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel"
@@ -67,26 +59,6 @@ struct TranscriptView: View {
                 mode: .fixed(
                     conversation.sendDestination(selfUserId: store.selfUserId),
                     placeholder: conversation.displayTitle(in: store)))
-        }
-        .toolbar {
-            // A DM can't change membership (Zulip semantics), so "Add
-            // People" starts a new conversation pre-seeded with everyone
-            // here.
-            if case .dm = conversation {
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        showAddPeople = true
-                    } label: {
-                        Image(systemName: "person.badge.plus")
-                    }
-                    .help("New conversation with these people plus others")
-                }
-            }
-        }
-        .sheet(isPresented: $showAddPeople) {
-            NewConversationSheet(
-                store: store, selection: $selection,
-                mode: .directMessage(initialUsers: dmParticipants))
         }
         // Keyed to the store instance: when the provisional warm-launch
         // store is replaced by the live one (or a queue rebuild swaps

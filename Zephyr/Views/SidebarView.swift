@@ -390,7 +390,7 @@ struct SidebarView: View {
                     Button {
                         selection = .allChannels
                     } label: {
-                        addGlyph("number")
+                        joinChannelIcon
                     }
                     .help("Browse and join channels")
                 }
@@ -398,7 +398,7 @@ struct SidebarView: View {
                     Button {
                         startDirectMessage?()
                     } label: {
-                        addGlyph("person")
+                        Image(systemName: "person.badge.plus")
                     }
                     .help("New direct message")
                 }
@@ -459,14 +459,20 @@ struct SidebarView: View {
         .help("Servers and accounts (⌘1–⌘9 switch this window)")
     }
 
-    /// "+#" / "+person" — a small leading plus beside the subject glyph.
-    private func addGlyph(_ base: String) -> some View {
-        HStack(spacing: 1) {
-            Image(systemName: "plus")
-                .font(.system(size: 8, weight: .bold))
-            Image(systemName: base)
-                .font(.system(size: 13))
-        }
+    /// A "#" with a small plus badge at the lower right — the join-channel
+    /// analog of person.badge.plus (SF Symbols has no number.badge.plus).
+    private var joinChannelIcon: some View {
+        Image(systemName: "number")
+            .font(.system(size: 14, weight: .medium))
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: "plus")
+                    .font(.system(size: 7, weight: .heavy))
+                    .padding(1)
+                    // Knockout behind the badge: the # is stroke-dense
+                    // where person.badge.plus has empty space.
+                    .background(.bar, in: .circle)
+                    .offset(x: 4, y: 2)
+            }
     }
 
     private func accountLabel(_ account: Account) -> String {
