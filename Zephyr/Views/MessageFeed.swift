@@ -458,24 +458,6 @@ struct MessageRow: View {
             let controlsActive = hovering || showReactionPicker
             HStack(spacing: 2) {
                 Button {
-                    store.setStarred(!isStarred, messageId: message.id)
-                } label: {
-                    Image(systemName: isStarred ? "star.fill" : "star")
-                        .font(.callout)
-                        .foregroundStyle(
-                            isStarred ? AnyShapeStyle(.yellow) : AnyShapeStyle(.secondary))
-                        .padding(5)
-                        .background(
-                            controlsActive
-                                ? AnyShapeStyle(.quaternary.opacity(0.6))
-                                : AnyShapeStyle(.clear),
-                            in: .circle)
-                }
-                .buttonStyle(.plain)
-                .help(isStarred ? "Unstar" : "Star")
-                .opacity(controlsActive || isStarred ? 1 : 0)
-                .allowsHitTesting(controlsActive || isStarred)
-                Button {
                     showReactionPicker = true
                 } label: {
                     Image(systemName: "face.smiling")
@@ -495,6 +477,24 @@ struct MessageRow: View {
                 }
                 .opacity(controlsActive ? 1 : 0)
                 .allowsHitTesting(controlsActive)
+                Button {
+                    store.setStarred(!isStarred, messageId: message.id)
+                } label: {
+                    Image(systemName: isStarred ? "star.fill" : "star")
+                        .font(.callout)
+                        .foregroundStyle(
+                            isStarred ? AnyShapeStyle(.yellow) : AnyShapeStyle(.secondary))
+                        .padding(5)
+                        .background(
+                            controlsActive
+                                ? AnyShapeStyle(.quaternary.opacity(0.6))
+                                : AnyShapeStyle(.clear),
+                            in: .circle)
+                }
+                .buttonStyle(.plain)
+                .help(isStarred ? "Unstar" : "Star")
+                .opacity(controlsActive || isStarred ? 1 : 0)
+                .allowsHitTesting(controlsActive || isStarred)
             }
             .padding(.top, showHeader ? 8 : 0)
         }

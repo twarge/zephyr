@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import ZulipAPI
 import ZulipContent
 import ZulipModel
@@ -544,6 +545,9 @@ struct ComposeBar: View {
         uploads.append(item)
         let itemId = item.id
         let connection = store.connection
+        let fileExtension = (filename as NSString).pathExtension.lowercased()
+        let mimeType = UTType(filenameExtension: fileExtension)?.preferredMIMEType
+            ?? "application/octet-stream"
         let updateProgress: @MainActor (Double) -> Void = { fraction in
             if let index = uploads.firstIndex(where: { $0.id == itemId }) {
                 uploads[index].progress = fraction
@@ -552,7 +556,7 @@ struct ComposeBar: View {
         Task {
             defer { uploads.removeAll { $0.id == itemId } }
             guard let path = try? await connection.uploadFile(
-                data, filename: filename,
+                data, filename: filename, mimeType: mimeType,
                 progress: { fraction in
                     Task { @MainActor in updateProgress(fraction) }
                 })
@@ -560,7 +564,10 @@ struct ComposeBar: View {
             // Any spaces the server kept in the path would break the
             // markdown link (and the server's inline preview of it).
             let linkPath = path.replacingOccurrences(of: " ", with: "%20")
-            let reference = "[\(filename)](\(linkPath))"
+            // Images and audio embed with a leading "!" (what the web app
+            // inserts for supported media); other files stay plain links.
+            let embed = mimeType.hasPrefix("image/") || mimeType.hasPrefix("audio/")
+            let reference = "\(embed ? "!" : "")[\(filename)](\(linkPath))"
             text = text.isEmpty ? reference : "\(text)\n\(reference)"
         }
     }
