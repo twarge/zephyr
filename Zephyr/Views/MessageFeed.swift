@@ -472,11 +472,18 @@ struct MessageRow: View {
         }
         .contextMenu {
             let isStarred = (message.flags ?? []).contains("starred")
+            Button("Reply Quoting Message", systemImage: "text.quote") {
+                quoteAndReply()
+            }
             Button(isStarred ? "Unstar" : "Star", systemImage: "star") {
                 store.setStarred(!isStarred, messageId: message.id)
             }
             Button("Copy Text", systemImage: "doc.on.doc") {
                 Platform.copyToPasteboard(content.plainText)
+            }
+            Button("Copy Message Reference", systemImage: "link") {
+                Platform.copyToPasteboard(
+                    ConversationKey.permalink(to: message, in: store))
             }
             Button("Seen By…", systemImage: "eye") {
                 showReadReceipts = true
@@ -506,6 +513,34 @@ struct MessageRow: View {
         }
         .sheet(isPresented: $showReadReceipts) {
             ReadReceiptsSheet(store: store, message: message)
+        }
+    }
+
+    /// Zulip's quote-and-reply block, from the raw markdown:
+    ///   @_**Name|id** [said](permalink):
+    ///   ```quote
+    ///   …
+    ///   ```
+    private func quoteAndReply() {
+        Task {
+            let raw = await store.fetchRawContent(message.id) ?? content.plainText
+            let link = ConversationKey.permalink(to: message, in: store)
+            let quote = """
+                @_**\(message.senderFullName)|\(message.senderId)** [said](\(link)):
+                ```quote
+                \(raw)
+                ```
+
+                """
+            // Cross-conversation feeds have no compose: jump to the
+            // message's conversation first, then insert.
+            if keys.insertIntoCompose == nil,
+               let key = Unreads.conversationKey(for: message, selfUserId: store.selfUserId) {
+                keys.navigate?(.conversation(key))
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            keys.insertIntoCompose?(quote)
+            keys.focusCompose?()
         }
     }
 }

@@ -88,6 +88,22 @@ final class KeyboardRouter {
         uploadFiles = nil
     }
 
+    /// Text insertion into the visible compose bar (quote-and-reply);
+    /// ownership-tokened like uploads.
+    @ObservationIgnored private(set) var insertIntoCompose: ((String) -> Void)?
+    @ObservationIgnored private var composeInsertionOwner: UUID?
+
+    func registerComposeInsertion(owner: UUID, _ handler: @escaping (String) -> Void) {
+        composeInsertionOwner = owner
+        insertIntoCompose = handler
+    }
+
+    func unregisterComposeInsertion(owner: UUID) {
+        guard composeInsertionOwner == owner else { return }
+        composeInsertionOwner = nil
+        insertIntoCompose = nil
+    }
+
     private var selectedMessage: Message? {
         guard let selectedMessageId else { return nil }
         return store?.messages[selectedMessageId]

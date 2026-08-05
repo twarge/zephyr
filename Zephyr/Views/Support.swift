@@ -180,6 +180,36 @@ struct InitialsAvatar: View {
 
 extension ConversationKey {
     @MainActor
+    /// Zulip's hash encoding: encodeURIComponent, then `%` → `.` (so the
+    /// fragment survives routers that split on `%`).
+    static func encodeHashComponent(_ text: String) -> String {
+        let unreserved = CharacterSet(
+            charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
+        return (text.addingPercentEncoding(withAllowedCharacters: unreserved) ?? text)
+            .replacingOccurrences(of: "%", with: ".")
+    }
+
+    /// The web-app permalink to a message ("copy link to message" /
+    /// quote-and-reply's [said](…) target).
+    static func permalink(to message: Message, in store: PerAccountStore) -> String {
+        var base = store.connection.realmURL.absoluteString
+        while base.hasSuffix("/") { base.removeLast() }
+        let narrow: String
+        if let streamId = message.streamId {
+            let name = (store.channels[streamId]?.name
+                ?? store.subscriptions[streamId]?.name ?? "")
+                .replacingOccurrences(of: " ", with: "-")
+            narrow = "channel/\(streamId)-\(encodeHashComponent(name))"
+                + "/topic/\(encodeHashComponent(message.subject))"
+        } else if case .users(let recipients) = message.displayRecipient {
+            let ids = recipients.map(\.id).sorted().map(String.init).joined(separator: ",")
+            narrow = "dm/\(ids)-dm"
+        } else {
+            narrow = ""
+        }
+        return "\(base)/#narrow/\(narrow)/near/\(message.id)"
+    }
+
     func displayTitle(in store: PerAccountStore) -> String {
         switch self {
         case .dm(let joined):

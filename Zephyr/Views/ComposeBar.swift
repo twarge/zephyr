@@ -229,9 +229,18 @@ struct ComposeBar: View {
                 }
                 focus.wrappedValue = true
             }
+            // Quote-and-reply appends to the draft.
+            keys.registerComposeInsertion(owner: uploadOwnerId) { snippet in
+                if text.isEmpty {
+                    text = snippet
+                } else {
+                    text += (text.hasSuffix("\n") ? "" : "\n") + snippet
+                }
+            }
         }
         .onDisappear {
             keys.unregisterUpload(owner: uploadOwnerId)
+            keys.unregisterComposeInsertion(owner: uploadOwnerId)
         }
         .onChange(of: text) {
             if case .fixed(let destination, _) = mode {
