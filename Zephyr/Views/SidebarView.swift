@@ -803,13 +803,6 @@ private struct ChannelRow: View {
                 .frame(width: 12)
                 .help(isExpanded ? "Hide topics" : "Show topics")
             }
-            // No glyph column — compactness; a small lock still marks
-            // private channels.
-            if store.channels[subscription.streamId]?.inviteOnly == true {
-                Image(systemName: "lock.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
             Text(subscription.name)
                 .font(.body.weight(unreadCount > 0 && !subscription.muted ? .semibold : .regular))
                 .lineLimit(1)
@@ -819,6 +812,12 @@ private struct ChannelRow: View {
                     .foregroundStyle(.tertiary)
             }
             Spacer(minLength: 4)
+            // Private-channel lock sits trailing, inside the unread badge.
+            if store.channels[subscription.streamId]?.inviteOnly == true {
+                Image(systemName: "lock.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             if unreadCount > 0 && !subscription.muted {
                 CountBadge(count: unreadCount)
             }
