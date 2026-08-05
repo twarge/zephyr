@@ -28,6 +28,9 @@ struct MainSplitView: View {
     @State private var newConversation: NewConversationMode?
     @State private var dropTargeted = false
     @State private var columnVisibility = NavigationSplitViewVisibility.automatic
+    /// True while the narrow-window watcher hid the sidebar (so growing
+    /// the window restores it; a user's manual collapse is left alone).
+    @State private var autoCollapsedSidebar = false
     @State private var keys = KeyboardRouter()
     /// Per-window navigation state, restored with the window by the system
     /// (frames and window existence restore automatically; this brings the
@@ -109,6 +112,23 @@ struct MainSplitView: View {
                 .onAppear { detailFocused = true }
                 #endif
         }
+        #if os(macOS)
+        // macOS never adapts the split view to narrow windows on its own:
+        // squeeze the window and the sidebar auto-collapses to detail-only
+        // (and re-expands on grow, but only if this auto-collapse hid it —
+        // a manual collapse stays put). The two thresholds are hysteresis.
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            if width < 500, columnVisibility != .detailOnly {
+                autoCollapsedSidebar = true
+                withAnimation { columnVisibility = .detailOnly }
+            } else if width >= 560, autoCollapsedSidebar {
+                autoCollapsedSidebar = false
+                withAnimation { columnVisibility = .automatic }
+            }
+        }
+        #endif
         .environment(keys)
         .navigationTitle(store.realmName ?? "Zephyr")
         // Channel/topic/message links inside message content navigate in-app.
