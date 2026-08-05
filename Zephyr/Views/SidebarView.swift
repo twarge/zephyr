@@ -199,7 +199,7 @@ struct SidebarView: View {
             if !isFiltering {
                 Section("Views", isExpanded: expansion("views")) {
                     viewRow(
-                        "Recent conversations", icon: "clock", tag: .recentConversations,
+                        "Recent", icon: "clock", tag: .recentConversations,
                         badge: 0)
                     viewRow(
                         "Combined feed", icon: "line.3.horizontal", tag: .combinedFeed,
@@ -207,7 +207,7 @@ struct SidebarView: View {
                     viewRow(
                         "Mentions", icon: "at", tag: .mentions,
                         badge: store.unreads.mentionIds.count)
-                    viewRow("Starred messages", icon: "star", tag: .starred, badge: 0)
+                    viewRow("Starred", icon: "star", tag: .starred, badge: 0)
                     viewRow(
                         "All channels", icon: "rectangle.stack", tag: .allChannels, badge: 0)
                 }
