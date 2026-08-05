@@ -117,6 +117,15 @@ public struct ApiError: Error, Sendable {
     public var message: String
     public var retryAfterSeconds: Double?
 
+    public init(
+        httpStatus: Int, code: String, message: String, retryAfterSeconds: Double? = nil
+    ) {
+        self.httpStatus = httpStatus
+        self.code = code
+        self.message = message
+        self.retryAfterSeconds = retryAfterSeconds
+    }
+
     public var isBadEventQueueId: Bool { code == "BAD_EVENT_QUEUE_ID" }
     public var isRateLimited: Bool { code == "RATE_LIMIT_HIT" }
 

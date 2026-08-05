@@ -25,13 +25,60 @@ public enum WebAuth {
     }
 
     /// The URL to open in `ASWebAuthenticationSession` (callback scheme
-    /// `zulip`). For SSO backends, apply the same query param to the backend's
-    /// `login_url` from /server_settings instead.
-    public static func loginURL(realm: URL, otp: String) -> URL? {
+    /// `zulip`). `loginPath` is an external method's `login_url` from
+    /// /server_settings; nil means the realm's own login page (web password
+    /// flow).
+    public static func loginURL(realm: URL, loginPath: String? = nil, otp: String) -> URL? {
         var components = URLComponents(url: realm, resolvingAgainstBaseURL: false)
-        components?.path = "/accounts/login/"
+        components?.path = loginPath ?? "/accounts/login/"
         components?.queryItems = [URLQueryItem(name: "mobile_flow_otp", value: otp)]
         return components?.url
+    }
+
+    // MARK: Callback payload
+
+    /// The parsed `zulip://login` redirect (the server includes the user id,
+    /// so no follow-up /users/me call is needed).
+    public struct Payload: Sendable, Equatable {
+        public var realm: URL
+        public var email: String
+        public var userId: Int
+        public var otpEncryptedAPIKey: String
+    }
+
+    public enum PayloadError: Swift.Error, Equatable {
+        case notALoginCallback
+        case missingField(String)
+        case malformed(String)
+    }
+
+    /// Strict parse, mirroring zulip-flutter's validations: exact scheme and
+    /// host, all four fields present, the encrypted key exactly 64 hex chars.
+    public static func parsePayload(_ url: URL) throws -> Payload {
+        guard url.scheme?.lowercased() == "zulip",
+              url.host()?.lowercased() == "login",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { throw PayloadError.notALoginCallback }
+
+        func field(_ name: String) throws -> String {
+            guard let value = components.queryItems?.first(where: { $0.name == name })?.value,
+                  !value.isEmpty
+            else { throw PayloadError.missingField(name) }
+            return value
+        }
+        guard let realm = URL(string: try field("realm")), realm.host() != nil else {
+            throw PayloadError.malformed("realm")
+        }
+        guard let userId = Int(try field("user_id")) else {
+            throw PayloadError.malformed("user_id")
+        }
+        let encryptedKey = try field("otp_encrypted_api_key")
+        guard encryptedKey.count == 64, encryptedKey.allSatisfy(\.isHexDigit) else {
+            throw PayloadError.malformed("otp_encrypted_api_key")
+        }
+        return Payload(
+            realm: realm, email: try field("email"), userId: userId,
+            otpEncryptedAPIKey: encryptedKey)
     }
 
     /// Recovers the API key from the redirect's `otp_encrypted_api_key`.

@@ -46,3 +46,49 @@ struct WebAuthTests {
         #expect(url.absoluteString == "https://chat.example.com/accounts/login/?mobile_flow_otp=ab12")
     }
 }
+
+@Suite struct WebAuthPayloadTests {
+    private let key = String(repeating: "ab", count: 32)
+
+    @Test func parsesCompleteCallback() throws {
+        let url = URL(string:
+            "zulip://login?realm=https://chat.example.com&email=user%40example.com&user_id=7&otp_encrypted_api_key=\(key)")!
+        let payload = try WebAuth.parsePayload(url)
+        #expect(payload.realm == URL(string: "https://chat.example.com"))
+        #expect(payload.email == "user@example.com")
+        #expect(payload.userId == 7)
+        #expect(payload.otpEncryptedAPIKey == key)
+    }
+
+    @Test func rejectsWrongSchemeOrHost() {
+        #expect(throws: WebAuth.PayloadError.notALoginCallback) {
+            try WebAuth.parsePayload(URL(string: "https://login?realm=x")!)
+        }
+        #expect(throws: WebAuth.PayloadError.notALoginCallback) {
+            try WebAuth.parsePayload(URL(string: "zulip://logout?realm=x")!)
+        }
+    }
+
+    @Test func rejectsMissingOrMalformedFields() {
+        #expect(throws: WebAuth.PayloadError.missingField("email")) {
+            try WebAuth.parsePayload(URL(string:
+                "zulip://login?realm=https://x.com&user_id=7&otp_encrypted_api_key=\(key)")!)
+        }
+        #expect(throws: WebAuth.PayloadError.malformed("otp_encrypted_api_key")) {
+            try WebAuth.parsePayload(URL(string:
+                "zulip://login?realm=https://x.com&email=e&user_id=7&otp_encrypted_api_key=zz")!)
+        }
+        #expect(throws: WebAuth.PayloadError.malformed("user_id")) {
+            try WebAuth.parsePayload(URL(string:
+                "zulip://login?realm=https://x.com&email=e&user_id=seven&otp_encrypted_api_key=\(key)")!)
+        }
+    }
+
+    @Test func methodLoginURL() {
+        let url = WebAuth.loginURL(
+            realm: URL(string: "https://chat.example.com")!,
+            loginPath: "/accounts/login/social/google/", otp: "aa")
+        #expect(url?.absoluteString
+            == "https://chat.example.com/accounts/login/social/google/?mobile_flow_otp=aa")
+    }
+}

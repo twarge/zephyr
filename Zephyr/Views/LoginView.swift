@@ -1,9 +1,10 @@
+import AuthenticationServices
 import SwiftUI
 import ZulipAPI
 
-/// Realm discovery + sign-in. Password realms use fetch_api_key; any realm
-/// works with a manually copied API key. (SSO via ASWebAuthenticationSession
-/// is planned; see docs/ARCHITECTURE.md §7.)
+/// Realm discovery + sign-in. External methods (Google, GitHub, SAML, …) use
+/// the mobile web-auth flow via ASWebAuthenticationSession; password realms
+/// use fetch_api_key; a manually copied API key remains as the escape hatch.
 struct LoginView: View {
     @Environment(AppModel.self) private var model
 
@@ -26,6 +27,7 @@ struct LoginView: View {
     @State private var method = Method.password
     @State private var busy = false
     @State private var errorText: String?
+    @State private var webAuthSession = WebAuthSession()
 
     var body: some View {
         VStack(spacing: 16) {
@@ -72,11 +74,32 @@ struct LoginView: View {
             Text(settings.realmName ?? realm.host() ?? "")
                 .font(.headline)
             if let external = settings.externalAuthenticationMethods, !external.isEmpty {
-                Text("This organization also offers \(external.map(\.displayName).joined(separator: ", ")) sign-in; use an API key for those accounts for now.")
+                VStack(spacing: 8) {
+                    ForEach(external, id: \.name) { authMethod in
+                        Button {
+                            webSignIn(settings, realm: realm, loginPath: authMethod.loginUrl)
+                        } label: {
+                            HStack(spacing: 6) {
+                                if let icon = authMethod.displayIcon,
+                                   let iconURL = URL(string: icon, relativeTo: realm) {
+                                    AsyncImage(url: iconURL) { image in
+                                        image.resizable()
+                                    } placeholder: {
+                                        Color.clear
+                                    }
+                                    .frame(width: 18, height: 18)
+                                }
+                                Text("Sign in with \(authMethod.displayName)")
+                            }
+                            .frame(width: 260)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(busy)
+                    }
+                }
+                Text("or")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: 340)
-                    .multilineTextAlignment(.center)
             }
             Picker("Method", selection: $method) {
                 ForEach(availableMethods(settings)) { method in
@@ -160,6 +183,39 @@ struct LoginView: View {
             await model.addAccount(
                 realm: realm, email: authEmail, apiKey: key,
                 userId: me.userId, realmName: settings.realmName)
+        }
+    }
+
+    /// Zulip's mobile web-auth flow (SSO and web password logins): browser
+    /// sheet with a one-time pad; the zulip:// callback carries the API key
+    /// XOR-encrypted with it. See docs/ARCHITECTURE.md §7.
+    private func webSignIn(_ settings: ServerSettings, realm: URL, loginPath: String) {
+        run {
+            let otp = WebAuth.generateOTP()
+            guard let url = WebAuth.loginURL(realm: realm, loginPath: loginPath, otp: otp)
+            else {
+                throw ApiError(
+                    httpStatus: 0, code: "BAD_REALM_URL", message: realm.absoluteString)
+            }
+            let callback: URL
+            do {
+                callback = try await webAuthSession.authenticate(at: url)
+            } catch let error as ASWebAuthenticationSessionError
+                where error.code == .canceledLogin {
+                return  // User closed the sheet; not an error.
+            }
+            let payload = try WebAuth.parsePayload(callback)
+            // The callback must come from the realm we asked to sign into.
+            guard payload.realm.host()?.lowercased() == realm.host()?.lowercased() else {
+                throw ApiError(
+                    httpStatus: 0, code: "REALM_MISMATCH",
+                    message: "The sign-in response came from a different server.")
+            }
+            let key = try WebAuth.decryptAPIKey(
+                otpEncryptedAPIKey: payload.otpEncryptedAPIKey, otp: otp)
+            await model.addAccount(
+                realm: realm, email: payload.email, apiKey: key,
+                userId: payload.userId, realmName: settings.realmName)
         }
     }
 
