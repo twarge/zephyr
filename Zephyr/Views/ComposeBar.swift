@@ -188,6 +188,7 @@ struct ComposeBar: View {
                 } else {
                     TextField(placeholder, text: $text, axis: .vertical)
                         .textFieldStyle(.plain)
+                        .autocorrectionDisabled(false)
                         .lineLimit(1...10)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
@@ -337,6 +338,7 @@ struct ComposeBar: View {
                     }
                     TextEditor(text: $text)
                         .scrollContentBackground(.hidden)
+                        .autocorrectionDisabled(false)
                         .font(.body)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
