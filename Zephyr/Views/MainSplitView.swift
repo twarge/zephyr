@@ -4,7 +4,7 @@ import ZulipModel
 /// What the detail column shows: a DM/topic transcript, a channel's
 /// interleaved message feed, a channel's topic list, or a cross-channel view.
 /// Codable so each server's selection persists across launches.
-enum Destination: Hashable, Codable {
+nonisolated enum Destination: Hashable, Codable {
     case conversation(ConversationKey)
     case channel(streamId: Int)
     case channelTopics(streamId: Int)

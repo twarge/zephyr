@@ -47,6 +47,10 @@ final class AppModel {
     let global: GlobalStore
     private var connectivity: ConnectivityMonitor?
 
+    /// In-process App Intents (Shortcuts, Siri, Focus filters) resolve app
+    /// state through here; set once at launch.
+    static private(set) weak var shared: AppModel?
+
     /// Set by MainSplitView; used to suppress banners for the conversation
     /// being read.
     var activeConversation: ActiveConversation?
@@ -69,6 +73,7 @@ final class AppModel {
     }
 
     init() {
+        defer { Self.shared = self }
         do {
             global = try GlobalStore(
                 accountsStore: try JSONFileAccountsStore.standard(),

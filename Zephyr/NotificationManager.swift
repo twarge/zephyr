@@ -56,6 +56,11 @@ final class NotificationManager: NSObject {
     func handleMessageEvent(_ event: MessageEvent, accountId: Account.ID, store: PerAccountStore) {
         guard authorized, UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool ?? true
         else { return }
+        // Focus filter: the active Focus may restrict banners to one server.
+        if let only = UserDefaults.standard.string(forKey: "focusNotifyAccount"),
+           let onlyId = UUID(uuidString: only), onlyId != accountId {
+            return
+        }
         let message = event.message
         guard message.senderId != store.selfUserId else { return }
         guard !event.flags.contains("read") else { return }

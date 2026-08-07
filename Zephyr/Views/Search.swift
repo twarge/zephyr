@@ -7,7 +7,7 @@ import ZulipModel
 
 /// A committed search filter — rendered as a token bubble in the sidebar
 /// search field (the native analog of the web app's search pills).
-enum SearchToken: Identifiable, Hashable, Codable {
+nonisolated enum SearchToken: Identifiable, Hashable, Codable {
     case channel(streamId: Int, name: String)
     case topic(String)
     case sender(userId: Int, name: String)
@@ -382,7 +382,7 @@ extension SidebarSearchModel: @unchecked Sendable {}
 
 /// A full search: token filters plus free text (the server's full-text
 /// `search` operator).
-struct SearchQuery: Hashable, Codable {
+nonisolated struct SearchQuery: Hashable, Codable {
     var tokens: [SearchToken]
     var text: String
 
