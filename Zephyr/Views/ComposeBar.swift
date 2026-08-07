@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import UniformTypeIdentifiers
 import ZulipAPI
 import ZulipContent
@@ -249,6 +250,7 @@ struct ComposeBar: View {
                 .buttonStyle(.plain)
                 .padding(.bottom, 7)
                 .help(expanded ? "Compact message field" : "Long-form message field")
+                .popoverTip(LongFormComposeTip())
                 if expanded {
                     expandedEditor
                 } else {

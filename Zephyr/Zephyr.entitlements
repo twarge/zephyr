@@ -8,5 +8,10 @@
 	<true/>
 	<key>com.apple.security.files.user-selected.read-only</key>
 	<true/>
+	<!-- Communication-notification styling additionally needs the
+	     profile-gated com.apple.developer.usernotifications.communication
+	     entitlement: enable the "Communication Notifications" capability in
+	     Xcode (Signing & Capabilities) to provision it. The intent donation
+	     in NotificationManager is ready either way. -->
 </dict>
 </plist>

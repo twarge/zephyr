@@ -1,4 +1,5 @@
 import SwiftUI
+import Translation
 import ZulipAPI
 import ZulipContent
 import ZulipModel
@@ -625,6 +626,7 @@ struct MessageRow: View {
     @State private var editing = false
     @State private var editText = ""
     @State private var showMoveSheet = false
+    @State private var showTranslation = false
     @State private var showReadReceipts = false
     @State private var showEditHistory = false
 
@@ -807,6 +809,9 @@ struct MessageRow: View {
                 Platform.copyToPasteboard(
                     ConversationKey.permalink(to: message, in: store))
             }
+            Button("Translate", systemImage: "translate") {
+                showTranslation = true
+            }
             Button("Seen By…", systemImage: "eye") {
                 showReadReceipts = true
             }
@@ -830,6 +835,8 @@ struct MessageRow: View {
                 }
             }
         }
+        // System translation UI, on-device (Translation framework).
+        .translationPresentation(isPresented: $showTranslation, text: content.plainText)
         .sheet(isPresented: $showMoveSheet) {
             MoveTopicSheet(store: store, message: message)
         }

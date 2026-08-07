@@ -53,6 +53,7 @@ private struct GeneralSettings: View {
     @Environment(AppModel.self) private var model
     @AppStorage("badgePolicy") private var badgePolicy = BadgePolicy.dmsAndMentions.rawValue
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
+    @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
     @AppStorage("messageRetentionYears") private var messageRetentionYears = 5
     @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
     @AppStorage("recentSearchLimit") private var recentSearchLimit = 5
@@ -66,6 +67,9 @@ private struct GeneralSettings: View {
             }
             .pickerStyle(.inline)
             Toggle("Show notifications for messages", isOn: $notificationsEnabled)
+            #if os(macOS)
+            Toggle("Show in menu bar", isOn: $showMenuBarExtra)
+            #endif
             Text("Direct messages and mentions notify while Zephyr is running. (Zulip has no push service for desktop clients.)")
                 .font(.caption)
                 .foregroundStyle(.secondary)

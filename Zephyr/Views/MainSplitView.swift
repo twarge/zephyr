@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import ZulipModel
 
 /// What the detail column shows: a DM/topic transcript, a channel's
@@ -261,6 +262,25 @@ struct MainSplitView: View {
         .onChange(of: badgeCount, initial: true) {
             Platform.setAppBadge(badgeCount)
         }
+        // Handoff: the current conversation continues on another device.
+        .userActivity("com.twarge.zephyr.conversation", isActive: selection != nil) { activity in
+            activity.title = store.realmName ?? "Zephyr"
+            activity.isEligibleForHandoff = true
+            if let selection,
+               let data = try? JSONEncoder().encode(
+                StoredWindowState(account: store.accountId, destination: selection)) {
+                activity.addUserInfoEntries(from: ["state": data])
+            }
+        }
+        .onContinueUserActivity("com.twarge.zephyr.conversation") { activity in
+            guard let data = activity.userInfo?["state"] as? Data,
+                  let stored = try? JSONDecoder().decode(StoredWindowState.self, from: data)
+            else { return }
+            // Routed like a notification click: the key window hops
+            // accounts if needed, then navigates.
+            model.pendingDestination = PendingDestination(
+                account: stored.account, destination: stored.destination)
+        }
         .toolbar {
             if store.isRecoveringEventStream {
                 ToolbarItem(placement: .automatic) {
@@ -369,6 +389,11 @@ struct MainSplitView: View {
                     "No Conversation Selected",
                     systemImage: "bubble.left.and.bubble.right",
                     description: Text("Choose a conversation from the sidebar."))
+                    .overlay(alignment: .top) {
+                        TipView(OpenQuicklyTip())
+                            .frame(maxWidth: 380)
+                            .padding()
+                    }
             }
         }
     }

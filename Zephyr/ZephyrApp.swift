@@ -1,10 +1,18 @@
 import SwiftUI
+import TipKit
 import ZulipModel
 
 @main
 struct ZephyrApp: App {
     @State private var model = AppModel()
     @Environment(\.openWindow) private var openWindow
+    #if os(macOS)
+    @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
+    #endif
+
+    init() {
+        try? Tips.configure()
+    }
 
     var body: some Scene {
         WindowGroup(id: "main") {
@@ -30,9 +38,79 @@ struct ZephyrApp: App {
             HelpView()
         }
         .defaultSize(width: 620, height: 700)
+        MenuBarExtra(
+            "Zephyr", systemImage: "bubble.left.and.bubble.right",
+            isInserted: $showMenuBarExtra
+        ) {
+            MenuBarContent()
+                .environment(model)
+        }
         #endif
     }
 }
+
+#if os(macOS)
+/// The menu-bar glance: the most unread conversations across every server;
+/// clicking one focuses it in a main window.
+private struct MenuBarContent: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
+
+    private struct Line: Identifiable {
+        let id = UUID()
+        let account: Account.ID
+        let key: ConversationKey
+        let title: String
+        let count: Int
+    }
+
+    private var lines: [Line] {
+        var out: [Line] = []
+        for account in model.global.accounts {
+            guard let store = model.global.stores[account.id] else { continue }
+            for (key, ids) in store.unreads.unreadIds where !ids.isEmpty {
+                out.append(Line(
+                    account: account.id, key: key,
+                    title: key.displayTitle(in: store), count: ids.count))
+            }
+        }
+        return Array(out.sorted { $0.count > $1.count }.prefix(8))
+    }
+
+    var body: some View {
+        if lines.isEmpty {
+            Text("No unread conversations")
+        } else {
+            ForEach(lines) { line in
+                Button("\(line.title)  (\(line.count))") {
+                    show(line)
+                }
+            }
+        }
+        Divider()
+        Button("Open Zephyr") {
+            Platform.activate()
+            openMainWindowIfNeeded()
+        }
+    }
+
+    private func show(_ line: Line) {
+        Platform.activate()
+        model.pendingDestination = PendingDestination(
+            account: line.account, destination: .conversation(line.key))
+        openMainWindowIfNeeded()
+    }
+
+    private func openMainWindowIfNeeded() {
+        let hasMainWindow = NSApp.windows.contains {
+            $0.isVisible && $0.styleMask.contains(.titled) && !($0 is NSPanel)
+        }
+        if !hasMainWindow {
+            openWindow(id: "main")
+        }
+    }
+}
+#endif
 
 /// ⌘1…⌘9 switch the key window's server (ordered as in Settings →
 /// Accounts) — other windows keep showing theirs. Disabled when no main

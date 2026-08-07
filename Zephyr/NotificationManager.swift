@@ -1,6 +1,7 @@
 #if canImport(AppKit)
 import AppKit
 #endif
+import Intents
 import UserNotifications
 import ZulipAPI
 import ZulipContent
@@ -107,9 +108,33 @@ final class NotificationManager: NSObject {
         content.sound = .default
         content.userInfo = Self.userInfo(accountId: accountId, key: key)
 
+        // Communication notification: donating the receive intent lets the
+        // system style the banner like Messages (sender-first) and lets
+        // Focus break through for people. Falls back to the plain content
+        // if updating fails (e.g. the entitlement is missing).
+        var finalContent: UNNotificationContent = content
+        let senderId = "zephyr-\(accountId.uuidString)-\(message.senderId)"
+        let sender = INPerson(
+            personHandle: INPersonHandle(value: senderId, type: .unknown),
+            nameComponents: nil, displayName: message.senderFullName, image: nil,
+            contactIdentifier: nil, customIdentifier: senderId)
+        let intent = INSendMessageIntent(
+            recipients: nil, outgoingMessageType: .outgoingMessageText,
+            content: content.body,
+            speakableGroupName: INSpeakableString(
+                spokenPhrase: content.subtitle.isEmpty ? content.title : content.subtitle),
+            conversationIdentifier: "\(accountId.uuidString)|\(content.subtitle)|\(content.title)",
+            serviceName: nil, sender: sender, attachments: nil)
+        let interaction = INInteraction(intent: intent, response: nil)
+        interaction.direction = .incoming
+        interaction.donate()
+        if let updated = try? content.updating(from: intent) {
+            finalContent = updated
+        }
+
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(
-                identifier: "msg-\(message.id)", content: content, trigger: nil))
+                identifier: "msg-\(message.id)", content: finalContent, trigger: nil))
     }
 
     // MARK: Round-tripping the conversation through userInfo
