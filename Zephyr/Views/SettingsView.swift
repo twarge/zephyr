@@ -48,7 +48,6 @@ private struct GeneralSettings: View {
     @Environment(AppModel.self) private var model
     @AppStorage("badgePolicy") private var badgePolicy = BadgePolicy.dmsAndMentions.rawValue
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
-    @AppStorage("playSendSound") private var playSendSound = true
     @AppStorage("messageRetentionYears") private var messageRetentionYears = 5
     @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
     @AppStorage("recentSearchLimit") private var recentSearchLimit = 5
@@ -65,7 +64,6 @@ private struct GeneralSettings: View {
             Text("Direct messages and mentions notify while Zephyr is running. (Zulip has no push service for desktop clients.)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Toggle("Play sound when sending", isOn: $playSendSound)
             Divider()
                 .padding(.vertical, 4)
             Picker("Sort direct messages by:", selection: $dmSortOrder) {

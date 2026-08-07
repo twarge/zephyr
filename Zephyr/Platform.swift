@@ -74,10 +74,4 @@ enum Platform {
         NSApp.activate()
         #endif
     }
-
-    static func playSendSound() {
-        #if canImport(AppKit)
-        NSSound(named: "Pop")?.play()
-        #endif
-    }
 }

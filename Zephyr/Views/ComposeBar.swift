@@ -677,9 +677,6 @@ struct ComposeBar: View {
         store.typingStopped(in: destination)
         text = ""
         DraftStore.shared.setDraft("", for: destination, account: store.accountId)
-        if UserDefaults.standard.object(forKey: "playSendSound") as? Bool ?? true {
-            Platform.playSendSound()
-        }
     }
 }
 
