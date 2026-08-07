@@ -26,6 +26,10 @@ struct ZephyrApp: App {
             SettingsView()
                 .environment(model)
         }
+        Window("Zephyr Help", id: "help") {
+            HelpView()
+        }
+        .defaultSize(width: 620, height: 700)
         #endif
     }
 }
@@ -75,6 +79,16 @@ extension ZephyrApp {
             }
             .keyboardShortcut("o", modifiers: [.command, .shift])
         }
+        #if os(macOS)
+        // Replaces the system Help stub (which needs a registered help
+        // book) with our own manual window.
+        CommandGroup(replacing: .help) {
+            Button("Zephyr Help") {
+                openWindow(id: "help")
+            }
+            .keyboardShortcut("?", modifiers: .command)
+        }
+        #endif
         CommandMenu("Format") {
             Button("Bold") { model.pendingFormat = .bold }
                 .keyboardShortcut("b", modifiers: .command)

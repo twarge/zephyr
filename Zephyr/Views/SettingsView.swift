@@ -38,6 +38,11 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             AccountsSettings()
                 .tabItem { Label("Accounts", systemImage: "person.crop.circle") }
+            #if os(iOS)
+            // iOS has no Help menu; Settings is the conventional home.
+            HelpView()
+                .tabItem { Label("Help", systemImage: "questionmark.circle") }
+            #endif
         }
         .frame(width: 460)
         .padding(.bottom, 8)

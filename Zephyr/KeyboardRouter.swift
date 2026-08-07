@@ -413,7 +413,8 @@ struct WindowReader: NSViewRepresentable {
 struct ShortcutsHelpView: View {
     @Environment(\.dismiss) private var dismiss
 
-    private static let sections: [(String, [(String, String)])] = [
+    /// Shared with HelpView's Keyboard Navigation section.
+    static let sections: [(String, [(String, String)])] = [
         ("Navigation", [
             ("j  or  ↓", "Next message"),
             ("k  or  ↑", "Previous message"),
