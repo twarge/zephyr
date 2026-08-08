@@ -752,7 +752,9 @@ struct MessageRow: View {
             // Fixed layout (opacity gating, not insertion) so the star sits
             // in exactly the same spot as control and as starred indicator.
             let controlsActive = hovering || showReactionPicker
-            HStack(spacing: 2) {
+            // Top-aligned: the buttons' padding would otherwise center the
+            // time a few points below its message's first line.
+            HStack(alignment: .top, spacing: 2) {
                 Button {
                     showReactionPicker = true
                 } label: {
@@ -801,6 +803,7 @@ struct MessageRow: View {
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .padding(.leading, 4)
+                    .padding(.top, showHeader ? 2 : 1)
             }
             .padding(.top, showHeader ? 8 : 0)
         }
