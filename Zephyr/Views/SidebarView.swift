@@ -306,18 +306,12 @@ struct SidebarView: View {
                     }
                 }
             } header: {
-                HStack {
+                if let startDirectMessage {
+                    SectionHeaderWithAdd(
+                        title: "Direct messages", help: "New direct message",
+                        action: startDirectMessage)
+                } else {
                     Text("Direct messages")
-                    Spacer()
-                    if let startDirectMessage {
-                        Button(action: startDirectMessage) {
-                            Image(systemName: "plus.circle")
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .padding(.trailing, 8)
-                        .help("New direct message")
-                    }
                 }
             }
             if store.channelFolders.isEmpty {
@@ -544,20 +538,12 @@ struct SidebarView: View {
                     }
                 }
             } header: {
-                HStack {
+                if showsJoin {
+                    SectionHeaderWithAdd(
+                        title: title, help: "Browse and join channels",
+                        action: { selection = .allChannels })
+                } else {
                     Text(title)
-                    Spacer()
-                    if showsJoin {
-                        Button {
-                            selection = .allChannels
-                        } label: {
-                            Image(systemName: "plus.circle")
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .padding(.trailing, 8)
-                        .help("Browse and join channels")
-                    }
                 }
             }
         }
@@ -621,6 +607,36 @@ struct SidebarView: View {
         }
         .tag(tag)
         .simultaneousGesture(detachGesture(tag))
+    }
+}
+
+/// A section header whose + button stays invisible until the pointer
+/// approaches — matching the hover-revealed disclosure triangle beside it.
+/// (Touch platforms keep it visible; there's nothing to hover.)
+private struct SectionHeaderWithAdd: View {
+    let title: String
+    let help: String
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Button(action: action) {
+                Image(systemName: "plus.circle")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .padding(.trailing, 8)
+            .help(help)
+            #if os(macOS)
+            .opacity(hovering ? 1 : 0)
+            #endif
+        }
+        .contentShape(.rect)
+        .onHover { hovering = $0 }
     }
 }
 
