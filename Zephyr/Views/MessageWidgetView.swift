@@ -35,10 +35,8 @@ private struct PollView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Label(
-                    poll.question.isEmpty ? "Poll" : poll.question,
-                    systemImage: "chart.bar.xaxis")
-                    .font(.callout.weight(.semibold))
+                Text(poll.question.isEmpty ? "Poll" : poll.question)
+                    .font(.body.weight(.semibold))
                 if isAuthor {
                     Button {
                         editedQuestion = poll.question
@@ -152,8 +150,8 @@ private struct TodoListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Label(list.title ?? "To-do list", systemImage: "checklist")
-                    .font(.callout.weight(.semibold))
+                Text(list.title ?? "To-do list")
+                    .font(.body.weight(.semibold))
                 if isAuthor {
                     Button {
                         editedTitle = list.title ?? ""

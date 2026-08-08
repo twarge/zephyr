@@ -312,7 +312,7 @@ struct MessageFeedList: View {
         switch item {
         case .daySeparator(let label):
             Text(label)
-                .font(.caption.weight(.medium))
+                .font(.body.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
