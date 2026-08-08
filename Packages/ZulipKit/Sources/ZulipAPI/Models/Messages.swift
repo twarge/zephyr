@@ -55,7 +55,7 @@ public struct Reaction: Codable, Sendable, Hashable {
 /// A message as returned by GET /messages and `message` events, with
 /// `apply_markdown: true` (so `content` is server-rendered HTML). Encodable
 /// so the offline message cache can round-trip it through `ZulipJSON`.
-public struct Message: Codable, Sendable, Identifiable {
+public struct Message: Codable, Sendable, Identifiable, Equatable {
     public var id: Int
     public var senderId: Int
     public var senderFullName: String
@@ -84,7 +84,7 @@ public struct Message: Codable, Sendable, Identifiable {
 }
 
 /// One widget submessage: `content` is a JSON-encoded widget event.
-public struct Submessage: Codable, Sendable {
+public struct Submessage: Codable, Sendable, Equatable {
     public var msgType: String
     public var content: String
     public var senderId: Int

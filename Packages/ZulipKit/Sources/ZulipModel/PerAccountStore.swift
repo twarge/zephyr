@@ -821,12 +821,37 @@ public final class PerAccountStore {
     /// the server is fresher than last session.
     public func reconcileFetchedMessages(_ fetched: [Message]) {
         var written: [Int] = []
-        for message in fetched
-        where messages[message.id] == nil || cachedMessageIds.contains(message.id) {
-            messages[message.id] = message
-            cachedMessageIds.remove(message.id)
-            written.append(message.id)
+        for message in fetched {
+            if var existing = messages[message.id], !cachedMessageIds.contains(message.id) {
+                // A fetch can be NEWER than memory (strikes/votes/edits
+                // made in a missed-event window) or OLDER (a fetch that
+                // raced a live event) — adopt only what's provably newer.
+                var changed = false
+                // Submessages only ever grow: longer is newer.
+                if (message.submessages?.count ?? 0) > (existing.submessages?.count ?? 0) {
+                    existing.submessages = message.submessages
+                    changed = true
+                }
+                // Content follows the edit clock; ties keep the live copy.
+                if (message.lastEditTimestamp ?? 0) > (existing.lastEditTimestamp ?? 0) {
+                    existing.content = message.content
+                    existing.subject = message.subject
+                    existing.lastEditTimestamp = message.lastEditTimestamp
+                    changed = true
+                }
+                if changed {
+                    messages[message.id] = existing
+                    written.append(message.id)
+                }
+            } else {
+                messages[message.id] = message
+                cachedMessageIds.remove(message.id)
+                written.append(message.id)
+            }
         }
+        guard !written.isEmpty else { return }
+        // Other open lists showing these messages refresh too.
+        forEachMessageList { $0.handleChangedMessages(ids: written) }
         scheduleMessageCacheSave(written)
     }
 

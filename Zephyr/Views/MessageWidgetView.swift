@@ -183,21 +183,15 @@ private struct TodoListView: View {
                     store.strikeTodoTask(messageId: messageId, taskKey: task.key)
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
+                        Image(systemName: task.completed ? "checkmark.square.fill" : "square")
                             .foregroundStyle(
                                 task.completed
-                                    ? AnyShapeStyle(.green) : AnyShapeStyle(.tertiary))
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(task.title)
-                                .font(.callout)
-                                .strikethrough(task.completed)
-                                .foregroundStyle(task.completed ? .secondary : .primary)
-                            if let detail = task.detail {
-                                Text(detail)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                                    ? AnyShapeStyle(.green) : AnyShapeStyle(.tint))
+                        // One line, web-style: "Title: note".
+                        taskLine(task)
+                            .font(.callout)
+                            .strikethrough(task.completed)
+                            .foregroundStyle(task.completed ? .secondary : .primary)
                         Spacer(minLength: 0)
                     }
                     .contentShape(.rect)
@@ -228,6 +222,14 @@ private struct TodoListView: View {
         .padding(10)
         .frame(maxWidth: 420, alignment: .leading)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func taskLine(_ task: MessageWidget.TodoList.Task) -> Text {
+        var line = Text(task.title).fontWeight(.semibold)
+        if let detail = task.detail {
+            line = line + Text(": \(detail)")
+        }
+        return line
     }
 
     private func addTask() {

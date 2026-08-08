@@ -311,3 +311,55 @@ struct SubmessageEventTests {
         #expect(list.title == "Weekend chores")
     }
 }
+
+@MainActor
+@Suite struct ReconcileRefreshTests {
+    private static let widgetJSON = #"{\"widget_type\": \"todo\", \"extra_data\": {\"tasks\": [{\"task\": \"Dishes\", \"desc\": \"\"}]}}"#
+    private static let strike = #"{\"type\":\"strike\",\"key\":\"canned,0\"}"#
+
+    private func todoMessage(submessages: String) -> String {
+        """
+        {"id": 900, "sender_id": 5, "sender_full_name": "Lister", "timestamp": 1750000000,
+         "type": "stream", "content": "<p>/todo</p>", "stream_id": 10, "subject": "t",
+         "display_recipient": "general", "reactions": [], "flags": ["read"],
+         "submessages": [\(submessages)]}
+        """
+    }
+
+    @Test func refetchRefreshesSubmessagesButKeepsLocalFlags() throws {
+        let transport = FakeTransport(defaultResponse: .hang)
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key", transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        // In memory without strikes (e.g. fetched before the app closed)…
+        let initial = try ZulipJSON.decoder.decode(
+            Message.self,
+            from: Data(todoMessage(
+                submessages: #"{"msg_type": "widget", "sender_id": 5, "content": "\#(Self.widgetJSON)"}"#).utf8))
+        store.reconcileFetchedMessages([initial])
+        // …locally starred meanwhile (optimistic flag change)…
+        store.setStarred(true, messageId: 900)
+        #expect(store.messages[900]?.flags?.contains("starred") == true)
+
+        // …then a refetch arrives carrying a strike made in the gap.
+        let refetched = try ZulipJSON.decoder.decode(
+            Message.self,
+            from: Data(todoMessage(
+                submessages: #"{"msg_type": "widget", "sender_id": 5, "content": "\#(Self.widgetJSON)"}, {"msg_type": "widget", "sender_id": 9, "content": "\#(Self.strike)"}"#).utf8))
+        store.reconcileFetchedMessages([refetched])
+
+        let message = try #require(store.messages[900])
+        guard case .todoList(let list) = MessageWidget.parse(message) else {
+            Issue.record("expected todo list")
+            return
+        }
+        #expect(list.tasks.first?.completed == true)
+        #expect(message.flags?.contains("starred") == true)
+    }
+}
+
