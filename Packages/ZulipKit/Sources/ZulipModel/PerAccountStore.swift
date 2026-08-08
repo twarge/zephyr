@@ -81,6 +81,8 @@ public final class PerAccountStore {
     @ObservationIgnored private var dirtyMessageIds: Set<Int> = []
     @ObservationIgnored private var cacheSaveTask: Task<Void, Never>?
     @ObservationIgnored private var isFlushing = false
+    @ObservationIgnored private var flushRetryTask: Task<Void, Never>?
+    @ObservationIgnored private var flushRetryAttempt = 0
     /// Who's typing where (from typing events).
     public let typing = TypingStatus()
     /// User presence (maintained by the ping loop).
@@ -329,6 +331,15 @@ public final class PerAccountStore {
     /// Called when connectivity returns (event-poll recovery or the app's
     /// path monitor); a no-op when there's nothing waiting.
     public func flushPending() {
+        // An external trigger implies real connectivity: restart the
+        // self-retry ladder from the top.
+        flushRetryAttempt = 0
+        flushRetryTask?.cancel()
+        flushRetryTask = nil
+        flush()
+    }
+
+    private func flush() {
         guard !isFlushing else { return }
         isFlushing = true
         Task {
@@ -360,6 +371,24 @@ public final class PerAccountStore {
             persistPendingActions()
             // Transcripts rendered from the offline cache may be stale.
             forEachMessageList { $0.refetchIfOfflineFallback() }
+            // The path monitor often fires before sockets are actually
+            // usable; if work still failed, retry on a short ladder
+            // instead of waiting out the event loop's next recovery.
+            if outbox.contains(where: { $0.state == .queued }) || !pendingActions.isEmpty {
+                scheduleFlushRetry()
+            }
+        }
+    }
+
+    private func scheduleFlushRetry() {
+        guard flushRetryTask == nil, flushRetryAttempt < 5 else { return }
+        flushRetryAttempt += 1
+        let delay = Duration.seconds(Double(flushRetryAttempt) * 2)
+        flushRetryTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, !Task.isCancelled else { return }
+            self.flushRetryTask = nil
+            self.flush()
         }
     }
 

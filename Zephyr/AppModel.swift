@@ -242,6 +242,10 @@ final class AppModel {
         if case .failed = phase {
             Task { await self.retry() }
         }
+        // Wake sleeping event loops right away — their reconnect clears the
+        // recovering state and re-flushes; without this they'd sleep out
+        // the rest of their retry backoff first.
+        global.kickEventStreams()
         for account in global.accounts {
             if global.hasLiveStore(account.id) {
                 global.stores[account.id]?.flushPending()

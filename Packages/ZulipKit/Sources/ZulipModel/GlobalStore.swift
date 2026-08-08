@@ -119,6 +119,14 @@ public final class GlobalStore: UpdateMachineDelegate {
 
     // MARK: Store lifecycle
 
+    /// Interrupts every event loop's retry backoff (the network path came
+    /// back): reconnects — and therefore recovery flushes — happen now.
+    public func kickEventStreams() {
+        for machine in machines.values {
+            machine.kick()
+        }
+    }
+
     public func hasLiveStore(_ accountId: Account.ID) -> Bool {
         stores[accountId] != nil && !provisionalStores.contains(accountId)
     }

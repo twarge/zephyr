@@ -29,6 +29,7 @@ public final class UpdateMachine {
     private let sleep: SleepFunction
     private var pollTask: Task<Void, Never>?
     private var presenceTask: Task<Void, Never>?
+    private var backoffSleepTask: Task<Void, any Error>?
     private let logger = Logger(subsystem: "com.twarge.zephyr", category: "sync")
 
     private let enablePresence: Bool
@@ -58,6 +59,13 @@ public final class UpdateMachine {
         pollTask = nil
         presenceTask?.cancel()
         presenceTask = nil
+    }
+
+    /// Interrupts a pending retry backoff so the next poll happens NOW —
+    /// called when the network path comes back, instead of sleeping out up
+    /// to the full backoff (10s) before reconnecting and flushing.
+    public func kick() {
+        backoffSleepTask?.cancel()
     }
 
     private func presenceLoop() async {
@@ -122,11 +130,23 @@ public final class UpdateMachine {
                     delay = .seconds(retryAfter)
                 }
                 logger.debug("event poll failed (attempt \(consecutiveFailures)); retrying")
+                // Interruptible: kick() cancels just the inner sleep (retry
+                // now, fresh backoff); stopping the machine cancels the
+                // poll task, which cancels the sleep through the handler.
+                let sleepFunction = sleep
+                let sleepTask = Task { try await sleepFunction(delay) }
+                backoffSleepTask = sleepTask
                 do {
-                    try await sleep(delay)
+                    try await withTaskCancellationHandler {
+                        try await sleepTask.value
+                    } onCancel: {
+                        sleepTask.cancel()
+                    }
                 } catch {
-                    return
+                    if Task.isCancelled { return }
+                    backoff.reset()
                 }
+                backoffSleepTask = nil
             }
         }
     }

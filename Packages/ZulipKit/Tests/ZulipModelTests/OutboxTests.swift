@@ -88,6 +88,22 @@ struct OutboxTests {
         #expect(transport.requests.count == 2)
     }
 
+    @Test func failedFlushRetriesItselfShortly() async throws {
+        let (store, transport) = try makeStore(script: [
+            .networkError,  // The optimistic send: queued.
+            .networkError,  // Flush fires before the socket is usable.
+            .json(#"{"result": "success", "id": 503}"#),
+        ])
+        store.send("hello", to: .dm(userIds: [2]))
+        try await eventually("queued") { store.outbox.first?.state == .queued }
+        store.flushPending()
+        // The failed flush schedules its own retry (~2s) instead of
+        // waiting for the event loop's next recovery.
+        try await eventually(timeout: .seconds(6), "auto-retried to success") {
+            store.outbox.first?.state == .sending && transport.requests.count == 3
+        }
+    }
+
     @Test func destinationMatching() {
         let topic = SendDestination.topic(streamId: 10, topic: "Greetings")
         #expect(topic.matches(narrow: .topic(streamId: 10, topic: "greetings"), selfUserId: 1))
