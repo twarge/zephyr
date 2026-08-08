@@ -662,13 +662,10 @@ struct MessageRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 if showHeader {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        // Web-style: bold sender at the body text size (the
+                        // timestamp lives right-aligned in the row gutter).
                         Text(message.senderFullName)
-                            .font(.callout.weight(.semibold))
-                        Text(
-                            Date(timeIntervalSince1970: TimeInterval(message.timestamp))
-                                .formatted(date: .omitted, time: .shortened))
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .font(.body.weight(.semibold))
                         if message.lastEditTimestamp != nil {
                             Button {
                                 showEditHistory = true
@@ -721,7 +718,18 @@ struct MessageRow: View {
                     ReactionsRow(store: store, message: message)
                 }
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
+            // Every row carries its time in a right-aligned gutter, like
+            // the web app; the fixed width keeps the column steady and the
+            // hover controls clear of it.
+            Text(
+                Date(timeIntervalSince1970: TimeInterval(message.timestamp))
+                    .formatted(date: .omitted, time: .shortened))
+                .font(.body)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: 70, alignment: .trailing)
+                .padding(.top, showHeader ? 10 : 0)
         }
         .padding(.vertical, 1)
         .padding(.horizontal, 4)
@@ -790,6 +798,8 @@ struct MessageRow: View {
                 .allowsHitTesting(controlsActive || isStarred)
             }
             .padding(.top, showHeader ? 8 : 0)
+            // Clear of the timestamp gutter.
+            .padding(.trailing, 78)
         }
         // After the overlay: the hover region must include the reaction
         // button itself, or entering the button drops row-hover and the
