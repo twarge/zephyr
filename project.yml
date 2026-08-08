@@ -21,6 +21,8 @@ targets:
         products: [ZulipModel, ZulipAPI, ZulipContent, ZulipMath]
       - target: ZephyrWidgets
         embed: true
+      - target: ZephyrShare
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.twarge.zephyr
@@ -83,6 +85,46 @@ targets:
         SWIFT_VERSION: "6.0"
         # No MainActor-default here: TimelineProvider's requirements are
         # nonisolated and the widget has no shared mutable state.
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        REGISTER_APP_GROUPS: YES
+
+  ZephyrShare:
+    type: app-extension
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - Extensions/Share
+      - Shared
+    info:
+      path: Extensions/Share/Info.plist
+      properties:
+        CFBundleDisplayName: Zephyr
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsFileWithMaxCount: 10
+              NSExtensionActivationSupportsImageWithMaxCount: 10
+              NSExtensionActivationSupportsMovieWithMaxCount: 4
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.twarge.zephyr.share
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        DEVELOPMENT_TEAM: 257KW9ZJFP
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: Apple Development
+        CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: Support/Widgets-macOS.entitlements
+        CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]: Support/Widgets-iOS.entitlements
+        CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]: Support/Widgets-iOS.entitlements
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "6.0"
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         REGISTER_APP_GROUPS: YES
 

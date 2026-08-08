@@ -1,43 +1,34 @@
-# Remaining extension targets (need Xcode's target UI)
+# Extension targets
 
-Two adoptions from the platform-integration pass require new app-extension
-targets. Creating targets in this synchronized-group project is a
-File → New → Target operation in Xcode (~5 minutes each); hand-editing
-project.pbxproj for embedded extension targets is not worth the corruption
-risk. Everything in-app that they depend on already exists.
+Both app extensions are declared in project.yml (regenerate with
+`xcodegen generate`) and share the `group.com.twarge.zephyr` App Group.
 
-Shared prerequisite — App Group
-- Add the "App Groups" capability to the app and each extension target,
-  with group id `group.com.twarge.zephyr`.
-- The group container is the data channel both features use.
+## Share extension (ZephyrShare)
 
-## 1. Share extension ("send to Zephyr from anywhere")
+Deliberately thin — it never talks to Zulip:
 
-Architecture (deliberately thin — the extension never talks to Zulip):
-1. Extension target (one per platform, or macOS first): a small UI that
-   collects the shared attachments/text and writes them into an "inbox"
-   directory in the group container, then completes.
-2. App side: on activation, check the inbox; if entries exist, open the
-   New Conversation sheet with the files pre-attached to the upload
-   pipeline (ComposeBar's upload path handles the rest).
+1. The extension copies shared attachments into an "inbox" directory in
+   the group container (`Shared/ShareInbox.swift`), joins any shared
+   text/URLs into a manifest, shows a brief confirmation, and completes.
+   On macOS it also nudges the app awake via the `zephyr://` scheme.
+2. On activation the app's key window finds the inbox non-empty and
+   offers a destination picker (`SharePickerSheet`, backed by Open
+   Quickly's search). Picking navigates there; the compose bar seeds
+   itself — uploads start through the normal pipeline, shared text lands
+   in the draft — and the inbox entry is cleared.
 
-The app-side inbox consumer and compose-bar attachment seeding are the
-only new app code; the extension itself is ~100 lines.
+## Unreads widget (ZephyrWidgets)
 
-## 2. Unreads widget (WidgetKit)
+1. The app writes an unread digest (totals, mentions, top conversations
+   across all servers) into the group container whenever the badge count
+   changes, then reloads the widget timeline (`WidgetSummaryWriter`).
+2. The widget (`Extensions/Widgets`) renders small/medium views from
+   that digest; the timeline schedule is only a fallback.
 
-Architecture:
-1. App side: write a compact JSON summary (per-account unread/mention
-   counts, top conversations) into the group container whenever the badge
-   count changes (MainSplitView already recomputes it there).
-2. Widget target: a timeline provider that reads the summary and renders
-   small/medium unread views; deep-links open conversations via the
-   existing `zulip://`-style internal routing, and OpenConversationIntent
-   (already shipped) can make rows interactive.
+## Provisioning notes
 
-## Also gated on Xcode capability UI
-
-- Communication-notification styling: enable the "Communication
-  Notifications" capability on the app target (profile-gated entitlement).
-  The INSendMessageIntent donation in NotificationManager is already live
-  and takes effect the moment the entitlement exists.
+- Each extension bundle id needed its App ID minted once via
+  `xcodebuild -allowProvisioningUpdates`; plain builds work after that.
+- Communication-notification styling required enabling the capability on
+  the app target once in Xcode; the entitlement lives in the committed
+  entitlements files and survives regeneration.

@@ -158,6 +158,7 @@ struct ComposeBar: View {
     @State private var uploads: [UploadItem] = []
     @FocusState private var messageFocused: Bool
     @Environment(KeyboardRouter.self) private var keys
+    @Environment(AppModel.self) private var model
     @State private var uploadOwnerId = UUID()
 
     // Long-form mode: multi-line editor, drag-resizable, server-rendered
@@ -339,6 +340,7 @@ struct ComposeBar: View {
                     text += (text.hasSuffix("\n") ? "" : "\n") + snippet
                 }
             }
+            consumeShareSeed()
         }
         .onDisappear {
             keys.unregisterUpload(owner: uploadOwnerId)
@@ -665,6 +667,24 @@ struct ComposeBar: View {
         default:
             "doc"
         }
+    }
+
+    /// Share-extension items the user routed here: uploads start (the
+    /// file data is read up front, so the inbox clears immediately) and
+    /// shared text lands in the draft.
+    private func consumeShareSeed() {
+        guard let items = model.pendingComposeSeed, !items.isEmpty else { return }
+        model.pendingComposeSeed = nil
+        for item in items {
+            for file in item.files {
+                upload(fileURL: file, securityScoped: false)
+            }
+            if let shared = item.text, !shared.isEmpty {
+                text += (text.isEmpty ? "" : "\n") + shared
+            }
+            ShareInbox.clear(item)
+        }
+        messageFocused = true
     }
 
     // MARK: Send

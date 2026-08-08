@@ -43,6 +43,9 @@ struct MainSplitView: View {
         var account: UUID
         var destination: Destination
     }
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var pendingShareItems: [ShareInbox.PendingItem] = []
+    @State private var showSharePicker = false
     #if os(iOS)
     @FocusState private var detailFocused: Bool
     #endif
@@ -190,6 +193,22 @@ struct MainSplitView: View {
                 selection = destination
             }
         }
+        // Share-extension inbox: offer the destination picker when items
+        // arrive (app activation, or the extension's zephyr:// nudge).
+        .onChange(of: scenePhase, initial: true) {
+            checkShareInbox()
+        }
+        .onOpenURL { url in
+            if url.scheme == "zephyr" {
+                checkShareInbox()
+            }
+        }
+        .sheet(isPresented: $showSharePicker, onDismiss: { model.sharePickerActive = false }) {
+            SharePickerSheet(store: store, itemCount: pendingShareItemCount) { destination in
+                model.pendingComposeSeed = pendingShareItems
+                selection = destination
+            }
+        }
         #if os(macOS)
         .background(WindowReader { window in
             keys.hostWindow = window
@@ -323,6 +342,24 @@ struct MainSplitView: View {
                 total
             }
         }
+    }
+
+    private var pendingShareItemCount: Int {
+        pendingShareItems.reduce(0) {
+            $0 + $1.files.count + ($1.text == nil ? 0 : 1)
+        }
+    }
+
+    private func checkShareInbox() {
+        guard scenePhase == .active, !model.sharePickerActive else { return }
+        #if os(macOS)
+        guard keys.hostWindow?.isKeyWindow != false else { return }
+        #endif
+        let items = ShareInbox.pendingItems()
+        guard !items.isEmpty else { return }
+        model.sharePickerActive = true
+        pendingShareItems = items
+        showSharePicker = true
     }
 
     /// Notification-click navigation: only for this window's account, and

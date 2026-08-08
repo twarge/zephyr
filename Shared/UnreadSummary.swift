@@ -2,7 +2,7 @@ import Foundation
 
 /// The unread digest the app writes into the App Group container and the
 /// widget renders. Compiled into both targets; keep it dependency-free.
-struct UnreadSummary: Codable {
+nonisolated struct UnreadSummary: Codable {
     struct Line: Codable, Identifiable {
         var title: String
         var count: Int

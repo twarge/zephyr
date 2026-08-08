@@ -64,6 +64,12 @@ final class AppModel {
     var pendingNewConversation = false
     /// Set by File → Open Quickly… (⌘⇧O); the key window shows the palette.
     var pendingOpenQuickly = false
+    /// Share-extension items awaiting a compose bar: set when the user
+    /// picks a destination; the next compose bar to appear seeds itself.
+    var pendingComposeSeed: [ShareInbox.PendingItem]?
+    /// True while some window is showing the share picker (stops a second
+    /// window from offering the same inbox).
+    var sharePickerActive = false
     /// Set by the Format menu; the key window's compose applies it.
     var pendingFormat: ComposeFormat?
 

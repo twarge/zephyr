@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0977CC5FABE9E6F84BF48DA5 /* ShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */; };
 		0A7AFFF808844CC0EE4BE1EE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */; };
 		0B1CBDD1323F731109D06DEC /* RecentConversationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 475341E1FDF45E220243460A /* RecentConversationsView.swift */; };
 		0BC179CD59C27B54EA265364 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C391C25A76B13BD0D05B8706 /* NotificationManager.swift */; };
@@ -15,9 +16,11 @@
 		1809E45D7265B2EFF7464F38 /* ZulipContent in Frameworks */ = {isa = PBXBuildFile; productRef = AD2A65812AC38BAC3D200157 /* ZulipContent */; };
 		188461C8A7C5D3500365BA6D /* KeyboardRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43C09E2CE84013DBCE92521D /* KeyboardRouter.swift */; };
 		1A4EA966BF8059788CD35F91 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 823C14D4494BFA81F9DE3F8E /* Assets.xcassets */; };
+		217DBDEDF8373C7091CABD27 /* ZephyrShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D037A907658BA511667CA882 /* ZephyrShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3D07A493DA42E4D98B0DA530 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9C40C777893FC7275F955B /* Platform.swift */; };
 		3F863C40AC99B169668E1DD0 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7106DB9D273F41FC9FE36ABF /* AppModel.swift */; };
 		428E7CBC70049F69CF04CAB5 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC85F6AA56F7EF9105F7742E /* HelpView.swift */; };
+		53D49ACBC473F8B9F2B5BD5E /* SharePickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DBB2BFB3C180FACDCB32F82 /* SharePickerSheet.swift */; };
 		54BFB8373908F2BE25281ECF /* ZulipModel in Frameworks */ = {isa = PBXBuildFile; productRef = E4D870E5241B561551F2791A /* ZulipModel */; };
 		5794DA3E0828FC47D382D330 /* ZephyrWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D409AD6B2CC607462E58207 /* ZephyrWidgets.swift */; };
 		5E2EA17274897B42F4A65347 /* UnreadSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */; };
@@ -25,16 +28,19 @@
 		664752B641AB478805A1EAE7 /* AccountWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28D32E783B00DD974C9E8971 /* AccountWindowView.swift */; };
 		67B681DC63058035652E4E1A /* EmojiPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */; };
 		685FD431FA29FEA255D3FBC1 /* MessageContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 067FC7012EB2D00C26EF2527 /* MessageContentView.swift */; };
+		6E8974C03AF4B08EAFEE51A6 /* ShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */; };
 		706E3B7C39B1F3C9F5DF0E1E /* Support.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD6E84868E4713FC5F20FD6B /* Support.swift */; };
 		70E8661B18208CE08B86BFFA /* AppStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232E47A83B732D68F7D53F8A /* AppStateStore.swift */; };
 		73585300EF03DBD458D4EFB9 /* ZephyrWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C6F5CD532C093CA694EACE87 /* ZephyrWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7520AD45B999226B180174C7 /* NewConversationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */; };
 		75DE44DBC8650067EEAA958D /* TranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D95D81BD326A92094707205 /* TranscriptView.swift */; };
 		7BFEB47B6DCAC3AD9BCA6C35 /* Search.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B6E7BF3930F81D1C28D6C1 /* Search.swift */; };
+		7CA83B9202B397D38737BD29 /* ShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */; };
 		7E536CB80BBA16C3965B52CF /* MessageActionSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC11E5BCCDABAA47341BC0CA /* MessageActionSheets.swift */; };
 		883C05E8DCB4C721B557D835 /* TopicAutocompleteField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 828F7934E9D581DD3703EAAC /* TopicAutocompleteField.swift */; };
 		8CC1E79A10EE229827D2257A /* UnreadSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */; };
 		8D288550003242AB2596116F /* PDFAttachmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FE462CABA8309A90FD3A747 /* PDFAttachmentView.swift */; };
+		8F49328DDC70D304E6FE4130 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4093541134383EBC6243F280 /* ShareViewController.swift */; };
 		90244AA61E53F58A6D9AA222 /* OpenQuicklyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149499DA07B92E143F965C6C /* OpenQuicklyView.swift */; };
 		9511713F095ADB5FAF8E1593 /* MessageWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */; };
 		9890C37B9865F39B29EDF88D /* DraftSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4611B74F89FA03A6C524C9 /* DraftSync.swift */; };
@@ -47,6 +53,7 @@
 		B8CB761D6FE61F47C1E0FCBC /* ZephyrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066FAF47CC310A2445AAB0A9 /* ZephyrApp.swift */; };
 		BB931F8230B45BC90B104176 /* MessageFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BD4EE59C8A33FC99AA510C3 /* MessageFeed.swift */; };
 		BCBA356FC8FA69612CEAE5DA /* ComposeBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48877EEA1FAFF61902860BD0 /* ComposeBar.swift */; };
+		BD6ED142E9B10E20B22453B7 /* UnreadSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */; };
 		C2C81E0729324AE820EB8883 /* ChannelFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1758438236E9536CC8336895 /* ChannelFeedView.swift */; };
 		CAFDE08EBB3B372F2C6AA2B1 /* DetachedWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */; };
 		D3781CBA4A886F9D8F4A553A /* WidgetSummaryWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9AF8AD4ED790447AC128257 /* WidgetSummaryWriter.swift */; };
@@ -63,6 +70,13 @@
 			remoteGlobalIDString = 213C17BB9E4108C306BEFE93;
 			remoteInfo = ZephyrWidgets;
 		};
+		938FFD07A5B227F3CC07949C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8BEBDFECE21524CF9C256F55 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7DAEDDC5E72DE526E11C8C7E;
+			remoteInfo = ZephyrShare;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -73,6 +87,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				73585300EF03DBD458D4EFB9 /* ZephyrWidgets.appex in Embed Foundation Extensions */,
+				217DBDEDF8373C7091CABD27 /* ZephyrShare.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -99,6 +114,7 @@
 		3D409AD6B2CC607462E58207 /* ZephyrWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZephyrWidgets.swift; sourceTree = "<group>"; };
 		3F4611B74F89FA03A6C524C9 /* DraftSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftSync.swift; sourceTree = "<group>"; };
 		3FE462CABA8309A90FD3A747 /* PDFAttachmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFAttachmentView.swift; sourceTree = "<group>"; };
+		4093541134383EBC6243F280 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		43C09E2CE84013DBCE92521D /* KeyboardRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardRouter.swift; sourceTree = "<group>"; };
 		475341E1FDF45E220243460A /* RecentConversationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentConversationsView.swift; sourceTree = "<group>"; };
 		48877EEA1FAFF61902860BD0 /* ComposeBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeBar.swift; sourceTree = "<group>"; };
@@ -107,8 +123,11 @@
 		68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWidgetView.swift; sourceTree = "<group>"; };
 		7106DB9D273F41FC9FE36ABF /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		726EF7F3ABF31AB4CF23C545 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		76C23601CC0460F9C22C23DD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7DBB2BFB3C180FACDCB32F82 /* SharePickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharePickerSheet.swift; sourceTree = "<group>"; };
 		823C14D4494BFA81F9DE3F8E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		828F7934E9D581DD3703EAAC /* TopicAutocompleteField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicAutocompleteField.swift; sourceTree = "<group>"; };
+		A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInbox.swift; sourceTree = "<group>"; };
 		A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiPickerView.swift; sourceTree = "<group>"; };
 		A9AF8AD4ED790447AC128257 /* WidgetSummaryWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSummaryWriter.swift; sourceTree = "<group>"; };
 		AD6E84868E4713FC5F20FD6B /* Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Support.swift; sourceTree = "<group>"; };
@@ -120,6 +139,7 @@
 		C391C25A76B13BD0D05B8706 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		C5C28BE5A0DA537D6EB9C97A /* AllChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllChannelsView.swift; sourceTree = "<group>"; };
 		C6F5CD532C093CA694EACE87 /* ZephyrWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ZephyrWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D037A907658BA511667CA882 /* ZephyrShare.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ZephyrShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetachedWindow.swift; sourceTree = "<group>"; };
 		E7EBB59257B9154EAF76D934 /* NarrowFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NarrowFeedView.swift; sourceTree = "<group>"; };
 		EC11E5BCCDABAA47341BC0CA /* MessageActionSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageActionSheets.swift; sourceTree = "<group>"; };
@@ -166,6 +186,7 @@
 				475341E1FDF45E220243460A /* RecentConversationsView.swift */,
 				C0B6E7BF3930F81D1C28D6C1 /* Search.swift */,
 				BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */,
+				7DBB2BFB3C180FACDCB32F82 /* SharePickerSheet.swift */,
 				C17B1B985702AAFC4C30468A /* SidebarView.swift */,
 				AD6E84868E4713FC5F20FD6B /* Support.swift */,
 				828F7934E9D581DD3703EAAC /* TopicAutocompleteField.swift */,
@@ -188,9 +209,19 @@
 		6DD3E390B3CA2B3936487AF7 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */,
 				52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */,
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		7C179DEE64952CB6985A5F35 /* Share */ = {
+			isa = PBXGroup;
+			children = (
+				76C23601CC0460F9C22C23DD /* Info.plist */,
+				4093541134383EBC6243F280 /* ShareViewController.swift */,
+			);
+			path = Share;
 			sourceTree = "<group>";
 		};
 		886CC3A7FE9156296E42DEB0 /* Widgets */ = {
@@ -228,6 +259,7 @@
 			isa = PBXGroup;
 			children = (
 				0336B10E85CC165AC34AE4A6 /* Zephyr.app */,
+				D037A907658BA511667CA882 /* ZephyrShare.appex */,
 				C6F5CD532C093CA694EACE87 /* ZephyrWidgets.appex */,
 			);
 			name = Products;
@@ -244,6 +276,7 @@
 		DFBB9B29CB3C8F03159CF587 /* Extensions */ = {
 			isa = PBXGroup;
 			children = (
+				7C179DEE64952CB6985A5F35 /* Share */,
 				886CC3A7FE9156296E42DEB0 /* Widgets */,
 			);
 			path = Extensions;
@@ -282,6 +315,7 @@
 			);
 			dependencies = (
 				FAD3AB4C3D0D0339FA4EE6A3 /* PBXTargetDependency */,
+				98458300AC2BB81839EF94B8 /* PBXTargetDependency */,
 			);
 			name = Zephyr;
 			packageProductDependencies = (
@@ -293,6 +327,23 @@
 			productName = Zephyr;
 			productReference = 0336B10E85CC165AC34AE4A6 /* Zephyr.app */;
 			productType = "com.apple.product-type.application";
+		};
+		7DAEDDC5E72DE526E11C8C7E /* ZephyrShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8377D7D199383BFE07B6BED7 /* Build configuration list for PBXNativeTarget "ZephyrShare" */;
+			buildPhases = (
+				CE41F0813613CDAD2BA3E51E /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ZephyrShare;
+			packageProductDependencies = (
+			);
+			productName = ZephyrShare;
+			productReference = D037A907658BA511667CA882 /* ZephyrShare.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -308,6 +359,10 @@
 						ProvisioningStyle = Automatic;
 					};
 					2AEDC22B76AE14F52ADDA857 = {
+						DevelopmentTeam = 257KW9ZJFP;
+						ProvisioningStyle = Automatic;
+					};
+					7DAEDDC5E72DE526E11C8C7E = {
 						DevelopmentTeam = 257KW9ZJFP;
 						ProvisioningStyle = Automatic;
 					};
@@ -332,6 +387,7 @@
 			targets = (
 				2AEDC22B76AE14F52ADDA857 /* Zephyr */,
 				213C17BB9E4108C306BEFE93 /* ZephyrWidgets */,
+				7DAEDDC5E72DE526E11C8C7E /* ZephyrShare */,
 			);
 		};
 /* End PBXProject section */
@@ -352,6 +408,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6E8974C03AF4B08EAFEE51A6 /* ShareInbox.swift in Sources */,
 				8CC1E79A10EE229827D2257A /* UnreadSummary.swift in Sources */,
 				5794DA3E0828FC47D382D330 /* ZephyrWidgets.swift in Sources */,
 			);
@@ -389,6 +446,8 @@
 				0B1CBDD1323F731109D06DEC /* RecentConversationsView.swift in Sources */,
 				7BFEB47B6DCAC3AD9BCA6C35 /* Search.swift in Sources */,
 				0A7AFFF808844CC0EE4BE1EE /* SettingsView.swift in Sources */,
+				7CA83B9202B397D38737BD29 /* ShareInbox.swift in Sources */,
+				53D49ACBC473F8B9F2B5BD5E /* SharePickerSheet.swift in Sources */,
 				A2B018739699F9B2B4505207 /* SidebarView.swift in Sources */,
 				706E3B7C39B1F3C9F5DF0E1E /* Support.swift in Sources */,
 				F33ED1EE8D08E1F58540F09B /* Tips.swift in Sources */,
@@ -402,9 +461,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CE41F0813613CDAD2BA3E51E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0977CC5FABE9E6F84BF48DA5 /* ShareInbox.swift in Sources */,
+				8F49328DDC70D304E6FE4130 /* ShareViewController.swift in Sources */,
+				BD6ED142E9B10E20B22453B7 /* UnreadSummary.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		98458300AC2BB81839EF94B8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7DAEDDC5E72DE526E11C8C7E /* ZephyrShare */;
+			targetProxy = 938FFD07A5B227F3CC07949C /* PBXContainerItemProxy */;
+		};
 		FAD3AB4C3D0D0339FA4EE6A3 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 213C17BB9E4108C306BEFE93 /* ZephyrWidgets */;
@@ -557,6 +631,38 @@
 			};
 			name = Release;
 		};
+		604F46CACC9AAEDB5A8311E2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "Support/Widgets-iOS.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "Support/Widgets-iOS.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Support/Widgets-macOS.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 257KW9ZJFP;
+				INFOPLIST_FILE = Extensions/Share/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.twarge.zephyr.share;
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		88BC6549D58D5E8288FD69C6 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -588,6 +694,38 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
+		};
+		88F7156096ADA1EB16B21C5E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "Support/Widgets-iOS.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "Support/Widgets-iOS.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Support/Widgets-macOS.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 257KW9ZJFP;
+				INFOPLIST_FILE = Extensions/Share/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.twarge.zephyr.share;
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
 		};
 		8E7BD1A3CDFFDC90F00D2473 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -693,6 +831,15 @@
 			buildConfigurations = (
 				88BC6549D58D5E8288FD69C6 /* Debug */,
 				8E7BD1A3CDFFDC90F00D2473 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8377D7D199383BFE07B6BED7 /* Build configuration list for PBXNativeTarget "ZephyrShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				604F46CACC9AAEDB5A8311E2 /* Debug */,
+				88F7156096ADA1EB16B21C5E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
