@@ -311,11 +311,17 @@ struct MessageFeedList: View {
     private func feedRow(_ item: Item) -> some View {
         switch item {
         case .daySeparator(let label):
-            Text(label)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
+            // Web-style: a rule from the left edge up to the date, date on
+            // the right in small caps.
+            HStack(spacing: 8) {
+                Rectangle()
+                    .fill(.quaternary)
+                    .frame(height: 1)
+                Text(label)
+                    .font(.body.weight(.semibold).smallCaps())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 10)
         case .conversationHeader(let key, _):
             // Headers are hoisted into section headers by `sections`; this
             // case is unreachable but keeps the switch exhaustive.
@@ -725,7 +731,7 @@ struct MessageRow: View {
             Text(
                 Date(timeIntervalSince1970: TimeInterval(message.timestamp))
                     .formatted(date: .omitted, time: .shortened))
-                .font(.body)
+                .font(.body.smallCaps())
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .frame(width: 70, alignment: .trailing)
