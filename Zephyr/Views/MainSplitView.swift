@@ -12,6 +12,7 @@ nonisolated enum Destination: Hashable, Codable {
     case channelTopics(streamId: Int)
     case recentConversations
     case drafts
+    case outbox
     case combinedFeed
     case mentions
     case starred
@@ -536,6 +537,9 @@ struct MainSplitView: View {
             case .drafts:
                 DraftsView(store: store, selection: $selection)
                     .id(Destination.drafts)
+            case .outbox:
+                OutboxView(store: store, selection: $selection)
+                    .id(Destination.outbox)
             case .combinedFeed:
                 NarrowFeedView(
                     store: store, title: "Combined feed", narrow: .combinedFeed,

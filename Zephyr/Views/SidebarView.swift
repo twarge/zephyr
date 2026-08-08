@@ -241,6 +241,12 @@ struct SidebarView: View {
                         "Mentions", icon: "at", tag: .mentions,
                         badge: store.unreads.mentionIds.count)
                     viewRow("Starred", icon: "star", tag: .starred, badge: 0)
+                    // Unsent messages: only surfaces while something waits.
+                    if !store.outbox.isEmpty {
+                        viewRow(
+                            "Outbox", icon: "tray.and.arrow.up", tag: .outbox,
+                            badge: store.outbox.count)
+                    }
                     viewRow(
                         "All channels", icon: "rectangle.stack", tag: .allChannels, badge: 0)
                 }
@@ -260,25 +266,6 @@ struct SidebarView: View {
                                 search.clearRecentSearches()
                             }
                         }
-                    }
-                }
-            }
-            // Messages that couldn't send: queued ones go out on their own
-            // when the network returns; failed ones offer a manual retry.
-            if !store.outbox.isEmpty {
-                Section("Outbox", isExpanded: expansion("outbox")) {
-                    ForEach(store.outbox) { entry in
-                        OutboxSidebarRow(store: store, entry: entry)
-                            .tag(Destination.conversation(
-                                entry.destination.conversationKey(selfUserId: store.selfUserId)))
-                            .contextMenu {
-                                Button("Send Now") {
-                                    store.retrySend(entry.id)
-                                }
-                                Button("Discard", role: .destructive) {
-                                    store.discardSend(entry.id)
-                                }
-                            }
                     }
                 }
             }
@@ -492,46 +479,6 @@ struct SidebarView: View {
                     .background(.bar, in: .circle)
                     .offset(x: 4, y: 3)
             }
-    }
-
-    private struct OutboxSidebarRow: View {
-        let store: PerAccountStore
-        let entry: OutboxMessage
-
-        private var stateIcon: (name: String, color: Color) {
-            switch entry.state {
-            case .sending: ("arrow.up.circle", .secondary)
-            case .queued: ("clock.arrow.circlepath", .orange)
-            case .failed: ("exclamationmark.triangle.fill", .red)
-            }
-        }
-
-        var body: some View {
-            HStack(spacing: 8) {
-                Image(systemName: stateIcon.name)
-                    .foregroundStyle(stateIcon.color)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(entry.destination
-                        .conversationKey(selfUserId: store.selfUserId)
-                        .displayTitle(in: store))
-                        .font(.callout)
-                        .lineLimit(1)
-                    Text(entry.content)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            .help(helpText)
-        }
-
-        private var helpText: String {
-            switch entry.state {
-            case .sending: "Sending…"
-            case .queued: "Waiting for the network — sends automatically"
-            case .failed(let reason): "Failed: \(reason) — right-click to retry"
-            }
-        }
     }
 
     private func accountLabel(_ account: Account) -> String {

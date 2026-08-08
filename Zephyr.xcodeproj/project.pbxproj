@@ -17,6 +17,7 @@
 		188461C8A7C5D3500365BA6D /* KeyboardRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43C09E2CE84013DBCE92521D /* KeyboardRouter.swift */; };
 		1A4EA966BF8059788CD35F91 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 823C14D4494BFA81F9DE3F8E /* Assets.xcassets */; };
 		217DBDEDF8373C7091CABD27 /* ZephyrShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D037A907658BA511667CA882 /* ZephyrShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		24004A382336BF5AF3BA2749 /* OutboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6948BF0E49980622700ED102 /* OutboxView.swift */; };
 		25FE3BFD9203521A1B8E2231 /* DraftsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BABEF92E892ACE3DBCEF0E5 /* DraftsView.swift */; };
 		3D07A493DA42E4D98B0DA530 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9C40C777893FC7275F955B /* Platform.swift */; };
 		3F863C40AC99B169668E1DD0 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7106DB9D273F41FC9FE36ABF /* AppModel.swift */; };
@@ -122,6 +123,7 @@
 		4D9C40C777893FC7275F955B /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
 		52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadSummary.swift; sourceTree = "<group>"; };
 		68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWidgetView.swift; sourceTree = "<group>"; };
+		6948BF0E49980622700ED102 /* OutboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxView.swift; sourceTree = "<group>"; };
 		7106DB9D273F41FC9FE36ABF /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		726EF7F3ABF31AB4CF23C545 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		76C23601CC0460F9C22C23DD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -185,6 +187,7 @@
 				E7EBB59257B9154EAF76D934 /* NarrowFeedView.swift */,
 				B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */,
 				149499DA07B92E143F965C6C /* OpenQuicklyView.swift */,
+				6948BF0E49980622700ED102 /* OutboxView.swift */,
 				3FE462CABA8309A90FD3A747 /* PDFAttachmentView.swift */,
 				475341E1FDF45E220243460A /* RecentConversationsView.swift */,
 				C0B6E7BF3930F81D1C28D6C1 /* Search.swift */,
@@ -445,6 +448,7 @@
 				7520AD45B999226B180174C7 /* NewConversationSheet.swift in Sources */,
 				0BC179CD59C27B54EA265364 /* NotificationManager.swift in Sources */,
 				90244AA61E53F58A6D9AA222 /* OpenQuicklyView.swift in Sources */,
+				24004A382336BF5AF3BA2749 /* OutboxView.swift in Sources */,
 				8D288550003242AB2596116F /* PDFAttachmentView.swift in Sources */,
 				3D07A493DA42E4D98B0DA530 /* Platform.swift in Sources */,
 				0B1CBDD1323F731109D06DEC /* RecentConversationsView.swift in Sources */,

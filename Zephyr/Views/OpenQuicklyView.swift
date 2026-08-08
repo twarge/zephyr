@@ -27,6 +27,7 @@ struct OpenQuicklyView: View {
         Entry(destination: .mentions, name: "Mentions", icon: "at"),
         Entry(destination: .starred, name: "Starred", icon: "star"),
         Entry(destination: .drafts, name: "Drafts", icon: "pencil.line"),
+        Entry(destination: .outbox, name: "Outbox", icon: "tray.and.arrow.up"),
         Entry(destination: .allChannels, name: "All Channels", icon: "square.grid.2x2"),
     ]
 
