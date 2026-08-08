@@ -15,9 +15,6 @@ struct SidebarView: View {
     /// change only this window.
     @Binding var selectedAccount: Account.ID?
     var startDirectMessage: (() -> Void)?
-    /// False while the sidebar column is collapsed: its toolbar buttons
-    /// would otherwise migrate into the main toolbar.
-    var showsToolbarControls = true
     @Environment(\.openWindow) private var openWindow
     @Environment(AppModel.self) private var model
     @Environment(KeyboardRouter.self) private var keys
@@ -34,15 +31,13 @@ struct SidebarView: View {
         store: PerAccountStore, search: SidebarSearchModel,
         selection: Binding<Destination?>,
         selectedAccount: Binding<Account.ID?>,
-        startDirectMessage: (() -> Void)? = nil,
-        showsToolbarControls: Bool = true
+        startDirectMessage: (() -> Void)? = nil
     ) {
         self.store = store
         self.search = search
         _selection = selection
         _selectedAccount = selectedAccount
         self.startDirectMessage = startDirectMessage
-        self.showsToolbarControls = showsToolbarControls
         _collapsedSections = State(
             initialValue: AppStateStore.collapsedSections(for: store.accountId))
         _expandedChannels = State(
@@ -326,12 +321,17 @@ struct SidebarView: View {
                 }
             }
             if store.channelFolders.isEmpty {
-                channelSection(title: "Channels", id: "channels", channels: sortedSubscriptions)
+                channelSection(
+                    title: "Channels", id: "channels", channels: sortedSubscriptions,
+                    showsJoin: true)
             } else {
-                ForEach(store.channelFolders) { folder in
+                ForEach(
+                    Array(store.channelFolders.enumerated()), id: \.element.id
+                ) { index, folder in
                     channelSection(
                         title: folder.name, id: "folder-\(folder.id)",
-                        channels: channels(inFolder: folder.id))
+                        channels: channels(inFolder: folder.id),
+                        showsJoin: index == 0)
                 }
                 channelSection(
                     title: "Other channels", id: "folder-none",
@@ -391,24 +391,6 @@ struct SidebarView: View {
             ToolbarItem(placement: .automatic) {
                 serverMenu
             }
-            if showsToolbarControls {
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        selection = .allChannels
-                    } label: {
-                        joinChannelIcon
-                    }
-                    .help("Browse and join channels")
-                }
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        startDirectMessage?()
-                    } label: {
-                        Image(systemName: "person.badge.plus")
-                    }
-                    .help("New direct message")
-                }
-            }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
@@ -465,22 +447,6 @@ struct SidebarView: View {
         .help("Servers and accounts (⌘1–⌘9 switch this window)")
     }
 
-    /// A "#" with a circled-plus badge at the lower right, drawn to match
-    /// person.badge.plus (SF Symbols has no number.badge.plus): same open
-    /// plus.circle badge, base glyph knocked out behind it.
-    private var joinChannelIcon: some View {
-        Image(systemName: "number")
-            .font(.system(size: 15, weight: .regular))
-            .overlay(alignment: .bottomTrailing) {
-                Image(systemName: "plus.circle")
-                    .font(.system(size: 9, weight: .regular))
-                    // Clears the # strokes inside the badge circle, like
-                    // the badge cutout in real badge symbols.
-                    .background(.bar, in: .circle)
-                    .offset(x: 4, y: 3)
-            }
-    }
-
     private func accountLabel(_ account: Account) -> String {
         "\(account.realmName ?? account.realmURL.host() ?? "?") — \(account.email)"
     }
@@ -528,13 +494,15 @@ struct SidebarView: View {
     }
 
     @ViewBuilder
-    private func channelSection(title: String, id: String, channels: [Subscription]) -> some View {
+    private func channelSection(
+        title: String, id: String, channels: [Subscription], showsJoin: Bool = false
+    ) -> some View {
         let visible = visibleChannels(channels)
         let hideInactive = !isFiltering && !expandedInactiveSections.contains(id)
         let shown = hideInactive ? visible.filter { isActiveChannel($0.0) } : visible
         let hiddenCount = visible.count - shown.count
         if !visible.isEmpty {
-            Section(title, isExpanded: expansion(id)) {
+            Section(isExpanded: expansion(id)) {
                 ForEach(shown, id: \.0.id) { subscription, topicMatches in
                     let streamId = subscription.streamId
                     ChannelRow(
@@ -573,6 +541,22 @@ struct SidebarView: View {
                     && visible.contains(where: { !isActiveChannel($0.0) }) {
                     SidebarExpanderRow(title: "Hide inactive channels") {
                         expandedInactiveSections.remove(id)
+                    }
+                }
+            } header: {
+                HStack {
+                    Text(title)
+                    Spacer()
+                    if showsJoin {
+                        Button {
+                            selection = .allChannels
+                        } label: {
+                            Image(systemName: "plus.circle")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .padding(.trailing, 8)
+                        .help("Browse and join channels")
                     }
                 }
             }

@@ -82,8 +82,7 @@ struct MainSplitView: View {
             SidebarView(
                 store: store, search: search, selection: $selection,
                 selectedAccount: $selectedAccount,
-                startDirectMessage: { newConversation = .directMessage(initialUsers: []) },
-                showsToolbarControls: columnVisibility != .detailOnly)
+                startDirectMessage: { newConversation = .directMessage(initialUsers: []) })
                 .navigationSplitViewColumnWidth(min: 156, ideal: 156, max: 400)
         } detail: {
             detailContent
