@@ -15,9 +15,12 @@ targets:
     supportedDestinations: [iOS, macOS]
     sources:
       - Zephyr
+      - Shared
     dependencies:
       - package: ZulipKit
         products: [ZulipModel, ZulipAPI, ZulipContent, ZulipMath]
+      - target: ZephyrWidgets
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.twarge.zephyr
@@ -27,6 +30,11 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: Apple Development
         CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: Zephyr/Zephyr.entitlements
+        CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]: Support/Zephyr-iOS.entitlements
+        CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]: Support/Zephyr-iOS.entitlements
+        # Set by Xcode's App Groups capability; kept so regeneration
+        # preserves provisioning behavior.
+        REGISTER_APP_GROUPS: YES
         GENERATE_INFOPLIST_FILE: YES
         # Merged with the generated keys; carries NSUserActivityTypes.
         INFOPLIST_FILE: Support/Info.plist
@@ -43,6 +51,37 @@ targets:
         INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 Twarge. Apache-2.0."
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+
+  ZephyrWidgets:
+    type: app-extension
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - Extensions/Widgets
+      - Shared
+    info:
+      path: Extensions/Widgets/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.twarge.zephyr.widgets
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        DEVELOPMENT_TEAM: 257KW9ZJFP
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: Apple Development
+        CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: Support/Widgets-macOS.entitlements
+        CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]: Support/Widgets-iOS.entitlements
+        CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]: Support/Widgets-iOS.entitlements
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "6.0"
+        # No MainActor-default here: TimelineProvider's requirements are
+        # nonisolated and the widget has no shared mutable state.
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        REGISTER_APP_GROUPS: YES
 
 schemes:
   Zephyr:

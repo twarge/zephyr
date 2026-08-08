@@ -261,6 +261,7 @@ struct MainSplitView: View {
         }
         .onChange(of: badgeCount, initial: true) {
             Platform.setAppBadge(badgeCount)
+            WidgetSummaryWriter.update(global: model.global)
         }
         // Handoff: the current conversation continues on another device.
         .userActivity("com.twarge.zephyr.conversation", isActive: selection != nil) { activity in
