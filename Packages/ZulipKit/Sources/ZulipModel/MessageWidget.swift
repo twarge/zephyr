@@ -110,7 +110,7 @@ public enum MessageWidget: Sendable, Equatable {
         initial: [String: Any], updates: ArraySlice<Submessage>
     ) -> TodoList {
         let extra = initial["extra_data"] as? [String: Any]
-        let title = (extra?["task_list_title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        var title = (extra?["task_list_title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         var tasks: [TodoList.Task] = []
         var struck: Set<String> = []
 
@@ -147,6 +147,8 @@ public enum MessageWidget: Sendable, Equatable {
                 } else {
                     struck.insert(key)
                 }
+            case "new_task_list_title":
+                title = (event["title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             default:
                 continue
             }

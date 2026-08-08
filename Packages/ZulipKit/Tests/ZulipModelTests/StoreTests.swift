@@ -264,4 +264,50 @@ struct SubmessageEventTests {
         #expect(content.contains(#""idx":4"#))
         #expect(content.contains("Ramen"))
     }
+
+    @Test func addTodoTaskReplaysOwnCounterAndTitleEventApplies() async throws {
+        let transport = FakeTransport(
+            script: [.json(#"{"result": "success", "msg": ""}"#)],
+            defaultResponse: .hang)
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key", transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        // A todo list where this user (id 1) already added a task with
+        // key 2: the next add must use key 3.
+        let widgetJSON = #"{\"widget_type\": \"todo\", \"extra_data\": {\"task_list_title\": \"Chores\", \"tasks\": [{\"task\": \"Dishes\", \"desc\": \"\"}]}}"#
+        let priorTask = #"{\"type\":\"new_task\",\"key\":2,\"task\":\"Sweep\",\"desc\":\"\",\"completed\":false}"#
+        let todoMessage = """
+            {"id": 801, "sender_id": 5, "sender_full_name": "Lister", "timestamp": 1750000000,
+             "type": "stream", "content": "<p>/todo</p>", "stream_id": 10, "subject": "t",
+             "display_recipient": "general", "reactions": [],
+             "submessages": [
+                {"msg_type": "widget", "sender_id": 5, "content": "\(widgetJSON)"},
+                {"msg_type": "widget", "sender_id": 1, "content": "\(priorTask)"}]}
+            """
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(eventId: 1, message: todoMessage, flags: ["read"])))
+
+        store.addTodoTask(messageId: 801, task: "Laundry", detail: "whites")
+        try await eventually("submessage sent") { transport.requests.count == 1 }
+        let content = try #require(transport.requests[0].formValue("content"))
+        #expect(content.contains(#""type":"new_task""#))
+        #expect(content.contains(#""key":3"#))
+        #expect(content.contains("Laundry"))
+
+        // A live retitle event (author) updates the parsed widget.
+        let retitle = #"{"id": 2, "type": "submessage", "msg_type": "widget", "message_id": 801, "sender_id": 5, "submessage_id": 60, "content": "{\"type\":\"new_task_list_title\",\"title\":\"Weekend chores\"}"}"#
+        store.handleEvent(try decodeEvent(retitle))
+        let message = try #require(store.messages[801])
+        guard case .todoList(let list) = MessageWidget.parse(message) else {
+            Issue.record("expected todo list")
+            return
+        }
+        #expect(list.title == "Weekend chores")
+    }
 }

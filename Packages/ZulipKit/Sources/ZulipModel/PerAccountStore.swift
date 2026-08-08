@@ -701,6 +701,35 @@ public final class PerAccountStore {
         sendWidgetEvent(messageId: messageId, content: content)
     }
 
+    /// Appends a task to a to-do list (anyone may); keys are per-sender
+    /// counters like poll options.
+    public func addTodoTask(messageId: Int, task: String, detail: String? = nil) {
+        let trimmed = task.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        var nextKey = 1
+        for submessage in messages[messageId]?.submessages?.dropFirst() ?? [] {
+            guard submessage.senderId == selfUserId,
+                  let data = submessage.content.data(using: .utf8),
+                  let event = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  event["type"] as? String == "new_task" else { continue }
+            nextKey = max(nextKey, (event["key"] as? Int ?? 0) + 1)
+        }
+        sendWidgetEventJSON(
+            messageId: messageId,
+            [
+                "type": "new_task", "key": nextKey, "task": trimmed,
+                "desc": detail?.trimmingCharacters(in: .whitespaces) ?? "",
+                "completed": false,
+            ])
+    }
+
+    /// Sets a to-do list's title (the web app allows only the author).
+    public func setTodoListTitle(messageId: Int, title: String) {
+        sendWidgetEventJSON(
+            messageId: messageId,
+            ["type": "new_task_list_title", "title": title])
+    }
+
     /// Toggle a todo task's completion.
     public func strikeTodoTask(messageId: Int, taskKey: String) {
         sendWidgetEvent(

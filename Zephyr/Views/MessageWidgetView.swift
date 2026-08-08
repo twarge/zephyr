@@ -139,10 +139,45 @@ private struct TodoListView: View {
     let store: PerAccountStore
     let messageId: Int
 
+    @State private var newTask = ""
+    @State private var newTaskNote = ""
+    @State private var editedTitle = ""
+    @State private var showTitleEditor = false
+
+    /// Only the list's author can rename it (web parity).
+    private var isAuthor: Bool {
+        store.messages[messageId]?.senderId == store.selfUserId
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label(list.title ?? "To-do list", systemImage: "checklist")
-                .font(.callout.weight(.semibold))
+            HStack(spacing: 6) {
+                Label(list.title ?? "To-do list", systemImage: "checklist")
+                    .font(.callout.weight(.semibold))
+                if isAuthor {
+                    Button {
+                        editedTitle = list.title ?? ""
+                        showTitleEditor = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Edit the title")
+                    .popover(isPresented: $showTitleEditor) {
+                        HStack(spacing: 8) {
+                            TextField("Title", text: $editedTitle)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 260)
+                                .onSubmit(saveTitle)
+                            Button("Save", action: saveTitle)
+                                .keyboardShortcut(.defaultAction)
+                        }
+                        .padding(10)
+                    }
+                }
+            }
             ForEach(list.tasks, id: \.key) { task in
                 Button {
                     store.strikeTodoTask(messageId: messageId, taskKey: task.key)
@@ -175,9 +210,40 @@ private struct TodoListView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
+            // Anyone can extend the list, like the web widget.
+            HStack(spacing: 6) {
+                TextField("New task", text: $newTask)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(addTask)
+                TextField("Note (optional)", text: $newTaskNote)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 140)
+                    .onSubmit(addTask)
+                Button("Add", action: addTask)
+                    .disabled(newTask.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .font(.callout)
+            .controlSize(.small)
         }
         .padding(10)
         .frame(maxWidth: 420, alignment: .leading)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func addTask() {
+        let trimmed = newTask.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        let note = newTaskNote.trimmingCharacters(in: .whitespaces)
+        store.addTodoTask(
+            messageId: messageId, task: trimmed, detail: note.isEmpty ? nil : note)
+        newTask = ""
+        newTaskNote = ""
+    }
+
+    private func saveTitle() {
+        store.setTodoListTitle(
+            messageId: messageId,
+            title: editedTitle.trimmingCharacters(in: .whitespaces))
+        showTitleEditor = false
     }
 }
