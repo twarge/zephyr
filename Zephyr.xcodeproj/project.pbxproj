@@ -17,6 +17,7 @@
 		188461C8A7C5D3500365BA6D /* KeyboardRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43C09E2CE84013DBCE92521D /* KeyboardRouter.swift */; };
 		1A4EA966BF8059788CD35F91 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 823C14D4494BFA81F9DE3F8E /* Assets.xcassets */; };
 		217DBDEDF8373C7091CABD27 /* ZephyrShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D037A907658BA511667CA882 /* ZephyrShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		25FE3BFD9203521A1B8E2231 /* DraftsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BABEF92E892ACE3DBCEF0E5 /* DraftsView.swift */; };
 		3D07A493DA42E4D98B0DA530 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9C40C777893FC7275F955B /* Platform.swift */; };
 		3F863C40AC99B169668E1DD0 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7106DB9D273F41FC9FE36ABF /* AppModel.swift */; };
 		428E7CBC70049F69CF04CAB5 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC85F6AA56F7EF9105F7742E /* HelpView.swift */; };
@@ -127,6 +128,7 @@
 		7DBB2BFB3C180FACDCB32F82 /* SharePickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharePickerSheet.swift; sourceTree = "<group>"; };
 		823C14D4494BFA81F9DE3F8E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		828F7934E9D581DD3703EAAC /* TopicAutocompleteField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicAutocompleteField.swift; sourceTree = "<group>"; };
+		9BABEF92E892ACE3DBCEF0E5 /* DraftsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftsView.swift; sourceTree = "<group>"; };
 		A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInbox.swift; sourceTree = "<group>"; };
 		A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiPickerView.swift; sourceTree = "<group>"; };
 		A9AF8AD4ED790447AC128257 /* WidgetSummaryWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSummaryWriter.swift; sourceTree = "<group>"; };
@@ -171,6 +173,7 @@
 				FB37E72A9961DF2EB9503B4D /* ChannelTopicsView.swift */,
 				48877EEA1FAFF61902860BD0 /* ComposeBar.swift */,
 				DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */,
+				9BABEF92E892ACE3DBCEF0E5 /* DraftsView.swift */,
 				A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */,
 				BC85F6AA56F7EF9105F7742E /* HelpView.swift */,
 				28E9D19485B08518476527C2 /* LoginView.swift */,
@@ -428,6 +431,7 @@
 				15238C1DCBB889813D725E14 /* ConnectivityMonitor.swift in Sources */,
 				CAFDE08EBB3B372F2C6AA2B1 /* DetachedWindow.swift in Sources */,
 				9890C37B9865F39B29EDF88D /* DraftSync.swift in Sources */,
+				25FE3BFD9203521A1B8E2231 /* DraftsView.swift in Sources */,
 				67B681DC63058035652E4E1A /* EmojiPickerView.swift in Sources */,
 				428E7CBC70049F69CF04CAB5 /* HelpView.swift in Sources */,
 				188461C8A7C5D3500365BA6D /* KeyboardRouter.swift in Sources */,

@@ -26,6 +26,7 @@ struct OpenQuicklyView: View {
         Entry(destination: .combinedFeed, name: "Combined", icon: "line.3.horizontal"),
         Entry(destination: .mentions, name: "Mentions", icon: "at"),
         Entry(destination: .starred, name: "Starred", icon: "star"),
+        Entry(destination: .drafts, name: "Drafts", icon: "pencil.line"),
         Entry(destination: .allChannels, name: "All Channels", icon: "square.grid.2x2"),
     ]
 

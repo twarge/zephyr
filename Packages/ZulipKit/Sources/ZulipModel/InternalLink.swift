@@ -13,6 +13,7 @@ public enum InternalLink: Equatable, Sendable {
     case recent
     case inbox
     case combinedFeed
+    case drafts
     case search(text: String?, senderId: Int?, streamId: Int?, topic: String?)
 
     public static func parse(href: String, realmURL: URL) -> InternalLink? {
@@ -29,6 +30,7 @@ public enum InternalLink: Equatable, Sendable {
             case "recent", "recent_topics": return .recent
             case "inbox": return .inbox
             case "all_messages", "feed": return .combinedFeed
+            case "drafts": return .drafts
             default: return nil
             }
         }

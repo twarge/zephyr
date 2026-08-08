@@ -261,6 +261,8 @@ extension InternalLink {
             components.queryItems = [URLQueryItem(name: "view", value: "inbox")]
         case .combinedFeed:
             components.queryItems = [URLQueryItem(name: "view", value: "combined")]
+        case .drafts:
+            components.queryItems = [URLQueryItem(name: "view", value: "drafts")]
         case .search(let text, let senderId, let streamId, let topic):
             var items = [URLQueryItem(name: "search", value: text ?? "")]
             if let senderId {
@@ -297,6 +299,7 @@ extension InternalLink {
             case "recent": self = .recent
             case "inbox": self = .inbox
             case "combined": self = .combinedFeed
+            case "drafts": self = .drafts
             default: return nil
             }
         } else if let streamValue = value("stream"), let streamId = Int(streamValue) {
@@ -344,6 +347,8 @@ extension InternalLink {
             return (.recentConversations, nil)
         case .combinedFeed:
             return (.combinedFeed, nil)
+        case .drafts:
+            return (.drafts, nil)
         case .search(let text, let senderId, let streamId, let topic):
             var tokens: [SearchToken] = []
             if let streamId {

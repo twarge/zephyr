@@ -110,7 +110,8 @@ struct TopicNameTests {
         #expect(InternalLink.parse(href: "/#inbox", realmURL: realm) == .inbox)
         #expect(InternalLink.parse(href: "/#all_messages", realmURL: realm) == .combinedFeed)
         #expect(InternalLink.parse(href: "/#feed", realmURL: realm) == .combinedFeed)
-        #expect(InternalLink.parse(href: "/#drafts", realmURL: realm) == nil)
+        #expect(InternalLink.parse(href: "/#drafts", realmURL: realm) == .drafts)
+        #expect(InternalLink.parse(href: "/#keyboard-shortcuts", realmURL: realm) == nil)
     }
 
     @Test func searchNarrows() {
