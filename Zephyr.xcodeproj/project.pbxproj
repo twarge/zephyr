@@ -7,150 +7,352 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A100000000000000000000F4 /* ZulipAPI in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000F2 /* ZulipAPI */; };
-		A100000000000000000000F5 /* ZulipModel in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000F3 /* ZulipModel */; };
-		A100000000000000000000F7 /* ZulipContent in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000F6 /* ZulipContent */; };
-		A100000000000000000000F9 /* ZulipMath in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000F8 /* ZulipMath */; };
+		0A7AFFF808844CC0EE4BE1EE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */; };
+		0B1CBDD1323F731109D06DEC /* RecentConversationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 475341E1FDF45E220243460A /* RecentConversationsView.swift */; };
+		0BC179CD59C27B54EA265364 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C391C25A76B13BD0D05B8706 /* NotificationManager.swift */; };
+		15238C1DCBB889813D725E14 /* ConnectivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BFA44C0924355E456163217 /* ConnectivityMonitor.swift */; };
+		154A6DB5674AF7C019515AC3 /* ZulipMath in Frameworks */ = {isa = PBXBuildFile; productRef = 86972B326398BF7FE9542C42 /* ZulipMath */; };
+		1809E45D7265B2EFF7464F38 /* ZulipContent in Frameworks */ = {isa = PBXBuildFile; productRef = AD2A65812AC38BAC3D200157 /* ZulipContent */; };
+		188461C8A7C5D3500365BA6D /* KeyboardRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43C09E2CE84013DBCE92521D /* KeyboardRouter.swift */; };
+		1A4EA966BF8059788CD35F91 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 823C14D4494BFA81F9DE3F8E /* Assets.xcassets */; };
+		3D07A493DA42E4D98B0DA530 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9C40C777893FC7275F955B /* Platform.swift */; };
+		3F863C40AC99B169668E1DD0 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7106DB9D273F41FC9FE36ABF /* AppModel.swift */; };
+		428E7CBC70049F69CF04CAB5 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC85F6AA56F7EF9105F7742E /* HelpView.swift */; };
+		54BFB8373908F2BE25281ECF /* ZulipModel in Frameworks */ = {isa = PBXBuildFile; productRef = E4D870E5241B561551F2791A /* ZulipModel */; };
+		5F0FCA79F46D92DA6EF1091E /* NarrowFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7EBB59257B9154EAF76D934 /* NarrowFeedView.swift */; };
+		664752B641AB478805A1EAE7 /* AccountWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28D32E783B00DD974C9E8971 /* AccountWindowView.swift */; };
+		67B681DC63058035652E4E1A /* EmojiPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */; };
+		685FD431FA29FEA255D3FBC1 /* MessageContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 067FC7012EB2D00C26EF2527 /* MessageContentView.swift */; };
+		706E3B7C39B1F3C9F5DF0E1E /* Support.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD6E84868E4713FC5F20FD6B /* Support.swift */; };
+		70E8661B18208CE08B86BFFA /* AppStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232E47A83B732D68F7D53F8A /* AppStateStore.swift */; };
+		7520AD45B999226B180174C7 /* NewConversationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */; };
+		75DE44DBC8650067EEAA958D /* TranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D95D81BD326A92094707205 /* TranscriptView.swift */; };
+		7BFEB47B6DCAC3AD9BCA6C35 /* Search.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B6E7BF3930F81D1C28D6C1 /* Search.swift */; };
+		7E536CB80BBA16C3965B52CF /* MessageActionSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC11E5BCCDABAA47341BC0CA /* MessageActionSheets.swift */; };
+		883C05E8DCB4C721B557D835 /* TopicAutocompleteField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 828F7934E9D581DD3703EAAC /* TopicAutocompleteField.swift */; };
+		8D288550003242AB2596116F /* PDFAttachmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FE462CABA8309A90FD3A747 /* PDFAttachmentView.swift */; };
+		90244AA61E53F58A6D9AA222 /* OpenQuicklyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149499DA07B92E143F965C6C /* OpenQuicklyView.swift */; };
+		9511713F095ADB5FAF8E1593 /* MessageWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */; };
+		9890C37B9865F39B29EDF88D /* DraftSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4611B74F89FA03A6C524C9 /* DraftSync.swift */; };
+		9C2971F9C1F755CB722B43E8 /* MainSplitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B2CA9D7CF1C06AA7B0A1D52 /* MainSplitView.swift */; };
+		A2B018739699F9B2B4505207 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C17B1B985702AAFC4C30468A /* SidebarView.swift */; };
+		A395FC333148C3BE66791CC5 /* ChannelTopicsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB37E72A9961DF2EB9503B4D /* ChannelTopicsView.swift */; };
+		A4DAC225CFBF91023FFE91B3 /* ZulipAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 27D0006F9ED91CF207CFAA5B /* ZulipAPI */; };
+		A82A7771694C25DF30CA4009 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28E9D19485B08518476527C2 /* LoginView.swift */; };
+		B25F5C4B54A1AD406C201ECB /* ZephyrIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14B376B2915109D9F3810E20 /* ZephyrIntents.swift */; };
+		B8CB761D6FE61F47C1E0FCBC /* ZephyrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066FAF47CC310A2445AAB0A9 /* ZephyrApp.swift */; };
+		BB931F8230B45BC90B104176 /* MessageFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BD4EE59C8A33FC99AA510C3 /* MessageFeed.swift */; };
+		BCBA356FC8FA69612CEAE5DA /* ComposeBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48877EEA1FAFF61902860BD0 /* ComposeBar.swift */; };
+		C2C81E0729324AE820EB8883 /* ChannelFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1758438236E9536CC8336895 /* ChannelFeedView.swift */; };
+		CAFDE08EBB3B372F2C6AA2B1 /* DetachedWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */; };
+		E100D2C195474421ED98A3B1 /* WebAuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5410F479FB8AE6E80F4866 /* WebAuthSession.swift */; };
+		F33ED1EE8D08E1F58540F09B /* Tips.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AB37CBF3789C6E2854F3632 /* Tips.swift */; };
+		F6C17F7A2914098D59DE30AB /* AllChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C28BE5A0DA537D6EB9C97A /* AllChannelsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		A100000000000000000000C3 /* Zephyr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Zephyr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0336B10E85CC165AC34AE4A6 /* Zephyr.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Zephyr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		066FAF47CC310A2445AAB0A9 /* ZephyrApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZephyrApp.swift; sourceTree = "<group>"; };
+		067FC7012EB2D00C26EF2527 /* MessageContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageContentView.swift; sourceTree = "<group>"; };
+		08D61FEDB2BCFA89017740EF /* Zephyr.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Zephyr.entitlements; sourceTree = "<group>"; };
+		149499DA07B92E143F965C6C /* OpenQuicklyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenQuicklyView.swift; sourceTree = "<group>"; };
+		14B376B2915109D9F3810E20 /* ZephyrIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZephyrIntents.swift; sourceTree = "<group>"; };
+		1758438236E9536CC8336895 /* ChannelFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelFeedView.swift; sourceTree = "<group>"; };
+		1BFA44C0924355E456163217 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityMonitor.swift; sourceTree = "<group>"; };
+		232E47A83B732D68F7D53F8A /* AppStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateStore.swift; sourceTree = "<group>"; };
+		246E2A99D0BD63D5209BD33B /* ZulipKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ZulipKit; path = Packages/ZulipKit; sourceTree = SOURCE_ROOT; };
+		28D32E783B00DD974C9E8971 /* AccountWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountWindowView.swift; sourceTree = "<group>"; };
+		28E9D19485B08518476527C2 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		2AB37CBF3789C6E2854F3632 /* Tips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tips.swift; sourceTree = "<group>"; };
+		2D95D81BD326A92094707205 /* TranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptView.swift; sourceTree = "<group>"; };
+		3B2CA9D7CF1C06AA7B0A1D52 /* MainSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainSplitView.swift; sourceTree = "<group>"; };
+		3BD4EE59C8A33FC99AA510C3 /* MessageFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageFeed.swift; sourceTree = "<group>"; };
+		3F4611B74F89FA03A6C524C9 /* DraftSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftSync.swift; sourceTree = "<group>"; };
+		3FE462CABA8309A90FD3A747 /* PDFAttachmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFAttachmentView.swift; sourceTree = "<group>"; };
+		43C09E2CE84013DBCE92521D /* KeyboardRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardRouter.swift; sourceTree = "<group>"; };
+		475341E1FDF45E220243460A /* RecentConversationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentConversationsView.swift; sourceTree = "<group>"; };
+		48877EEA1FAFF61902860BD0 /* ComposeBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeBar.swift; sourceTree = "<group>"; };
+		4D9C40C777893FC7275F955B /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
+		68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWidgetView.swift; sourceTree = "<group>"; };
+		7106DB9D273F41FC9FE36ABF /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		823C14D4494BFA81F9DE3F8E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		828F7934E9D581DD3703EAAC /* TopicAutocompleteField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicAutocompleteField.swift; sourceTree = "<group>"; };
+		A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiPickerView.swift; sourceTree = "<group>"; };
+		AD6E84868E4713FC5F20FD6B /* Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Support.swift; sourceTree = "<group>"; };
+		B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewConversationSheet.swift; sourceTree = "<group>"; };
+		BC85F6AA56F7EF9105F7742E /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
+		BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		C0B6E7BF3930F81D1C28D6C1 /* Search.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Search.swift; sourceTree = "<group>"; };
+		C17B1B985702AAFC4C30468A /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		C391C25A76B13BD0D05B8706 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		C5C28BE5A0DA537D6EB9C97A /* AllChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllChannelsView.swift; sourceTree = "<group>"; };
+		DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetachedWindow.swift; sourceTree = "<group>"; };
+		E7EBB59257B9154EAF76D934 /* NarrowFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NarrowFeedView.swift; sourceTree = "<group>"; };
+		EC11E5BCCDABAA47341BC0CA /* MessageActionSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageActionSheets.swift; sourceTree = "<group>"; };
+		FB37E72A9961DF2EB9503B4D /* ChannelTopicsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelTopicsView.swift; sourceTree = "<group>"; };
+		FC5410F479FB8AE6E80F4866 /* WebAuthSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthSession.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		A100000000000000000000C4 /* Zephyr */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Zephyr;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
-
 /* Begin PBXFrameworksBuildPhase section */
-		A100000000000000000000E2 /* Frameworks */ = {
+		262F461089EC8CC6EAE1DCA1 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A100000000000000000000F4 /* ZulipAPI in Frameworks */,
-				A100000000000000000000F5 /* ZulipModel in Frameworks */,
-				A100000000000000000000F7 /* ZulipContent in Frameworks */,
-				A100000000000000000000F9 /* ZulipMath in Frameworks */,
+				54BFB8373908F2BE25281ECF /* ZulipModel in Frameworks */,
+				A4DAC225CFBF91023FFE91B3 /* ZulipAPI in Frameworks */,
+				1809E45D7265B2EFF7464F38 /* ZulipContent in Frameworks */,
+				154A6DB5674AF7C019515AC3 /* ZulipMath in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A100000000000000000000C1 = {
+		2F9A6FAB9E659DB79DF34D95 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				A100000000000000000000C4 /* Zephyr */,
-				A100000000000000000000C2 /* Products */,
+				28D32E783B00DD974C9E8971 /* AccountWindowView.swift */,
+				C5C28BE5A0DA537D6EB9C97A /* AllChannelsView.swift */,
+				1758438236E9536CC8336895 /* ChannelFeedView.swift */,
+				FB37E72A9961DF2EB9503B4D /* ChannelTopicsView.swift */,
+				48877EEA1FAFF61902860BD0 /* ComposeBar.swift */,
+				DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */,
+				A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */,
+				BC85F6AA56F7EF9105F7742E /* HelpView.swift */,
+				28E9D19485B08518476527C2 /* LoginView.swift */,
+				3B2CA9D7CF1C06AA7B0A1D52 /* MainSplitView.swift */,
+				EC11E5BCCDABAA47341BC0CA /* MessageActionSheets.swift */,
+				067FC7012EB2D00C26EF2527 /* MessageContentView.swift */,
+				3BD4EE59C8A33FC99AA510C3 /* MessageFeed.swift */,
+				68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */,
+				E7EBB59257B9154EAF76D934 /* NarrowFeedView.swift */,
+				B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */,
+				149499DA07B92E143F965C6C /* OpenQuicklyView.swift */,
+				3FE462CABA8309A90FD3A747 /* PDFAttachmentView.swift */,
+				475341E1FDF45E220243460A /* RecentConversationsView.swift */,
+				C0B6E7BF3930F81D1C28D6C1 /* Search.swift */,
+				BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */,
+				C17B1B985702AAFC4C30468A /* SidebarView.swift */,
+				AD6E84868E4713FC5F20FD6B /* Support.swift */,
+				828F7934E9D581DD3703EAAC /* TopicAutocompleteField.swift */,
+				2D95D81BD326A92094707205 /* TranscriptView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		612AF186E8C6E85C4880CC83 = {
+			isa = PBXGroup;
+			children = (
+				D13068B9C4F70218C2D558FA /* Packages */,
+				92C0E649E05F5CFF221ED566 /* Zephyr */,
+				AF0461F34E739EF907032AC9 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		A100000000000000000000C2 /* Products */ = {
+		92C0E649E05F5CFF221ED566 /* Zephyr */ = {
 			isa = PBXGroup;
 			children = (
-				A100000000000000000000C3 /* Zephyr.app */,
+				7106DB9D273F41FC9FE36ABF /* AppModel.swift */,
+				232E47A83B732D68F7D53F8A /* AppStateStore.swift */,
+				823C14D4494BFA81F9DE3F8E /* Assets.xcassets */,
+				1BFA44C0924355E456163217 /* ConnectivityMonitor.swift */,
+				3F4611B74F89FA03A6C524C9 /* DraftSync.swift */,
+				43C09E2CE84013DBCE92521D /* KeyboardRouter.swift */,
+				C391C25A76B13BD0D05B8706 /* NotificationManager.swift */,
+				4D9C40C777893FC7275F955B /* Platform.swift */,
+				2AB37CBF3789C6E2854F3632 /* Tips.swift */,
+				FC5410F479FB8AE6E80F4866 /* WebAuthSession.swift */,
+				08D61FEDB2BCFA89017740EF /* Zephyr.entitlements */,
+				066FAF47CC310A2445AAB0A9 /* ZephyrApp.swift */,
+				14B376B2915109D9F3810E20 /* ZephyrIntents.swift */,
+				2F9A6FAB9E659DB79DF34D95 /* Views */,
+			);
+			path = Zephyr;
+			sourceTree = "<group>";
+		};
+		AF0461F34E739EF907032AC9 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				0336B10E85CC165AC34AE4A6 /* Zephyr.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		D13068B9C4F70218C2D558FA /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				246E2A99D0BD63D5209BD33B /* ZulipKit */,
+			);
+			path = Packages;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A100000000000000000000D1 /* Zephyr */ = {
+		2AEDC22B76AE14F52ADDA857 /* Zephyr */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A100000000000000000000D2 /* Build configuration list for PBXNativeTarget "Zephyr" */;
+			buildConfigurationList = 276FA59FADB80C530270E770 /* Build configuration list for PBXNativeTarget "Zephyr" */;
 			buildPhases = (
-				A100000000000000000000E1 /* Sources */,
-				A100000000000000000000E2 /* Frameworks */,
-				A100000000000000000000E3 /* Resources */,
+				77B8BA99491B1A259CD320A2 /* Sources */,
+				9C6C9CF6C8261B132BE93EB9 /* Resources */,
+				262F461089EC8CC6EAE1DCA1 /* Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			fileSystemSynchronizedGroups = (
-				A100000000000000000000C4 /* Zephyr */,
-			);
 			name = Zephyr;
 			packageProductDependencies = (
-				A100000000000000000000F2 /* ZulipAPI */,
-				A100000000000000000000F3 /* ZulipModel */,
-				A100000000000000000000F6 /* ZulipContent */,
-				A100000000000000000000F8 /* ZulipMath */,
+				E4D870E5241B561551F2791A /* ZulipModel */,
+				27D0006F9ED91CF207CFAA5B /* ZulipAPI */,
+				AD2A65812AC38BAC3D200157 /* ZulipContent */,
+				86972B326398BF7FE9542C42 /* ZulipMath */,
 			);
 			productName = Zephyr;
-			productReference = A100000000000000000000C3 /* Zephyr.app */;
+			productReference = 0336B10E85CC165AC34AE4A6 /* Zephyr.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		A100000000000000000000A1 /* Project object */ = {
+		8BEBDFECE21524CF9C256F55 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2700;
-				LastUpgradeCheck = 2700;
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
 				TargetAttributes = {
-					A100000000000000000000D1 = {
-						CreatedOnToolsVersion = 27.0;
+					2AEDC22B76AE14F52ADDA857 = {
+						DevelopmentTeam = 257KW9ZJFP;
+						ProvisioningStyle = Automatic;
 					};
 				};
 			};
-			buildConfigurationList = A100000000000000000000B1 /* Build configuration list for PBXProject "Zephyr" */;
+			buildConfigurationList = A7C3F89928DDFDEBB6388A8F /* Build configuration list for PBXProject "Zephyr" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
 				Base,
+				en,
 			);
-			mainGroup = A100000000000000000000C1;
+			mainGroup = 612AF186E8C6E85C4880CC83;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				A100000000000000000000F1 /* XCLocalSwiftPackageReference "Packages/ZulipKit" */,
+				7719EBB15E310B948F46D19F /* XCLocalSwiftPackageReference "Packages/ZulipKit" */,
 			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = A100000000000000000000C2 /* Products */;
+			productRefGroup = AF0461F34E739EF907032AC9 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A100000000000000000000D1 /* Zephyr */,
+				2AEDC22B76AE14F52ADDA857 /* Zephyr */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		A100000000000000000000E3 /* Resources */ = {
+		9C6C9CF6C8261B132BE93EB9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1A4EA966BF8059788CD35F91 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A100000000000000000000E1 /* Sources */ = {
+		77B8BA99491B1A259CD320A2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				664752B641AB478805A1EAE7 /* AccountWindowView.swift in Sources */,
+				F6C17F7A2914098D59DE30AB /* AllChannelsView.swift in Sources */,
+				3F863C40AC99B169668E1DD0 /* AppModel.swift in Sources */,
+				70E8661B18208CE08B86BFFA /* AppStateStore.swift in Sources */,
+				C2C81E0729324AE820EB8883 /* ChannelFeedView.swift in Sources */,
+				A395FC333148C3BE66791CC5 /* ChannelTopicsView.swift in Sources */,
+				BCBA356FC8FA69612CEAE5DA /* ComposeBar.swift in Sources */,
+				15238C1DCBB889813D725E14 /* ConnectivityMonitor.swift in Sources */,
+				CAFDE08EBB3B372F2C6AA2B1 /* DetachedWindow.swift in Sources */,
+				9890C37B9865F39B29EDF88D /* DraftSync.swift in Sources */,
+				67B681DC63058035652E4E1A /* EmojiPickerView.swift in Sources */,
+				428E7CBC70049F69CF04CAB5 /* HelpView.swift in Sources */,
+				188461C8A7C5D3500365BA6D /* KeyboardRouter.swift in Sources */,
+				A82A7771694C25DF30CA4009 /* LoginView.swift in Sources */,
+				9C2971F9C1F755CB722B43E8 /* MainSplitView.swift in Sources */,
+				7E536CB80BBA16C3965B52CF /* MessageActionSheets.swift in Sources */,
+				685FD431FA29FEA255D3FBC1 /* MessageContentView.swift in Sources */,
+				BB931F8230B45BC90B104176 /* MessageFeed.swift in Sources */,
+				9511713F095ADB5FAF8E1593 /* MessageWidgetView.swift in Sources */,
+				5F0FCA79F46D92DA6EF1091E /* NarrowFeedView.swift in Sources */,
+				7520AD45B999226B180174C7 /* NewConversationSheet.swift in Sources */,
+				0BC179CD59C27B54EA265364 /* NotificationManager.swift in Sources */,
+				90244AA61E53F58A6D9AA222 /* OpenQuicklyView.swift in Sources */,
+				8D288550003242AB2596116F /* PDFAttachmentView.swift in Sources */,
+				3D07A493DA42E4D98B0DA530 /* Platform.swift in Sources */,
+				0B1CBDD1323F731109D06DEC /* RecentConversationsView.swift in Sources */,
+				7BFEB47B6DCAC3AD9BCA6C35 /* Search.swift in Sources */,
+				0A7AFFF808844CC0EE4BE1EE /* SettingsView.swift in Sources */,
+				A2B018739699F9B2B4505207 /* SidebarView.swift in Sources */,
+				706E3B7C39B1F3C9F5DF0E1E /* Support.swift in Sources */,
+				F33ED1EE8D08E1F58540F09B /* Tips.swift in Sources */,
+				883C05E8DCB4C721B557D835 /* TopicAutocompleteField.swift in Sources */,
+				75DE44DBC8650067EEAA958D /* TranscriptView.swift in Sources */,
+				E100D2C195474421ED98A3B1 /* WebAuthSession.swift in Sources */,
+				B8CB761D6FE61F47C1E0FCBC /* ZephyrApp.swift in Sources */,
+				B25F5C4B54A1AD406C201ECB /* ZephyrIntents.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		A100000000000000000000B2 /* Debug */ = {
+		056292407F51502CA1060760 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Zephyr/Zephyr.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 257KW9ZJFP;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Support/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Twarge. Apache-2.0.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.twarge.zephyr;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		191FD5C6FE5046A72F5DEAEA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
@@ -180,14 +382,13 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
 					"$(inherited)",
+					"DEBUG=1",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
@@ -195,25 +396,63 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				SDKROOT = macosx;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
 		};
-		A100000000000000000000B3 /* Release */ = {
+		5005DEF3CEA9E28193AD5787 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Zephyr/Zephyr.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 257KW9ZJFP;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Support/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Twarge. Apache-2.0.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.twarge.zephyr;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		CA35A12D6D9654934B4B2E8F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
@@ -243,8 +482,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
@@ -252,142 +490,64 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				SDKROOT = macosx;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
-			};
-			name = Release;
-		};
-		A100000000000000000000D3 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Zephyr/Zephyr.entitlements;
-				CODE_SIGN_IDENTITY = "-";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 257KW9ZJFP;
-				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Support/Info.plist;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Twarge. Apache-2.0.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.twarge.zephyr;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-				SUPPORTS_MACCATALYST = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		A100000000000000000000D4 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Zephyr/Zephyr.entitlements;
-				CODE_SIGN_IDENTITY = "-";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 257KW9ZJFP;
-				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Support/Info.plist;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Twarge. Apache-2.0.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.twarge.zephyr;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-				SUPPORTS_MACCATALYST = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A100000000000000000000B1 /* Build configuration list for PBXProject "Zephyr" */ = {
+		276FA59FADB80C530270E770 /* Build configuration list for PBXNativeTarget "Zephyr" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A100000000000000000000B2 /* Debug */,
-				A100000000000000000000B3 /* Release */,
+				056292407F51502CA1060760 /* Debug */,
+				5005DEF3CEA9E28193AD5787 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
-		A100000000000000000000D2 /* Build configuration list for PBXNativeTarget "Zephyr" */ = {
+		A7C3F89928DDFDEBB6388A8F /* Build configuration list for PBXProject "Zephyr" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A100000000000000000000D3 /* Debug */,
-				A100000000000000000000D4 /* Release */,
+				191FD5C6FE5046A72F5DEAEA /* Debug */,
+				CA35A12D6D9654934B4B2E8F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		A100000000000000000000F1 /* XCLocalSwiftPackageReference "Packages/ZulipKit" */ = {
+		7719EBB15E310B948F46D19F /* XCLocalSwiftPackageReference "Packages/ZulipKit" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/ZulipKit;
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		A100000000000000000000F2 /* ZulipAPI */ = {
+		27D0006F9ED91CF207CFAA5B /* ZulipAPI */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ZulipAPI;
 		};
-		A100000000000000000000F3 /* ZulipModel */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = ZulipModel;
-		};
-		A100000000000000000000F6 /* ZulipContent */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = ZulipContent;
-		};
-		A100000000000000000000F8 /* ZulipMath */ = {
+		86972B326398BF7FE9542C42 /* ZulipMath */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ZulipMath;
 		};
+		AD2A65812AC38BAC3D200157 /* ZulipContent */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ZulipContent;
+		};
+		E4D870E5241B561551F2791A /* ZulipModel */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ZulipModel;
+		};
 /* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = A100000000000000000000A1 /* Project object */;
+	rootObject = 8BEBDFECE21524CF9C256F55 /* Project object */;
 }

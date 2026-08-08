@@ -1,0 +1,55 @@
+# XcodeGen source of truth for Zephyr.xcodeproj — regenerate with:
+#   xcodegen generate
+# The generated project is committed so CI needs no extra step.
+name: Zephyr
+options:
+  createIntermediateGroups: true
+
+packages:
+  ZulipKit:
+    path: Packages/ZulipKit
+
+targets:
+  Zephyr:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - Zephyr
+    dependencies:
+      - package: ZulipKit
+        products: [ZulipModel, ZulipAPI, ZulipContent, ZulipMath]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.twarge.zephyr
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        DEVELOPMENT_TEAM: 257KW9ZJFP
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: Apple Development
+        CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: Zephyr/Zephyr.entitlements
+        GENERATE_INFOPLIST_FILE: YES
+        # Merged with the generated keys; carries NSUserActivityTypes.
+        INFOPLIST_FILE: Support/Info.plist
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "6.0"
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+        ENABLE_PREVIEWS: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.social-networking
+        INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 Twarge. Apache-2.0."
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+
+schemes:
+  Zephyr:
+    build:
+      targets:
+        Zephyr: all
+    run:
+      config: Debug
+    archive:
+      config: Release
