@@ -255,6 +255,24 @@ extension InternalLink {
             components.queryItems = [URLQueryItem(name: "is", value: "starred")]
         case .mentions:
             components.queryItems = [URLQueryItem(name: "is", value: "mentioned")]
+        case .recent:
+            components.queryItems = [URLQueryItem(name: "view", value: "recent")]
+        case .inbox:
+            components.queryItems = [URLQueryItem(name: "view", value: "inbox")]
+        case .combinedFeed:
+            components.queryItems = [URLQueryItem(name: "view", value: "combined")]
+        case .search(let text, let senderId, let streamId, let topic):
+            var items = [URLQueryItem(name: "search", value: text ?? "")]
+            if let senderId {
+                items.append(URLQueryItem(name: "sender", value: String(senderId)))
+            }
+            if let streamId {
+                items.append(URLQueryItem(name: "stream", value: String(streamId)))
+            }
+            if let topic {
+                items.append(URLQueryItem(name: "topic", value: topic))
+            }
+            components.queryItems = items
         }
         return components.url
     }
@@ -267,7 +285,21 @@ extension InternalLink {
             components.queryItems?.first(where: { $0.name == name })?.value
         }
         let near = value("near").flatMap(Int.init)
-        if let streamValue = value("stream"), let streamId = Int(streamValue) {
+        // Search first: its items can include stream/topic scope.
+        if let text = value("search") {
+            self = .search(
+                text: text.isEmpty ? nil : text,
+                senderId: value("sender").flatMap(Int.init),
+                streamId: value("stream").flatMap(Int.init),
+                topic: value("topic"))
+        } else if let view = value("view") {
+            switch view {
+            case "recent": self = .recent
+            case "inbox": self = .inbox
+            case "combined": self = .combinedFeed
+            default: return nil
+            }
+        } else if let streamValue = value("stream"), let streamId = Int(streamValue) {
             if let topic = value("topic") {
                 self = .topic(streamId: streamId, topic: topic, nearMessageId: near)
             } else {
@@ -289,19 +321,44 @@ extension InternalLink {
     }
 
     /// The in-app destination (with the message to land on, when the link
-    /// carries one).
-    func destination(selfUserId: Int) -> (destination: Destination, near: Int?) {
+    /// carries one). The store, when available, resolves display names for
+    /// search tokens.
+    func destination(
+        selfUserId: Int, store: PerAccountStore?
+    ) -> (destination: Destination, near: Int?) {
         switch self {
         case .channel(let streamId):
-            (.channel(streamId: streamId), nil)
+            return (.channel(streamId: streamId), nil)
         case .topic(let streamId, let topic, let near):
-            (.conversation(.topic(streamId: streamId, topic: topic)), near)
+            return (.conversation(.topic(streamId: streamId, topic: topic)), near)
         case .dm(let userIds, let near):
-            (.conversation(Unreads.dmKey(participantIds: userIds, selfUserId: selfUserId)), near)
+            return (
+                .conversation(Unreads.dmKey(participantIds: userIds, selfUserId: selfUserId)),
+                near)
         case .starred:
-            (.starred, nil)
+            return (.starred, nil)
         case .mentions:
-            (.mentions, nil)
+            return (.mentions, nil)
+        case .recent, .inbox:
+            // Zulip's Inbox has no direct analog; Recent is the closest.
+            return (.recentConversations, nil)
+        case .combinedFeed:
+            return (.combinedFeed, nil)
+        case .search(let text, let senderId, let streamId, let topic):
+            var tokens: [SearchToken] = []
+            if let streamId {
+                let name = store?.channels[streamId]?.name
+                    ?? store?.subscriptions[streamId]?.name ?? "channel"
+                tokens.append(.channel(streamId: streamId, name: name))
+            }
+            if let topic {
+                tokens.append(.topic(topic))
+            }
+            if let senderId {
+                let name = store?.users[senderId]?.fullName ?? "User \(senderId)"
+                tokens.append(.sender(userId: senderId, name: name))
+            }
+            return (.search(SearchQuery(tokens: tokens, text: text ?? "")), nil)
         }
     }
 }

@@ -447,7 +447,8 @@ struct MainSplitView: View {
     private func openInternal(_ link: InternalLink, accountId: Account.ID) {
         let selfUserId = model.global.accounts
             .first { $0.id == accountId }?.userId ?? store.selfUserId
-        let (destination, near) = link.destination(selfUserId: selfUserId)
+        let (destination, near) = link.destination(
+            selfUserId: selfUserId, store: model.global.stores[accountId])
         if accountId == store.accountId {
             if let near, case .conversation(let key) = destination {
                 keys.highlightMessageId = near

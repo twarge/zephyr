@@ -10,6 +10,10 @@ public enum InternalLink: Equatable, Sendable {
     case dm(userIds: [Int], nearMessageId: Int?)
     case starred
     case mentions
+    case recent
+    case inbox
+    case combinedFeed
+    case search(text: String?, senderId: Int?, streamId: Int?, topic: String?)
 
     public static func parse(href: String, realmURL: URL) -> InternalLink? {
         guard let hashIndex = href.firstIndex(of: "#") else { return nil }
@@ -19,12 +23,23 @@ public enum InternalLink: Equatable, Sendable {
         let parts = href[href.index(after: hashIndex)...]
             .split(separator: "/")
             .map(String.init)
+        // Non-narrow view hashes.
+        if parts.count == 1 {
+            switch parts[0] {
+            case "recent", "recent_topics": return .recent
+            case "inbox": return .inbox
+            case "all_messages", "feed": return .combinedFeed
+            default: return nil
+            }
+        }
         guard parts.first == "narrow", parts.count >= 3, (parts.count - 1).isMultiple(of: 2)
         else { return nil }
 
         var streamId: Int?
         var topic: String?
         var dmIds: [Int]?
+        var searchText: String?
+        var senderId: Int?
         var view: InternalLink?
         var near: Int?
         var index = 1
@@ -56,6 +71,13 @@ public enum InternalLink: Equatable, Sendable {
                 case "mentioned": view = .mentions
                 default: return nil
                 }
+            case "search":
+                guard let decoded = decodeHashComponent(operand) else { return nil }
+                searchText = decoded
+            case "sender":
+                // Operand is "{id}-{slugified-name}" like channels.
+                guard let id = Int(operand.prefix(while: \.isNumber)) else { return nil }
+                senderId = id
             case "near", "with":
                 near = Int(operand)
             default:
@@ -63,8 +85,13 @@ public enum InternalLink: Equatable, Sendable {
             }
             index += 2
         }
-        if let view, streamId == nil, dmIds == nil {
+        if let view, streamId == nil, dmIds == nil, searchText == nil, senderId == nil {
             return view
+        }
+        if searchText != nil || senderId != nil {
+            // A search narrow, optionally scoped by channel/topic.
+            guard dmIds == nil, view == nil else { return nil }
+            return .search(text: searchText, senderId: senderId, streamId: streamId, topic: topic)
         }
         if let dmIds {
             return .dm(userIds: dmIds, nearMessageId: near)

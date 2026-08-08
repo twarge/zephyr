@@ -47,7 +47,7 @@ struct InternalLinkTests {
     @Test func unsupportedNarrowsFallThrough() {
         #expect(InternalLink.parse(href: "https://example.com/docs", realmURL: realm) == nil)
         #expect(InternalLink.parse(href: "/#settings", realmURL: realm) == nil)
-        #expect(InternalLink.parse(href: "/#narrow/search/kernel", realmURL: realm) == nil)
+        #expect(InternalLink.parse(href: "/#narrow/is/resolved", realmURL: realm) == nil)
     }
 
     @Test func dotEncodedTopics() {
@@ -98,6 +98,35 @@ struct TopicNameTests {
         #expect(InternalLink.parse(href: "#narrow/is/starred", realmURL: realm) == .starred)
         #expect(InternalLink.parse(href: "#narrow/is/mentioned", realmURL: realm) == .mentions)
         #expect(InternalLink.parse(href: "#narrow/is/resolved", realmURL: realm) == nil)
+    }
+}
+
+@Suite struct ViewAndSearchLinkTests {
+    private let realm = URL(string: "https://discourse.example.com")!
+
+    @Test func viewHashes() {
+        #expect(InternalLink.parse(href: "/#recent", realmURL: realm) == .recent)
+        #expect(InternalLink.parse(href: "/#recent_topics", realmURL: realm) == .recent)
+        #expect(InternalLink.parse(href: "/#inbox", realmURL: realm) == .inbox)
+        #expect(InternalLink.parse(href: "/#all_messages", realmURL: realm) == .combinedFeed)
+        #expect(InternalLink.parse(href: "/#feed", realmURL: realm) == .combinedFeed)
+        #expect(InternalLink.parse(href: "/#drafts", realmURL: realm) == nil)
+    }
+
+    @Test func searchNarrows() {
+        #expect(InternalLink.parse(href: "/#narrow/search/hello.20world", realmURL: realm)
+            == .search(text: "hello world", senderId: nil, streamId: nil, topic: nil))
+        // Channel/topic-scoped search keeps the scope.
+        #expect(InternalLink.parse(
+            href: "/#narrow/channel/10-general/topic/releases/search/kernel", realmURL: realm)
+            == .search(text: "kernel", senderId: nil, streamId: 10, topic: "releases"))
+    }
+
+    @Test func senderNarrows() {
+        #expect(InternalLink.parse(href: "/#narrow/sender/9-tom", realmURL: realm)
+            == .search(text: nil, senderId: 9, streamId: nil, topic: nil))
+        #expect(InternalLink.parse(href: "/#narrow/channel/10-general/sender/9-tom", realmURL: realm)
+            == .search(text: nil, senderId: 9, streamId: 10, topic: nil))
     }
 }
 
