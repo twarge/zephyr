@@ -114,3 +114,23 @@ struct TypingTests {
         #expect(stop?.formValue("op") == "stop")
     }
 }
+
+@Suite struct SlashCommandTokenTests {
+    @Test func slashAtStartSuggestsCommands() throws {
+        let token = try #require(ComposeAutocomplete.trailingToken(in: "/p"))
+        #expect(token.token == .command("p"))
+        #expect(token.triggerIndex == "/p".startIndex)
+        #expect(ComposeAutocomplete.trailingToken(in: "/")?.token == .command(""))
+    }
+
+    @Test func slashElsewhereOrPastTheWordDoesNot() {
+        // Mid-message slashes are just text.
+        #expect(ComposeAutocomplete.trailingToken(in: "hi /p") == nil)
+        // Past the command word, no command suggestions...
+        #expect(ComposeAutocomplete.trailingToken(in: "/poll lunch") == nil)
+        // ...but later triggers still autocomplete.
+        #expect(ComposeAutocomplete.trailingToken(in: "/poll lunch with @Ni")?.token
+            == .mention("Ni"))
+    }
+}
+

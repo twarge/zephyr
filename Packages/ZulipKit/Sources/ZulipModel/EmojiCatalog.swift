@@ -54,10 +54,23 @@ public enum ComposeAutocomplete {
         case mention(String)
         case emoji(String)
         case channel(String)
+        /// A server slash command (/poll, /todo, /me) being typed — only
+        /// meaningful as the message's very first word.
+        case command(String)
     }
 
     public static func trailingToken(in text: String) -> (token: Token, triggerIndex: String.Index)? {
         guard !text.isEmpty else { return nil }
+
+        if text.hasPrefix("/") {
+            let query = String(text.dropFirst())
+            if query.count <= 20,
+               !query.contains(where: { $0.isWhitespace || $0.isNewline }) {
+                return (.command(query), text.startIndex)
+            }
+            // Past the command word ("/poll lunch?"): fall through — later
+            // @/:/# triggers still autocomplete.
+        }
 
         func lastTrigger(_ trigger: Character) -> String.Index? {
             guard let index = text.lastIndex(of: trigger) else { return nil }

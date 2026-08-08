@@ -110,16 +110,39 @@ final class DraftStore {
     }
 }
 
+/// A server-interpreted slash command, offered when the message starts
+/// with "/".
+struct SlashCommand: Identifiable, Equatable {
+    let name: String
+    let icon: String
+    let summary: String
+    var id: String { name }
+
+    static let all: [SlashCommand] = [
+        SlashCommand(
+            name: "poll", icon: "chart.bar.xaxis",
+            summary: "Question on this line, options on the following lines"),
+        SlashCommand(
+            name: "todo", icon: "checklist",
+            summary: "Title on this line, tasks on the following lines"),
+        SlashCommand(
+            name: "me", icon: "figure.wave",
+            summary: "Action message — “/me is heading out”"),
+    ]
+}
+
 private enum ComposeSuggestion: Identifiable {
     case mention(User)
     case emoji(EmojiEntry)
     case channel(Subscription)
+    case command(SlashCommand)
 
     var id: String {
         switch self {
         case .mention(let user): "m\(user.userId)"
         case .emoji(let entry): "e\(entry.id)"
         case .channel(let sub): "c\(sub.streamId)"
+        case .command(let command): "s\(command.name)"
         }
     }
 
@@ -129,6 +152,7 @@ private enum ComposeSuggestion: Identifiable {
         case .mention(let user): "@**\(user.fullName)** "
         case .emoji(let entry): ":\(entry.name): "
         case .channel(let sub): "#**\(sub.name)** "
+        case .command(let command): "/\(command.name) "
         }
     }
 }
@@ -533,6 +557,19 @@ struct ComposeBar: View {
                 Text(":\(entry.name):")
                     .font(.callout)
             }
+        case .command(let command):
+            HStack(spacing: 6) {
+                Image(systemName: command.icon)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18)
+                Text("/\(command.name)")
+                    .font(.callout.weight(.medium))
+                Text(command.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         case .channel(let sub):
             HStack(spacing: 6) {
                 Image(systemName: "number")
@@ -577,6 +614,10 @@ struct ComposeBar: View {
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
                 .prefix(6)
             suggestions = channels.map { .channel($0) }
+        case .command(let query):
+            suggestions = SlashCommand.all
+                .filter { query.isEmpty || $0.name.hasPrefix(query.lowercased()) }
+                .map { .command($0) }
         }
     }
 
