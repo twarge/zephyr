@@ -37,6 +37,7 @@ public enum FakeResponse: Sendable {
     /// default response so a test's event loop parks quietly.
     case hang
     case networkError
+    case timeout
 }
 
 /// Scripted `ApiTransport`: responses are served in FIFO order, then
@@ -82,6 +83,8 @@ public final class FakeTransport: ApiTransport {
             return (Data(body.utf8), http)
         case .networkError:
             throw URLError(.notConnectedToInternet)
+        case .timeout:
+            throw URLError(.timedOut)
         case .hang, nil:
             // Park until this request's task is cancelled.
             typealias Continuation = CheckedContinuation<(Data, HTTPURLResponse), any Error>

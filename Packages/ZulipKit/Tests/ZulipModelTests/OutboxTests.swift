@@ -71,6 +71,23 @@ struct OutboxTests {
         #expect(store.outbox.isEmpty)
     }
 
+    @Test func timedOutSendQueuesAndFlushResends() async throws {
+        let (store, transport) = try makeStore(script: [
+            .timeout,
+            .json(#"{"result": "success", "id": 502}"#),
+        ])
+        store.send("hello", to: .dm(userIds: [2]))
+        // A timeout is a network failure: queued for automatic resend.
+        try await eventually("queued after timeout") {
+            store.outbox.first?.state == .queued
+        }
+        store.flushPending()
+        try await eventually("resent on flush (awaits echo)") {
+            store.outbox.first?.state == .sending
+        }
+        #expect(transport.requests.count == 2)
+    }
+
     @Test func destinationMatching() {
         let topic = SendDestination.topic(streamId: 10, topic: "Greetings")
         #expect(topic.matches(narrow: .topic(streamId: 10, topic: "greetings"), selfUserId: 1))

@@ -66,6 +66,9 @@ final class AppModel {
     var pendingNewConversation = false
     /// Set by File → Open Quickly… (⌘⇧O); the key window shows the palette.
     var pendingOpenQuickly = false
+    /// View → Back (⌘[) / Forward (⌘]): the key window steps its own
+    /// navigation history (-1 back, +1 forward).
+    var pendingHistoryStep: Int?
     /// Share-extension items awaiting a compose bar: set when the user
     /// picks a destination; the next compose bar to appear seeds itself.
     var pendingComposeSeed: [ShareInbox.PendingItem]?

@@ -157,6 +157,13 @@ extension ZephyrApp {
             }
             .keyboardShortcut("o", modifiers: [.command, .shift])
         }
+        CommandGroup(before: .sidebar) {
+            Button("Back") { model.pendingHistoryStep = -1 }
+                .keyboardShortcut("[", modifiers: .command)
+            Button("Forward") { model.pendingHistoryStep = 1 }
+                .keyboardShortcut("]", modifiers: .command)
+            Divider()
+        }
         #if os(macOS)
         // Replaces the system Help stub (which needs a registered help
         // book) with our own manual window.

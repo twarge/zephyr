@@ -1,5 +1,6 @@
 import SwiftUI
 import TipKit
+import ZulipAPI
 import ZulipModel
 
 /// What the detail column shows: a DM/topic transcript, a channel's
@@ -46,6 +47,13 @@ struct MainSplitView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var pendingShareItems: [ShareInbox.PendingItem] = []
     @State private var showSharePicker = false
+    /// Per-window navigation history for ⌘[ / ⌘].
+    @State private var backStack: [Destination] = []
+    @State private var forwardStack: [Destination] = []
+    @State private var historyNavigation = false
+    /// A downloaded attachment presented via Quick Look (iOS; macOS saves
+    /// to Downloads instead).
+    @State private var downloadPreviewURL: URL?
     #if os(iOS)
     @FocusState private var detailFocused: Bool
     #endif
@@ -149,15 +157,24 @@ struct MainSplitView: View {
                 if let host = url.host()?.lowercased() {
                     for account in model.global.accounts
                     where account.realmURL.host()?.lowercased() == host {
-                        guard let link = InternalLink.parse(
-                            href: url.absoluteString, realmURL: account.realmURL)
-                        else { break }  // The realm's, but not a narrow → browser.
-                        openInternal(link, accountId: account.id)
-                        return .handled
+                        if let link = InternalLink.parse(
+                            href: url.absoluteString, realmURL: account.realmURL) {
+                            openInternal(link, accountId: account.id)
+                            return .handled
+                        }
+                        // Attachment links need our auth — the browser
+                        // would hit the login wall. Download in-app.
+                        if url.path().contains("/user_uploads/"),
+                           let connection = model.global.stores[account.id]?.connection {
+                            downloadAttachment(url: url, connection: connection)
+                            return .handled
+                        }
+                        break  // The realm's, but nothing we handle → browser.
                     }
                 }
                 return .systemAction
             })
+        .quickLookPreview($downloadPreviewURL)
         .sheet(item: $newConversation) { mode in
             NewConversationSheet(store: store, selection: $selection, mode: mode)
         }
@@ -189,6 +206,26 @@ struct MainSplitView: View {
             #endif
             model.pendingOpenQuickly = false
             showOpenQuickly = true
+        }
+        // ⌘[ / ⌘]: this window's navigation history.
+        .onChange(of: selection) { old, _ in
+            if historyNavigation {
+                historyNavigation = false
+            } else if let old {
+                backStack.append(old)
+                if backStack.count > 50 {
+                    backStack.removeFirst()
+                }
+                forwardStack.removeAll()
+            }
+        }
+        .onChange(of: model.pendingHistoryStep) {
+            guard let step = model.pendingHistoryStep else { return }
+            #if os(macOS)
+            guard keys.hostWindow?.isKeyWindow != false else { return }
+            #endif
+            model.pendingHistoryStep = nil
+            navigateHistory(step)
         }
         .sheet(isPresented: $showOpenQuickly) {
             OpenQuicklyView(store: store) { destination in
@@ -343,6 +380,65 @@ struct MainSplitView: View {
             case .none:
                 total
             }
+        }
+    }
+
+    private func navigateHistory(_ step: Int) {
+        historyNavigation = true
+        if step < 0 {
+            guard let previous = backStack.popLast() else {
+                historyNavigation = false
+                return
+            }
+            if let selection {
+                forwardStack.append(selection)
+            }
+            selection = previous
+        } else {
+            guard let next = forwardStack.popLast() else {
+                historyNavigation = false
+                return
+            }
+            if let selection {
+                backStack.append(selection)
+            }
+            selection = next
+        }
+    }
+
+    /// Downloads an attachment through the account's authenticated session:
+    /// macOS saves into Downloads and reveals it; iOS presents Quick Look
+    /// (whose share sheet covers "Save to Files").
+    private func downloadAttachment(url: URL, connection: ApiConnection) {
+        Task {
+            guard let (data, response) = await fetchMedia(
+                path: url.absoluteString, connection: connection) else { return }
+            let filename = response.suggestedFilename
+                ?? url.lastPathComponent.removingPercentEncoding
+                ?? "attachment"
+            #if os(macOS)
+            guard let downloads = FileManager.default.urls(
+                for: .downloadsDirectory, in: .userDomainMask).first else { return }
+            var destination = downloads.appendingPathComponent(filename)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                let base = (filename as NSString).deletingPathExtension
+                let ext = (filename as NSString).pathExtension
+                destination = downloads.appendingPathComponent(
+                    "\(base)-\(Int(Date.now.timeIntervalSince1970))"
+                        + (ext.isEmpty ? "" : ".\(ext)"))
+            }
+            do {
+                try data.write(to: destination)
+                NSWorkspace.shared.activateFileViewerSelecting([destination])
+            } catch {
+                // Sandbox without the Downloads entitlement, disk full…
+            }
+            #else
+            let temp = FileManager.default.temporaryDirectory
+                .appendingPathComponent(filename)
+            try? data.write(to: temp)
+            downloadPreviewURL = temp
+            #endif
         }
     }
 

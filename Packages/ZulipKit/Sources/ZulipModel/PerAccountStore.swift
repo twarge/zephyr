@@ -335,6 +335,12 @@ public final class PerAccountStore {
             let endActivity = BackgroundActivity.begin("offline-flush")
             defer { endActivity() }
             defer { isFlushing = false }
+            // Give the recovering event stream a beat to deliver echoes
+            // for sends that actually landed (their entries clear) before
+            // resending ambiguous timed-out entries.
+            for _ in 0..<6 where isRecoveringEventStream {
+                try? await Task.sleep(for: .milliseconds(500))
+            }
             for entry in outbox where entry.state == .queued {
                 if let index = outbox.firstIndex(where: { $0.id == entry.id }) {
                     outbox[index].state = .sending
@@ -473,10 +479,14 @@ public final class PerAccountStore {
             // already have, if it raced the response).
         } catch {
             if let index = outbox.firstIndex(where: { $0.id == localId }) {
-                // Never reached the server → wait for the network and resend
-                // automatically. Anything ambiguous needs a manual retry
-                // (resending could duplicate the message).
-                outbox[index].state = isDefinitelyOfflineError(error)
+                // Network failures (including timeouts and dropped
+                // connections) queue for automatic resend on reconnect.
+                // A timed-out send *may* have reached the server;
+                // flushPending narrows the duplicate window by letting the
+                // recovering event stream deliver the echo (which clears
+                // the entry) before resending. Server rejections stay
+                // failed and need a manual retry.
+                outbox[index].state = isTransientNetworkError(error)
                     ? .queued
                     : .failed(error.localizedDescription)
             }

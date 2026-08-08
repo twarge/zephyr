@@ -25,6 +25,19 @@ public enum SendDestination: Hashable, Sendable, Codable {
     }
 }
 
+extension SendDestination {
+    /// The conversation an outbox entry belongs to (the sidebar Outbox
+    /// section navigates there).
+    public func conversationKey(selfUserId: Int) -> ConversationKey {
+        switch self {
+        case .topic(let streamId, let topic):
+            .topic(streamId: streamId, topic: topic)
+        case .dm(let userIds):
+            Unreads.dmKey(participantIds: userIds, selfUserId: selfUserId)
+        }
+    }
+}
+
 extension ConversationKey {
     /// The destination for composing into this conversation.
     public func sendDestination(selfUserId: Int) -> SendDestination {
@@ -44,8 +57,9 @@ extension ConversationKey {
 public struct OutboxMessage: Identifiable, Sendable, Equatable, Codable {
     public enum State: Sendable, Equatable, Codable {
         case sending
-        /// Waiting for the network: the send never reached the server, so
-        /// it's resent automatically on reconnect.
+        /// Waiting for the network: the send failed with a network error
+        /// (offline, dropped connection, or timeout) and resends
+        /// automatically on reconnect.
         case queued
         case failed(String)
     }
