@@ -1,11 +1,15 @@
 import Foundation
 
-/// A Zulip internal narrow link (`/#narrow/…` from rendered message HTML),
-/// parsed into an in-app destination. Unsupported narrows (dm, is, search…)
-/// parse as nil and should fall through to the web app.
+/// A Zulip internal narrow link (`/#narrow/…` — from rendered message HTML,
+/// or a pasted web-app URL on a signed-in realm), parsed into an in-app
+/// destination. Unsupported narrows (search, settings…) parse as nil and
+/// should fall through to the web app.
 public enum InternalLink: Equatable, Sendable {
     case channel(streamId: Int)
     case topic(streamId: Int, topic: String, nearMessageId: Int?)
+    case dm(userIds: [Int], nearMessageId: Int?)
+    case starred
+    case mentions
 
     public static func parse(href: String, realmURL: URL) -> InternalLink? {
         guard let hashIndex = href.firstIndex(of: "#") else { return nil }
@@ -20,6 +24,8 @@ public enum InternalLink: Equatable, Sendable {
 
         var streamId: Int?
         var topic: String?
+        var dmIds: [Int]?
+        var view: InternalLink?
         var near: Int?
         var index = 1
         while index + 1 < parts.count {
@@ -35,12 +41,33 @@ public enum InternalLink: Equatable, Sendable {
             case "topic", "subject":
                 guard let decoded = decodeHashComponent(operand) else { return nil }
                 topic = decoded
+            case "dm", "pm-with":
+                // Operand is "{ids,joined,by,commas}-dm" ("-pm" from old
+                // links; "{id}-{name}" for a single person).
+                let ids = operand
+                    .prefix { $0.isNumber || $0 == "," }
+                    .split(separator: ",")
+                    .compactMap { Int($0) }
+                guard !ids.isEmpty else { return nil }
+                dmIds = ids
+            case "is":
+                switch operand {
+                case "starred": view = .starred
+                case "mentioned": view = .mentions
+                default: return nil
+                }
             case "near", "with":
                 near = Int(operand)
             default:
                 return nil
             }
             index += 2
+        }
+        if let view, streamId == nil, dmIds == nil {
+            return view
+        }
+        if let dmIds {
+            return .dm(userIds: dmIds, nearMessageId: near)
         }
         guard let streamId else { return nil }
         if let topic {

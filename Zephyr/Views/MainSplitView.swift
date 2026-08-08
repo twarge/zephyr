@@ -136,25 +136,27 @@ struct MainSplitView: View {
         #endif
         .environment(keys)
         .navigationTitle(store.realmName ?? "Zephyr")
-        // Channel/topic/message links inside message content navigate in-app.
+        // Narrow links navigate in-app: rewritten links inside message
+        // content, and pasted/clicked web-app URLs on ANY signed-in realm
+        // (other realms hop the window like a notification click).
         .environment(
             \.openURL,
             OpenURLAction { url in
-                guard let link = InternalLink(appURL: url) else { return .systemAction }
-                switch link {
-                case .channel(let streamId):
-                    selection = .channel(streamId: streamId)
-                case .topic(let streamId, let topic, let near):
-                    let key = ConversationKey.topic(streamId: streamId, topic: topic)
-                    if let near {
-                        keys.highlightMessageId = near
-                        if selection != .conversation(key) {
-                            keys.pendingNear = (key, near)
-                        }
-                    }
-                    selection = .conversation(key)
+                if let link = InternalLink(appURL: url) {
+                    openInternal(link, accountId: store.accountId)
+                    return .handled
                 }
-                return .handled
+                if let host = url.host()?.lowercased() {
+                    for account in model.global.accounts
+                    where account.realmURL.host()?.lowercased() == host {
+                        guard let link = InternalLink.parse(
+                            href: url.absoluteString, realmURL: account.realmURL)
+                        else { break }  // The realm's, but not a narrow → browser.
+                        openInternal(link, accountId: account.id)
+                        return .handled
+                    }
+                }
+                return .systemAction
             })
         .sheet(item: $newConversation) { mode in
             NewConversationSheet(store: store, selection: $selection, mode: mode)
@@ -344,6 +346,26 @@ struct MainSplitView: View {
         }
     }
 
+    /// Routes a parsed narrow link: directly when it's this window's
+    /// account, via the pending-destination hop otherwise.
+    private func openInternal(_ link: InternalLink, accountId: Account.ID) {
+        let selfUserId = model.global.accounts
+            .first { $0.id == accountId }?.userId ?? store.selfUserId
+        let (destination, near) = link.destination(selfUserId: selfUserId)
+        if accountId == store.accountId {
+            if let near, case .conversation(let key) = destination {
+                keys.highlightMessageId = near
+                if selection != .conversation(key) {
+                    keys.pendingNear = (key, near)
+                }
+            }
+            selection = destination
+        } else {
+            model.pendingDestination = PendingDestination(
+                account: accountId, destination: destination, near: near)
+        }
+    }
+
     private var pendingShareItemCount: Int {
         pendingShareItems.reduce(0) {
             $0 + $1.files.count + ($1.text == nil ? 0 : 1)
@@ -372,6 +394,12 @@ struct MainSplitView: View {
         if keys.hostWindow?.isKeyWindow == false && NSApp.keyWindow != nil { return }
         #endif
         model.pendingDestination = nil
+        if let near = pending.near, case .conversation(let key) = pending.destination {
+            keys.highlightMessageId = near
+            if selection != .conversation(key) {
+                keys.pendingNear = (key, near)
+            }
+        }
         selection = pending.destination
     }
 

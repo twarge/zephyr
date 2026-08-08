@@ -244,22 +244,64 @@ extension InternalLink {
             if let near {
                 components.queryItems?.append(URLQueryItem(name: "near", value: String(near)))
             }
+        case .dm(let userIds, let near):
+            components.queryItems = [
+                URLQueryItem(name: "dm", value: userIds.map(String.init).joined(separator: ","))
+            ]
+            if let near {
+                components.queryItems?.append(URLQueryItem(name: "near", value: String(near)))
+            }
+        case .starred:
+            components.queryItems = [URLQueryItem(name: "is", value: "starred")]
+        case .mentions:
+            components.queryItems = [URLQueryItem(name: "is", value: "mentioned")]
         }
         return components.url
     }
 
     init?(appURL: URL) {
         guard appURL.scheme == "zephyr", appURL.host() == "narrow",
-              let components = URLComponents(url: appURL, resolvingAgainstBaseURL: false),
-              let streamValue = components.queryItems?.first(where: { $0.name == "stream" })?.value,
-              let streamId = Int(streamValue)
+              let components = URLComponents(url: appURL, resolvingAgainstBaseURL: false)
         else { return nil }
-        let topic = components.queryItems?.first(where: { $0.name == "topic" })?.value
-        let near = components.queryItems?.first(where: { $0.name == "near" })?.value.flatMap(Int.init)
-        if let topic {
-            self = .topic(streamId: streamId, topic: topic, nearMessageId: near)
+        let value = { (name: String) in
+            components.queryItems?.first(where: { $0.name == name })?.value
+        }
+        let near = value("near").flatMap(Int.init)
+        if let streamValue = value("stream"), let streamId = Int(streamValue) {
+            if let topic = value("topic") {
+                self = .topic(streamId: streamId, topic: topic, nearMessageId: near)
+            } else {
+                self = .channel(streamId: streamId)
+            }
+        } else if let dm = value("dm") {
+            let ids = dm.split(separator: ",").compactMap { Int($0) }
+            guard !ids.isEmpty else { return nil }
+            self = .dm(userIds: ids, nearMessageId: near)
+        } else if let view = value("is") {
+            switch view {
+            case "starred": self = .starred
+            case "mentioned": self = .mentions
+            default: return nil
+            }
         } else {
-            self = .channel(streamId: streamId)
+            return nil
+        }
+    }
+
+    /// The in-app destination (with the message to land on, when the link
+    /// carries one).
+    func destination(selfUserId: Int) -> (destination: Destination, near: Int?) {
+        switch self {
+        case .channel(let streamId):
+            (.channel(streamId: streamId), nil)
+        case .topic(let streamId, let topic, let near):
+            (.conversation(.topic(streamId: streamId, topic: topic)), near)
+        case .dm(let userIds, let near):
+            (.conversation(Unreads.dmKey(participantIds: userIds, selfUserId: selfUserId)), near)
+        case .starred:
+            (.starred, nil)
+        case .mentions:
+            (.mentions, nil)
         }
     }
 }

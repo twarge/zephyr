@@ -12,11 +12,13 @@ enum ComposeFormat {
     case link
 }
 
-/// A navigation request (notification click), scoped to its account: the
-/// key window hops servers first if it shows a different one.
+/// A navigation request (notification click, cross-realm message link),
+/// scoped to its account: the key window hops servers first if it shows a
+/// different one. `near` is the message to land on, when there is one.
 struct PendingDestination: Equatable {
     var account: Account.ID
     var destination: Destination
+    var near: Int? = nil
 }
 
 /// The conversation being read in some window; banners for it are
