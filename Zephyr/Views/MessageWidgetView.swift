@@ -179,24 +179,34 @@ private struct TodoListView: View {
                 }
             }
             ForEach(list.tasks, id: \.key) { task in
-                Button {
-                    store.strikeTodoTask(messageId: messageId, taskKey: task.key)
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Image(systemName: task.completed ? "checkmark.square.fill" : "square")
-                            .foregroundStyle(
-                                task.completed
-                                    ? AnyShapeStyle(.green) : AnyShapeStyle(.tint))
-                        // One line, web-style: "Title: note".
-                        taskLine(task)
-                            .font(.callout)
-                            .strikethrough(task.completed)
-                            .foregroundStyle(task.completed ? .secondary : .primary)
-                        Spacer(minLength: 0)
-                    }
-                    .contentShape(.rect)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    // The native checkbox (system control colors); the
+                    // binding's set is the strike toggle.
+                    #if os(macOS)
+                    Toggle(
+                        "",
+                        isOn: Binding(
+                            get: { task.completed },
+                            set: { _ in
+                                store.strikeTodoTask(messageId: messageId, taskKey: task.key)
+                            }))
+                        .toggleStyle(.checkbox)
+                        .labelsHidden()
+                    #else
+                    Image(systemName: task.completed ? "checkmark.square.fill" : "square")
+                        .foregroundStyle(.tint)
+                    #endif
+                    // One line, web-style: "Title: note".
+                    taskLine(task)
+                        .font(.callout)
+                        .strikethrough(task.completed)
+                        .foregroundStyle(task.completed ? .secondary : .primary)
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.plain)
+                .contentShape(.rect)
+                .onTapGesture {
+                    store.strikeTodoTask(messageId: messageId, taskKey: task.key)
+                }
                 .help(task.completed ? "Mark as not done" : "Mark as done")
             }
             if list.tasks.isEmpty {
