@@ -186,7 +186,7 @@ extension ZephyrApp {
         // View additions: reload, and text sizing (Dynamic Type steps).
         CommandGroup(before: .toolbar) {
             Button("Reload") { model.pendingCommand = .reload }
-                .keyboardShortcut("r", modifiers: .command)
+                .keyboardShortcut("r", modifiers: [.command, .option])
             Divider()
             Button("Bigger Text") { textSizeStep = min(textSizeStep + 1, 3) }
                 .keyboardShortcut("=", modifiers: .command)
@@ -198,6 +198,7 @@ extension ZephyrApp {
         }
         CommandMenu("Message") {
             Button("Reply") { model.pendingCommand = .reply }
+                .keyboardShortcut("r", modifiers: .command)
             Button("Reply Quoting Message") { model.pendingCommand = .replyQuoting }
             Button("Edit Message") { model.pendingCommand = .editMessage }
                 .keyboardShortcut("e", modifiers: .command)
