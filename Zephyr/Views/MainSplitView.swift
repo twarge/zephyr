@@ -284,17 +284,24 @@ struct MainSplitView: View {
         .toolbar {
             if store.isRecoveringEventStream {
                 ToolbarItem(placement: .automatic) {
-                    // "Broken link" — SF Symbols has no link.slash, so the
-                    // slash is drawn over the link glyph.
-                    Image(systemName: "link")
-                        .foregroundStyle(.yellow)
-                        .overlay {
-                            Rectangle()
-                                .fill(.yellow)
-                                .frame(width: 1.5, height: 17)
-                                .rotationEffect(.degrees(45))
+                    // A broken chain link (SF Symbols has none): two
+                    // separated link halves on the diagonal, in a standard
+                    // round filled badge like the other circular controls.
+                    ZStack {
+                        Circle()
+                            .fill(.yellow)
+                        VStack(spacing: 2) {
+                            Capsule()
+                                .strokeBorder(.black.opacity(0.55), lineWidth: 1.6)
+                                .frame(width: 7, height: 9)
+                            Capsule()
+                                .strokeBorder(.black.opacity(0.55), lineWidth: 1.6)
+                                .frame(width: 7, height: 9)
                         }
-                        .help("Connection lost — reconnecting…")
+                        .rotationEffect(.degrees(-45))
+                    }
+                    .frame(width: 21, height: 21)
+                    .help("Connection lost — reconnecting…")
                 }
             }
         }
