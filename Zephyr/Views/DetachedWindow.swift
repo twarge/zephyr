@@ -9,7 +9,6 @@ struct DetachedWindow: Hashable, Codable {
     var destination: Destination
 }
 
-#if os(macOS)
 /// An ordinary account window pinned to the double-clicked destination —
 /// full app window, just starting with the sidebar closed. Its server can
 /// be switched like any other window's.
@@ -23,4 +22,3 @@ struct DetachedRootView: View {
             startsWithSidebarClosed: true)
     }
 }
-#endif

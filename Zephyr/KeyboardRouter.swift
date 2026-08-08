@@ -38,6 +38,9 @@ final class KeyboardRouter {
     #endif
     /// Set to a message id to ask its row to enter edit mode; the row clears it.
     var editRequestId: Int?
+    /// A menu-bar action aimed at the selected message; the owning row
+    /// consumes it (same pattern as editRequestId).
+    var messageActionRequest: MessageActionRequest?
     /// Message-link (/near/) navigation: the conversation to open anchored
     /// at a message, and the message to flash once visible.
     @ObservationIgnored var pendingNear: (key: ConversationKey, messageId: Int)?
@@ -410,6 +413,19 @@ struct WindowReader: NSViewRepresentable {
 #endif
 
 /// The `?` overlay: the keymap, in Zulip web's grouping.
+/// A Message-menu action routed to the selected message's row.
+struct MessageActionRequest: Equatable {
+    enum Action: Equatable {
+        case replyQuoting
+        case copyReference
+        case translate
+        case moveToTopic
+    }
+
+    var messageId: Int
+    var action: Action
+}
+
 struct ShortcutsHelpView: View {
     @Environment(\.dismiss) private var dismiss
 

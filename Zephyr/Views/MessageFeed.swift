@@ -748,6 +748,23 @@ struct MessageRow: View {
                 }
             }
         }
+        // Message-menu actions aimed at this (selected) row.
+        .onChange(of: keys.messageActionRequest) { _, request in
+            guard let request, request.messageId == message.id else { return }
+            keys.messageActionRequest = nil
+            switch request.action {
+            case .replyQuoting:
+                quoteAndReply()
+            case .copyReference:
+                Platform.copyToPasteboard(ConversationKey.permalink(to: message, in: store))
+            case .translate:
+                showTranslation = true
+            case .moveToTopic:
+                if message.type == .stream {
+                    showMoveSheet = true
+                }
+            }
+        }
         .overlay(alignment: .topTrailing) {
             // Fixed layout (opacity gating, not insertion) so the star sits
             // in exactly the same spot as control and as starred indicator.

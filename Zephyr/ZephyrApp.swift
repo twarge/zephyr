@@ -9,6 +9,7 @@ struct ZephyrApp: App {
     #if os(macOS)
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
     #endif
+    @AppStorage("textSizeStep") private var textSizeStep = 0
 
     init() {
         try? Tips.configure()
@@ -20,9 +21,8 @@ struct ZephyrApp: App {
                 .environment(model)
         }
         .commands { accountCommands }
-        #if os(macOS)
         // Double-clicked sidebar entries open a fresh main window with the
-        // sidebar collapsed.
+        // sidebar collapsed (macOS and iPadOS both support multiple scenes).
         WindowGroup(for: DetachedWindow.self) { $window in
             if let window {
                 DetachedRootView(window: window)
@@ -30,6 +30,7 @@ struct ZephyrApp: App {
             }
         }
         .defaultSize(width: 720, height: 640)
+        #if os(macOS)
         Settings {
             SettingsView()
                 .environment(model)
@@ -112,15 +113,35 @@ private struct MenuBarContent: View {
 }
 #endif
 
-/// ⌘1…⌘9 switch the key window's server (ordered as in Settings →
-/// Accounts) — other windows keep showing theirs. Disabled when no main
-/// window is focused.
-struct AccountSwitchCommands: Commands {
+/// The Go menu: history, the app views (⌥⌘1…6), Open Quickly, and the
+/// key window's server (⌘1…⌘9, ordered as in Settings → Accounts) —
+/// other windows keep showing theirs.
+struct GoCommands: Commands {
     let model: AppModel
     @FocusedValue(\.windowAccount) private var windowAccount
 
     var body: some Commands {
-        CommandGroup(after: .sidebar) {
+        CommandMenu("Go") {
+            Button("Back") { model.pendingHistoryStep = -1 }
+                .keyboardShortcut("[", modifiers: .command)
+            Button("Forward") { model.pendingHistoryStep = 1 }
+                .keyboardShortcut("]", modifiers: .command)
+            Divider()
+            Button("Recent") { model.pendingCommand = .navigate(.recentConversations) }
+                .keyboardShortcut("1", modifiers: [.command, .option])
+            Button("Combined") { model.pendingCommand = .navigate(.combinedFeed) }
+                .keyboardShortcut("2", modifiers: [.command, .option])
+            Button("Mentions") { model.pendingCommand = .navigate(.mentions) }
+                .keyboardShortcut("3", modifiers: [.command, .option])
+            Button("Starred") { model.pendingCommand = .navigate(.starred) }
+                .keyboardShortcut("4", modifiers: [.command, .option])
+            Button("Drafts") { model.pendingCommand = .navigate(.drafts) }
+                .keyboardShortcut("5", modifiers: [.command, .option])
+            Button("Outbox") { model.pendingCommand = .navigate(.outbox) }
+                .keyboardShortcut("6", modifiers: [.command, .option])
+            Divider()
+            Button("Open Quickly…") { model.pendingOpenQuickly = true }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
             Divider()
             ForEach(
                 Array(model.global.accounts.prefix(9).enumerated()), id: \.element.id
@@ -132,6 +153,12 @@ struct AccountSwitchCommands: Commands {
                     KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
                 .disabled(windowAccount == nil)
             }
+            ForEach(model.global.accounts.dropFirst(9)) { account in
+                Button(account.realmName ?? account.realmURL.host() ?? "Server") {
+                    windowAccount?.wrappedValue = account.id
+                }
+                .disabled(windowAccount == nil)
+            }
         }
     }
 }
@@ -139,49 +166,92 @@ struct AccountSwitchCommands: Commands {
 extension ZephyrApp {
     @CommandsBuilder
     var accountCommands: some Commands {
-        AccountSwitchCommands(model: model)
+        GoCommands(model: model)
         CommandGroup(replacing: .newItem) {
             Button("New Conversation") {
                 model.pendingNewConversation = true
             }
             .keyboardShortcut("n", modifiers: .command)
-            #if os(macOS)
+            // iPadOS supports multiple scenes too (Stage Manager etc.).
             Button("New Window") {
                 openWindow(id: "main")
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
-            #endif
+        }
+        // Edit → Find focuses the search field, like the / key.
+        CommandGroup(after: .textEditing) {
+            Button("Find") { model.pendingCommand = .find }
+                .keyboardShortcut("f", modifiers: .command)
+        }
+        // View additions: reload, and text sizing (Dynamic Type steps).
+        CommandGroup(before: .toolbar) {
+            Button("Reload") { model.pendingCommand = .reload }
+                .keyboardShortcut("r", modifiers: .command)
             Divider()
-            Button("Open Quickly…") {
-                model.pendingOpenQuickly = true
-            }
-            .keyboardShortcut("o", modifiers: [.command, .shift])
-        }
-        CommandGroup(before: .sidebar) {
-            Button("Back") { model.pendingHistoryStep = -1 }
-                .keyboardShortcut("[", modifiers: .command)
-            Button("Forward") { model.pendingHistoryStep = 1 }
-                .keyboardShortcut("]", modifiers: .command)
+            Button("Bigger Text") { textSizeStep = min(textSizeStep + 1, 3) }
+                .keyboardShortcut("=", modifiers: .command)
+            Button("Smaller Text") { textSizeStep = max(textSizeStep - 1, -2) }
+                .keyboardShortcut("-", modifiers: .command)
+            Button("Actual Text Size") { textSizeStep = 0 }
+                .keyboardShortcut("0", modifiers: .command)
             Divider()
         }
-        #if os(macOS)
-        // Replaces the system Help stub (which needs a registered help
-        // book) with our own manual window.
-        CommandGroup(replacing: .help) {
-            Button("Zephyr Help") {
-                openWindow(id: "help")
-            }
-            .keyboardShortcut("?", modifiers: .command)
+        CommandMenu("Message") {
+            Button("Reply") { model.pendingCommand = .reply }
+            Button("Reply Quoting Message") { model.pendingCommand = .replyQuoting }
+            Button("Edit Message") { model.pendingCommand = .editMessage }
+                .keyboardShortcut("e", modifiers: .command)
+            Button("Star / Unstar") { model.pendingCommand = .toggleStar }
+            Divider()
+            Button("Copy Message Reference") { model.pendingCommand = .copyReference }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+            Button("Translate") { model.pendingCommand = .translate }
+            Button("Move to Topic…") { model.pendingCommand = .moveToTopic }
+            Divider()
+            Button("Mark Conversation as Read") { model.pendingCommand = .markConversationRead }
+                .keyboardShortcut("k", modifiers: [.command, .shift])
         }
-        #endif
         CommandMenu("Format") {
             Button("Bold") { model.pendingFormat = .bold }
                 .keyboardShortcut("b", modifiers: .command)
             Button("Italic") { model.pendingFormat = .italic }
                 .keyboardShortcut("i", modifiers: .command)
+            Button("Strikethrough") { model.pendingFormat = .strikethrough }
+                .keyboardShortcut("x", modifiers: [.command, .shift])
+            Divider()
             Button("Link") { model.pendingFormat = .link }
                 .keyboardShortcut("k", modifiers: .command)
+            Button("Code") { model.pendingFormat = .code }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
+            Button("Quote") { model.pendingFormat = .quote }
+                .keyboardShortcut("9", modifiers: [.command, .shift])
+            Button("Spoiler") { model.pendingFormat = .spoiler }
         }
+        CommandGroup(replacing: .help) {
+            #if os(macOS)
+            // Replaces the system Help stub (which needs a registered
+            // help book) with our own manual window.
+            Button("Zephyr Help") {
+                openWindow(id: "help")
+            }
+            .keyboardShortcut("?", modifiers: .command)
+            #endif
+            Button("Keyboard Shortcuts") { model.pendingCommand = .shortcutsHelp }
+                .keyboardShortcut("/", modifiers: .command)
+        }
+    }
+}
+
+/// View-menu text sizing: steps map onto Dynamic Type sizes (0 is the
+/// system default).
+nonisolated func typeSizeForTextStep(_ step: Int) -> DynamicTypeSize {
+    switch step {
+    case ...(-2): .small
+    case -1: .medium
+    case 0: .large
+    case 1: .xLarge
+    case 2: .xxLarge
+    default: .xxxLarge
     }
 }
 

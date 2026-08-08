@@ -220,6 +220,9 @@ struct MainSplitView: View {
                 forwardStack.removeAll()
             }
         }
+        .onChange(of: model.pendingCommand) {
+            consumeCommand()
+        }
         .onChange(of: model.pendingHistoryStep) {
             guard let step = model.pendingHistoryStep else { return }
             #if os(macOS)
@@ -462,6 +465,51 @@ struct MainSplitView: View {
             model.pendingDestination = PendingDestination(
                 account: accountId, destination: destination, near: near)
         }
+    }
+
+    /// Menu-bar commands land in the key window; message actions route to
+    /// the selected row through the keyboard router.
+    private func consumeCommand() {
+        guard let command = model.pendingCommand else { return }
+        #if os(macOS)
+        guard keys.hostWindow?.isKeyWindow != false else { return }
+        #endif
+        model.pendingCommand = nil
+        switch command {
+        case .navigate(let destination):
+            selection = destination
+        case .reply:
+            _ = keys.handleCharacter("r")
+        case .editMessage:
+            _ = keys.handleCharacter("e")
+        case .toggleStar:
+            _ = keys.handleCharacter("*")
+        case .find:
+            _ = keys.handleCharacter("/")
+        case .replyQuoting:
+            requestMessageAction(.replyQuoting)
+        case .copyReference:
+            requestMessageAction(.copyReference)
+        case .translate:
+            requestMessageAction(.translate)
+        case .moveToTopic:
+            requestMessageAction(.moveToTopic)
+        case .markConversationRead:
+            if case .conversation(let key) = selection {
+                store.markConversationRead(key)
+            }
+        case .reload:
+            if let feed = keys.activeFeed {
+                Task { await feed.fetchInitial() }
+            }
+        case .shortcutsHelp:
+            keys.showHelp = true
+        }
+    }
+
+    private func requestMessageAction(_ action: MessageActionRequest.Action) {
+        guard let id = keys.selectedMessageId else { return }
+        keys.messageActionRequest = MessageActionRequest(messageId: id, action: action)
     }
 
     private var pendingShareItemCount: Int {

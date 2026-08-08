@@ -10,6 +10,26 @@ enum ComposeFormat {
     case bold
     case italic
     case link
+    case strikethrough
+    case code
+    case quote
+    case spoiler
+}
+
+/// A menu-bar command routed to the key window (MainSplitView consumes).
+enum AppCommand: Equatable {
+    case navigate(Destination)
+    case reply
+    case replyQuoting
+    case editMessage
+    case toggleStar
+    case copyReference
+    case translate
+    case moveToTopic
+    case markConversationRead
+    case find
+    case reload
+    case shortcutsHelp
 }
 
 /// A navigation request (notification click, cross-realm message link),
@@ -77,6 +97,8 @@ final class AppModel {
     var sharePickerActive = false
     /// Set by the Format menu; the key window's compose applies it.
     var pendingFormat: ComposeFormat?
+    /// Set by menu commands (Go/Message/View/Help); the key window acts.
+    var pendingCommand: AppCommand?
 
     private var defaultAccountId: Account.ID? {
         if case .ready(let id) = phase { return id }

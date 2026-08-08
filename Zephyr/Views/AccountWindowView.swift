@@ -22,6 +22,8 @@ struct AccountWindowView: View {
     /// Restored with the window, so every window comes back on its server.
     @SceneStorage("windowAccount") private var storedAccount = ""
     @State private var accountId: Account.ID?
+    /// View-menu text sizing, applied window-wide.
+    @AppStorage("textSizeStep") private var textSizeStep = 0
     #if os(macOS)
     @State private var hostWindow: NSWindow?
     #endif
@@ -46,6 +48,7 @@ struct AccountWindowView: View {
                     }
             }
         }
+        .dynamicTypeSize(typeSizeForTextStep(textSizeStep))
         .focusedSceneValue(\.windowAccount, $accountId)
         #if os(macOS)
         .background(WindowReader { window in hostWindow = window })

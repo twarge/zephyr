@@ -52,10 +52,19 @@ struct HelpView: View {
     /// keymap.
     private static let appShortcuts: [(String, String)] = [
         ("⌘⇧O", "Open Quickly — channel or view"),
+        ("⌘[  ⌘]", "Back / forward"),
+        ("⌥⌘1…6", "Go to Recent, Combined, Mentions, Starred, Drafts, Outbox"),
+        ("⌘F", "Search"),
+        ("⌘R", "Reload the current view"),
         ("⌘⇧N", "New window"),
         ("⌘N", "New conversation"),
+        ("⌘E", "Edit the selected message"),
+        ("⌘⇧C", "Copy message reference"),
+        ("⌘⇧K", "Mark conversation as read"),
         ("⌘B  ⌘I  ⌘K", "Bold / italic / link while composing"),
-        ("?", "Show the shortcuts sheet"),
+        ("⌘⇧X  ⌘⇧M  ⌘⇧9", "Strikethrough / code / quote"),
+        ("⌘=  ⌘−", "Bigger / smaller text"),
+        ("⌘/  or  ?", "Show the shortcuts sheet"),
     ]
 
     private var keyboardSection: some View {

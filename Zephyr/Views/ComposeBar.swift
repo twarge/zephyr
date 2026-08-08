@@ -499,6 +499,10 @@ struct ComposeBar: View {
         case .bold: wrappers = ("**", "**")
         case .italic: wrappers = ("*", "*")
         case .link: wrappers = ("[", "](url)")
+        case .strikethrough: wrappers = ("~~", "~~")
+        case .code: wrappers = ("`", "`")
+        case .quote: wrappers = ("```quote\n", "\n```")
+        case .spoiler: wrappers = ("```spoiler\n", "\n```")
         }
         if expanded, !showPreview, let selection = editorSelection,
            case .selection(let range) = selection.indices, !range.isEmpty {

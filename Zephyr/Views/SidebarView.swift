@@ -47,10 +47,8 @@ struct SidebarView: View {
     /// Double-clicking a sidebar entry opens it standalone in a new window.
     private func detachGesture(_ destination: Destination) -> some Gesture {
         TapGesture(count: 2).onEnded {
-            #if os(macOS)
             openWindow(
                 value: DetachedWindow(accountId: store.accountId, destination: destination))
-            #endif
         }
     }
 
