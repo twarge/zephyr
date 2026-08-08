@@ -724,18 +724,7 @@ struct MessageRow: View {
                     ReactionsRow(store: store, message: message)
                 }
             }
-            Spacer(minLength: 8)
-            // Every row carries its time in a right-aligned gutter, like
-            // the web app; the fixed width keeps the column steady and the
-            // hover controls clear of it.
-            Text(
-                Date(timeIntervalSince1970: TimeInterval(message.timestamp))
-                    .formatted(date: .omitted, time: .shortened))
-                .font(.body.smallCaps())
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .frame(width: 70, alignment: .trailing)
-                .padding(.top, showHeader ? 10 : 0)
+            Spacer(minLength: 0)
         }
         .padding(.vertical, 1)
         .padding(.horizontal, 4)
@@ -802,10 +791,18 @@ struct MessageRow: View {
                 .help(isStarred ? "Unstar" : "Star")
                 .opacity(controlsActive || isStarred ? 1 : 0)
                 .allowsHitTesting(controlsActive || isStarred)
+                // The time rides the overlay (not a layout column), so
+                // content flows full-width beneath it; the star sits just
+                // to its left.
+                Text(
+                    Date(timeIntervalSince1970: TimeInterval(message.timestamp))
+                        .formatted(date: .omitted, time: .shortened))
+                    .font(.body.smallCaps())
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 4)
             }
             .padding(.top, showHeader ? 8 : 0)
-            // Clear of the timestamp gutter.
-            .padding(.trailing, 78)
         }
         // After the overlay: the hover region must include the reaction
         // button itself, or entering the button drops row-hover and the
