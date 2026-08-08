@@ -100,7 +100,6 @@ private struct PollView: View {
                 Button("Add", action: addOption)
                     .disabled(newOption.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .controlSize(.small)
         }
         .padding(10)
         .frame(maxWidth: 420, alignment: .leading)
@@ -223,7 +222,6 @@ private struct TodoListView: View {
                 Button("Add", action: addTask)
                     .disabled(newTask.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .controlSize(.small)
         }
         .padding(10)
         .frame(maxWidth: 420, alignment: .leading)
