@@ -54,6 +54,9 @@ public enum ComposeAutocomplete {
         case mention(String)
         case emoji(String)
         case channel(String)
+        /// "#channel>topic" being typed: a topic link
+        /// (`#**channel>topic**`).
+        case channelTopic(channel: String, topic: String)
         /// A server slash command (/poll, /todo, /me) being typed — only
         /// meaningful as the message's very first word.
         case command(String)
@@ -86,7 +89,9 @@ public enum ComposeAutocomplete {
         }
         guard let (trigger, index) = candidates.max(by: { $0.1 < $1.1 }) else { return nil }
         let query = String(text[text.index(after: index)...])
-        guard query.count <= 30, !query.contains("\n") else { return nil }
+        // Channel+topic links run longer than other tokens.
+        guard query.count <= (trigger == "#" ? 90 : 30), !query.contains("\n")
+        else { return nil }
 
         switch trigger {
         case "@":
@@ -103,6 +108,12 @@ public enum ComposeAutocomplete {
             return (.emoji(query), index)
         case "#":
             guard !query.contains("*") else { return nil }
+            if let separator = query.firstIndex(of: ">") {
+                let channel = String(query[..<separator])
+                let topic = String(query[query.index(after: separator)...])
+                guard !channel.isEmpty, !topic.contains(">") else { return nil }
+                return (.channelTopic(channel: channel, topic: topic), index)
+            }
             return (.channel(query), index)
         default:
             return nil

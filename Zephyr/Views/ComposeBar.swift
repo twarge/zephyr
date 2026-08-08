@@ -135,6 +135,7 @@ private enum ComposeSuggestion: Identifiable {
     case mention(User)
     case emoji(EmojiEntry)
     case channel(Subscription)
+    case topicLink(channel: String, topic: String)
     case command(SlashCommand)
 
     var id: String {
@@ -142,6 +143,7 @@ private enum ComposeSuggestion: Identifiable {
         case .mention(let user): "m\(user.userId)"
         case .emoji(let entry): "e\(entry.id)"
         case .channel(let sub): "c\(sub.streamId)"
+        case .topicLink(let channel, let topic): "t\(channel)>\(topic)"
         case .command(let command): "s\(command.name)"
         }
     }
@@ -152,6 +154,7 @@ private enum ComposeSuggestion: Identifiable {
         case .mention(let user): "@**\(user.fullName)** "
         case .emoji(let entry): ":\(entry.name): "
         case .channel(let sub): "#**\(sub.name)** "
+        case .topicLink(let channel, let topic): "#**\(channel)>\(topic)** "
         case .command(let command): "/\(command.name) "
         }
     }
@@ -180,6 +183,8 @@ struct ComposeBar: View {
         var progress: Double = 0
     }
     @State private var uploads: [UploadItem] = []
+    @State private var linkTopics: [Int: [ChannelTopic]] = [:]
+    @State private var linkTopicsLoading: Set<Int> = []
     @FocusState private var messageFocused: Bool
     @Environment(KeyboardRouter.self) private var keys
     @Environment(AppModel.self) private var model
@@ -570,6 +575,15 @@ struct ComposeBar: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+        case .topicLink(let channel, let topic):
+            HStack(spacing: 6) {
+                Image(systemName: "number")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("\(channel) › \(TopicName.displayName(topic))")
+                    .font(.callout)
+                    .lineLimit(1)
+            }
         case .channel(let sub):
             HStack(spacing: 6) {
                 Image(systemName: "number")
@@ -618,6 +632,42 @@ struct ComposeBar: View {
             suggestions = SlashCommand.all
                 .filter { query.isEmpty || $0.name.hasPrefix(query.lowercased()) }
                 .map { .command($0) }
+        case .channelTopic(let channelQuery, let topicQuery):
+            // "#channel>topic": a link to a conversation elsewhere.
+            let channels = store.subscriptions.values
+            let channel = channels.first {
+                $0.name.caseInsensitiveCompare(channelQuery) == .orderedSame
+            } ?? channels
+                .filter { $0.name.range(of: channelQuery, options: .caseInsensitive) != nil }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                .first
+            guard let channel else {
+                suggestions = []
+                return
+            }
+            guard let topics = linkTopics[channel.streamId] else {
+                loadLinkTopics(streamId: channel.streamId)
+                suggestions = []
+                return
+            }
+            suggestions = topics
+                .map(\.name)
+                .filter { !$0.isEmpty }
+                .filter { topicQuery.isEmpty || $0.localizedCaseInsensitiveContains(topicQuery) }
+                .prefix(6)
+                .map { .topicLink(channel: channel.name, topic: $0) }
+        }
+    }
+
+    /// Topic lists for link autocomplete, fetched once per channel and
+    /// refreshed into the open suggestion card when they arrive.
+    private func loadLinkTopics(streamId: Int) {
+        guard !linkTopicsLoading.contains(streamId) else { return }
+        linkTopicsLoading.insert(streamId)
+        let connection = store.connection
+        Task {
+            linkTopics[streamId] = (try? await connection.getTopics(streamId: streamId)) ?? []
+            updateSuggestions()
         }
     }
 

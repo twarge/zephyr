@@ -123,6 +123,16 @@ struct TypingTests {
         #expect(ComposeAutocomplete.trailingToken(in: "/")?.token == .command(""))
     }
 
+    @Test func channelTopicLinkToken() throws {
+        let token = try #require(ComposeAutocomplete.trailingToken(in: "see #general>rel"))
+        #expect(token.token == .channelTopic(channel: "general", topic: "rel"))
+        // Bare ">" right after the channel opens topic suggestions.
+        #expect(ComposeAutocomplete.trailingToken(in: "#general>")?.token
+            == .channelTopic(channel: "general", topic: ""))
+        // A completed link stops suggesting.
+        #expect(ComposeAutocomplete.trailingToken(in: "see #**general>rel** ") == nil)
+    }
+
     @Test func slashElsewhereOrPastTheWordDoesNot() {
         // Mid-message slashes are just text.
         #expect(ComposeAutocomplete.trailingToken(in: "hi /p") == nil)
