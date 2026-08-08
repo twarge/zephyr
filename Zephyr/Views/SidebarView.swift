@@ -625,7 +625,8 @@ private struct SectionHeaderWithAdd: View {
             Text(title)
             Spacer()
             Button(action: action) {
-                Image(systemName: "plus.circle")
+                // Filled variant: solid disc with a knocked-out plus.
+                Image(systemName: "plus.circle.fill")
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
