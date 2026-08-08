@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "ZulipKit",
-    platforms: [.macOS(.v15), .iOS(.v18)],
+    platforms: [.macOS(.v15), .iOS(.v18), .tvOS(.v18), .visionOS(.v2)],
     products: [
         .library(name: "ZulipAPI", targets: ["ZulipAPI"]),
         .library(name: "ZulipModel", targets: ["ZulipModel"]),

@@ -5,13 +5,15 @@
 #   make test       ZulipKit package tests (model, API, content, math)
 #   make mac        debug app        (make mac-release for optimised)
 #   make ios        simulator build  (make ios-device for a signed device build)
+#   make tv         tvOS monitor app (simulator)
+#   make vision     visionOS build (simulator)
 #   make run        build and launch the Mac app
 #   make generate   regenerate Zephyr.xcodeproj from project.yml (xcodegen)
 #   make clean
 
-.PHONY: all test mac mac-release ios ios-device run generate clean
+.PHONY: all test mac mac-release ios ios-device tv vision run generate clean
 
-all: test mac ios
+all: test mac ios tv vision
 
 test:
 	swift test --package-path Packages/ZulipKit
@@ -32,6 +34,16 @@ ios:
 	xcodebuild -project Zephyr.xcodeproj -scheme Zephyr \
 	  -destination "generic/platform=iOS Simulator" -quiet build
 	@echo "==> Built for iOS Simulator"
+
+tv:
+	xcodebuild -project Zephyr.xcodeproj -scheme ZephyrTV \
+	  -destination "generic/platform=tvOS Simulator" -quiet build
+	@echo "==> Built for tvOS Simulator"
+
+vision:
+	xcodebuild -project Zephyr.xcodeproj -scheme Zephyr \
+	  -destination "generic/platform=visionOS Simulator" -quiet build
+	@echo "==> Built for visionOS Simulator"
 
 ios-device:
 	xcodebuild -project Zephyr.xcodeproj -scheme Zephyr \

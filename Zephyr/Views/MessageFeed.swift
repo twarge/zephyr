@@ -1,5 +1,7 @@
 import SwiftUI
+#if canImport(Translation)
 import Translation
+#endif
 import ZulipAPI
 import ZulipContent
 import ZulipModel
@@ -531,6 +533,21 @@ struct MessageFeedList: View {
     }
 }
 
+/// translationPresentation where the framework exists; a no-op elsewhere
+/// (e.g. visionOS).
+private struct TranslationSheet: ViewModifier {
+    @Binding var isPresented: Bool
+    let text: String
+
+    func body(content: Content) -> some View {
+        #if canImport(Translation) && !os(visionOS)
+        content.translationPresentation(isPresented: $isPresented, text: text)
+        #else
+        content
+        #endif
+    }
+}
+
 /// A recipient bar in the web app's style: full-width, tinted with the
 /// channel's color, leading colored channel glyph.
 private struct ConversationHeaderRow: View {
@@ -842,9 +859,11 @@ struct MessageRow: View {
                 Platform.copyToPasteboard(
                     ConversationKey.permalink(to: message, in: store))
             }
+            #if canImport(Translation) && !os(visionOS)
             Button("Translate", systemImage: "translate") {
                 showTranslation = true
             }
+            #endif
             Button("Seen By…", systemImage: "eye") {
                 showReadReceipts = true
             }
@@ -868,8 +887,9 @@ struct MessageRow: View {
                 }
             }
         }
-        // System translation UI, on-device (Translation framework).
-        .translationPresentation(isPresented: $showTranslation, text: content.plainText)
+        // System translation UI, on-device (absent on platforms without
+        // the Translation framework).
+        .modifier(TranslationSheet(isPresented: $showTranslation, text: content.plainText))
         .sheet(isPresented: $showMoveSheet) {
             MoveTopicSheet(store: store, message: message)
         }
