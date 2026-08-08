@@ -69,7 +69,7 @@ private struct PollView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Text("\(option.voterIds.count)")
-                            .font(.caption.weight(.semibold))
+                            .font(.body.weight(.semibold))
                             .monospacedDigit()
                             .frame(minWidth: 22)
                             .padding(.vertical, 2)
@@ -79,7 +79,7 @@ private struct PollView: View {
                                     : AnyShapeStyle(.quaternary),
                                 in: .capsule)
                         Text(option.text)
-                            .font(.callout)
+                            .font(.body)
                         Spacer(minLength: 0)
                     }
                     .contentShape(.rect)
@@ -89,7 +89,7 @@ private struct PollView: View {
             }
             if poll.options.isEmpty {
                 Text("No options yet")
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
             // Anyone can extend the poll, like the web widget.
@@ -100,7 +100,6 @@ private struct PollView: View {
                 Button("Add", action: addOption)
                     .disabled(newOption.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .font(.callout)
             .controlSize(.small)
         }
         .padding(10)
@@ -196,7 +195,7 @@ private struct TodoListView: View {
                     #endif
                     // One line, web-style: "Title: note".
                     taskLine(task)
-                        .font(.callout)
+                        .font(.body)
                         .strikethrough(task.completed)
                         .foregroundStyle(task.completed ? .secondary : .primary)
                     Spacer(minLength: 0)
@@ -209,7 +208,7 @@ private struct TodoListView: View {
             }
             if list.tasks.isEmpty {
                 Text("No tasks yet")
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
             // Anyone can extend the list, like the web widget.
@@ -224,7 +223,6 @@ private struct TodoListView: View {
                 Button("Add", action: addTask)
                     .disabled(newTask.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .font(.callout)
             .controlSize(.small)
         }
         .padding(10)
