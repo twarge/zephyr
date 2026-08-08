@@ -669,6 +669,38 @@ public final class PerAccountStore {
             content: #"{"type":"vote","key":"\#(optionKey)","vote":\#(vote ? 1 : -1)}"#)
     }
 
+    /// Appends an option to a poll (anyone may). The event's idx is this
+    /// user's per-poll counter — replayed from the existing submessages so
+    /// the option key ("\(selfUserId),\(idx)") never collides.
+    public func addPollOption(messageId: Int, option: String) {
+        let trimmed = option.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        var nextIdx = 1
+        for submessage in messages[messageId]?.submessages?.dropFirst() ?? [] {
+            guard submessage.senderId == selfUserId,
+                  let data = submessage.content.data(using: .utf8),
+                  let event = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  event["type"] as? String == "new_option" else { continue }
+            nextIdx = max(nextIdx, (event["idx"] as? Int ?? 0) + 1)
+        }
+        sendWidgetEventJSON(
+            messageId: messageId,
+            ["type": "new_option", "option": trimmed, "idx": nextIdx])
+    }
+
+    /// Sets a poll's question (the web app allows only the poll's author).
+    public func setPollQuestion(messageId: Int, question: String) {
+        sendWidgetEventJSON(
+            messageId: messageId,
+            ["type": "question", "question": question])
+    }
+
+    private func sendWidgetEventJSON(messageId: Int, _ payload: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let content = String(data: data, encoding: .utf8) else { return }
+        sendWidgetEvent(messageId: messageId, content: content)
+    }
+
     /// Toggle a todo task's completion.
     public func strikeTodoTask(messageId: Int, taskKey: String) {
         sendWidgetEvent(

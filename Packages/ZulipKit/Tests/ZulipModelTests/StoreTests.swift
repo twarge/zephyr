@@ -228,4 +228,40 @@ struct SubmessageEventTests {
         }
         #expect(poll.options.first?.voterIds == [9])
     }
+
+    @Test func addPollOptionReplaysOwnCounter() async throws {
+        let transport = FakeTransport(
+            script: [.json(#"{"result": "success", "msg": ""}"#)],
+            defaultResponse: .hang)
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key", transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        // A poll where this user (id 1) already added an option with idx 3:
+        // the next add must use idx 4 so the option key can't collide.
+        let widgetJSON = #"{\"widget_type\": \"poll\", \"extra_data\": {\"question\": \"Lunch?\", \"options\": [\"Pizza\"]}}"#
+        let priorOption = #"{\"type\":\"new_option\",\"option\":\"Sushi\",\"idx\":3}"#
+        let pollMessage = """
+            {"id": 701, "sender_id": 5, "sender_full_name": "Poller", "timestamp": 1750000000,
+             "type": "stream", "content": "<p>/poll</p>", "stream_id": 10, "subject": "t",
+             "display_recipient": "general", "reactions": [],
+             "submessages": [
+                {"msg_type": "widget", "sender_id": 5, "content": "\(widgetJSON)"},
+                {"msg_type": "widget", "sender_id": 1, "content": "\(priorOption)"}]}
+            """
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(eventId: 1, message: pollMessage, flags: ["read"])))
+
+        store.addPollOption(messageId: 701, option: "Ramen")
+        try await eventually("submessage sent") { transport.requests.count == 1 }
+        let content = try #require(transport.requests[0].formValue("content"))
+        #expect(content.contains(#""type":"new_option""#))
+        #expect(content.contains(#""idx":4"#))
+        #expect(content.contains("Ramen"))
+    }
 }

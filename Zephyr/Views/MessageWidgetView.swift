@@ -23,12 +23,46 @@ private struct PollView: View {
     let store: PerAccountStore
     let messageId: Int
 
+    @State private var newOption = ""
+    @State private var editedQuestion = ""
+    @State private var showQuestionEditor = false
+
+    /// Only the poll's author can set or change the question (web parity).
+    private var isAuthor: Bool {
+        store.messages[messageId]?.senderId == store.selfUserId
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label(
-                poll.question.isEmpty ? "Poll" : poll.question,
-                systemImage: "chart.bar.xaxis")
-                .font(.callout.weight(.semibold))
+            HStack(spacing: 6) {
+                Label(
+                    poll.question.isEmpty ? "Poll" : poll.question,
+                    systemImage: "chart.bar.xaxis")
+                    .font(.callout.weight(.semibold))
+                if isAuthor {
+                    Button {
+                        editedQuestion = poll.question
+                        showQuestionEditor = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(poll.question.isEmpty ? "Add a question" : "Edit the question")
+                    .popover(isPresented: $showQuestionEditor) {
+                        HStack(spacing: 8) {
+                            TextField("Question", text: $editedQuestion)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 260)
+                                .onSubmit(saveQuestion)
+                            Button("Save", action: saveQuestion)
+                                .keyboardShortcut(.defaultAction)
+                        }
+                        .padding(10)
+                    }
+                }
+            }
             ForEach(poll.options, id: \.key) { option in
                 let voted = option.voterIds.contains(store.selfUserId)
                 Button {
@@ -53,17 +87,50 @@ private struct PollView: View {
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .help(voted ? "Retract your vote" : "Vote for this option")
+                .help(helpText(option: option, voted: voted))
             }
             if poll.options.isEmpty {
                 Text("No options yet")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
+            // Anyone can extend the poll, like the web widget.
+            HStack(spacing: 6) {
+                TextField("New option", text: $newOption)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(addOption)
+                Button("Add", action: addOption)
+                    .disabled(newOption.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .font(.callout)
+            .controlSize(.small)
         }
         .padding(10)
         .frame(maxWidth: 420, alignment: .leading)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func helpText(option: MessageWidget.Poll.Option, voted: Bool) -> String {
+        let action = voted ? "Retract your vote" : "Vote for this option"
+        guard !option.voterIds.isEmpty else { return action }
+        let names = option.voterIds
+            .map { store.users[$0]?.fullName ?? "User \($0)" }
+            .joined(separator: ", ")
+        return "\(names) — \(action.lowercased())"
+    }
+
+    private func addOption() {
+        let trimmed = newOption.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        store.addPollOption(messageId: messageId, option: trimmed)
+        newOption = ""
+    }
+
+    private func saveQuestion() {
+        store.setPollQuestion(
+            messageId: messageId,
+            question: editedQuestion.trimmingCharacters(in: .whitespaces))
+        showQuestionEditor = false
     }
 }
 
