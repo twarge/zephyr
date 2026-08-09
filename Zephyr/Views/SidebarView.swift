@@ -550,29 +550,44 @@ struct SidebarView: View {
     @ViewBuilder
     private func topicRows(for streamId: Int) -> some View {
         if let topics = search.channelTopics[streamId] {
-            ForEach(topics.prefix(Self.maxInlineTopics), id: \.name) { topic in
-                SidebarTopicRow(store: store, streamId: streamId, topic: topic)
+            let shown = Array(topics.prefix(Self.maxInlineTopics))
+            let hasMore = topics.count > Self.maxInlineTopics
+            ForEach(Array(shown.enumerated()), id: \.element.name) { index, topic in
+                SidebarTopicRow(
+                    store: store, streamId: streamId, topic: topic,
+                    rail: index == shown.count - 1 && !hasMore ? .cap : .through)
                     .tag(Destination.conversation(
                         .topic(streamId: streamId, topic: topic.name)))
                     .simultaneousGesture(
                         detachGesture(.conversation(
                             .topic(streamId: streamId, topic: topic.name))))
             }
-            if topics.count > Self.maxInlineTopics {
+            if hasMore {
                 Text("All topics…")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .padding(.leading, 26)
+                    .background(alignment: .leading) {
+                        TopicRailView(color: channelColor(streamId), kind: .dotted)
+                    }
                     .tag(Destination.channelTopics(streamId: streamId))
             }
         } else {
             ProgressView()
                 .controlSize(.small)
                 .padding(.leading, 26)
+                .background(alignment: .leading) {
+                    TopicRailView(color: channelColor(streamId), kind: .cap)
+                }
                 // Channels restored as expanded from last session reach here
                 // without a disclosure click — kick the fetch ourselves.
                 .onAppear { search.refreshTopics(streamId) }
         }
+    }
+
+    private func channelColor(_ streamId: Int) -> Color {
+        store.subscriptions[streamId]?.color.flatMap(Color.init(zulipHex:))
+            ?? .stableColor(for: streamId)
     }
 
     private func toggleChannel(_ streamId: Int) {
@@ -858,11 +873,61 @@ private struct ChannelRow: View {
     }
 }
 
+/// The channel-colored thread rail beside expanded topics: a vertical
+/// line dropping from the disclosure triangle. `.through` segments bleed
+/// across row gaps for continuity; `.cap` ends the last topic with a
+/// rounded tip; `.dotted` fades out at the "All topics…" row.
+struct TopicRailView: View {
+    enum Kind {
+        case through
+        case cap
+        case dotted
+    }
+
+    let color: Color
+    let kind: Kind
+
+    /// Centered under the channel row's disclosure chevron.
+    private static let railX: CGFloat = 8
+
+    var body: some View {
+        GeometryReader { proxy in
+            let height = proxy.size.height
+            switch kind {
+            case .through:
+                Rectangle()
+                    .fill(color)
+                    .frame(width: 2)
+                    .offset(x: Self.railX - 1)
+            case .cap:
+                UnevenRoundedRectangle(bottomLeadingRadius: 1, bottomTrailingRadius: 1)
+                    .fill(color)
+                    .frame(width: 2, height: max(height - 3, 0))
+                    .offset(x: Self.railX - 1)
+            case .dotted:
+                Path { path in
+                    path.move(to: CGPoint(x: Self.railX, y: 0))
+                    path.addLine(to: CGPoint(x: Self.railX, y: height - 2))
+                }
+                .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [2, 4]))
+            }
+        }
+        .frame(width: 26)
+        // Bleed over the inter-row gaps so segments join into one line
+        // (the cap and dotted endings keep their bottom edge).
+        .padding(.top, -3)
+        .padding(.bottom, kind == .through ? -3 : 0)
+    }
+}
+
 /// An indented topic row under an expanded channel.
 private struct SidebarTopicRow: View {
     let store: PerAccountStore
     let streamId: Int
     let topic: ChannelTopic
+    /// The thread-rail segment beside this row (nil while filtering, where
+    /// rows appear without their disclosure context).
+    var rail: TopicRailView.Kind?
 
     private var key: ConversationKey {
         .topic(streamId: streamId, topic: topic.name)
@@ -913,6 +978,14 @@ private struct SidebarTopicRow: View {
         }
         .padding(.leading, 26)
         .padding(.vertical, 1)
+        .background(alignment: .leading) {
+            if let rail {
+                TopicRailView(
+                    color: store.subscriptions[streamId]?.color
+                        .flatMap(Color.init(zulipHex:)) ?? .stableColor(for: streamId),
+                    kind: rail)
+            }
+        }
         .opacity(visibility == .muted ? 0.5 : 1)
         .contextMenu {
             Button(visibility == .muted ? "Unmute Topic" : "Mute Topic") {
