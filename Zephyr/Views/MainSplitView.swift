@@ -84,6 +84,18 @@ struct MainSplitView: View {
                 selectedAccount: $selectedAccount,
                 startDirectMessage: { newConversation = .directMessage(initialUsers: []) })
                 .navigationSplitViewColumnWidth(min: 156, ideal: 156, max: 400)
+                #if os(macOS)
+                // The realm's logo rides the toolbar section above the
+                // sidebar; it disappears along with the sidebar when the
+                // window is too narrow (auto-collapse) or it's hidden.
+                .toolbar {
+                    if columnVisibility != .detailOnly {
+                        ToolbarItem(placement: .automatic) {
+                            RealmLogoView(store: store)
+                        }
+                    }
+                }
+                #endif
         } detail: {
             detailContent
                 .popoverTip(QuickLookNavigationTip())

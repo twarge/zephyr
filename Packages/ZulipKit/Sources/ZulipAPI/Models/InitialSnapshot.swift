@@ -11,6 +11,8 @@ public struct InitialSnapshot: Decodable, Sendable {
     public var eventQueueLongpollTimeoutSeconds: Int?
 
     public var realmName: String?
+    /// The realm's square icon (absolute, or relative to the realm URL).
+    public var realmIconUrl: String?
     public var maxMessageLength: Int?
     /// Static JSON mapping unicode emoji codepoints to shortcode names.
     public var serverEmojiDataUrl: String?

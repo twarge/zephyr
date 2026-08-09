@@ -22,6 +22,8 @@ public final class PerAccountStore {
     public let eventQueueLongpollTimeoutSeconds: Int
 
     public private(set) var realmName: String?
+    /// The realm's square icon (absolute, or relative to the realm URL).
+    public private(set) var realmIconUrl: String?
     public private(set) var users: [Int: User] = [:]
     public private(set) var channels: [Int: ZulipStream] = [:]
     public private(set) var subscriptions: [Int: Subscription] = [:]
@@ -120,6 +122,7 @@ public final class PerAccountStore {
         zulipFeatureLevel = snapshot.zulipFeatureLevel
         eventQueueLongpollTimeoutSeconds = snapshot.eventQueueLongpollTimeoutSeconds ?? 90
         realmName = snapshot.realmName
+        realmIconUrl = snapshot.realmIconUrl
         serverEmojiDataUrl = snapshot.serverEmojiDataUrl
         typingStartedWaitMs = snapshot.serverTypingStartedWaitPeriodMilliseconds ?? 10000
         typingStoppedWaitMs = snapshot.serverTypingStoppedWaitPeriodMilliseconds ?? 5000

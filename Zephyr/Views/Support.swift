@@ -51,6 +51,46 @@ final class AvatarLoader {
         cache.setObject(image, forKey: key)
         return image
     }
+
+    /// The realm's square icon (the register snapshot carries its URL).
+    func realmIcon(store: PerAccountStore) async -> PlatformImage? {
+        let key = "\(store.connection.realmURL.absoluteString)|realm-icon" as NSString
+        if let hit = cache.object(forKey: key) {
+            return hit
+        }
+        guard let iconUrl = store.realmIconUrl,
+              let url = URL(string: iconUrl, relativeTo: store.connection.realmURL),
+              let (data, _) = try? await ApiConnection.mediaSession.data(
+                  for: URLRequest(url: url.absoluteURL)),
+              let image = PlatformImage(data: data)
+        else { return nil }
+        cache.setObject(image, forKey: key)
+        return image
+    }
+}
+
+/// The realm's icon for the toolbar above the sidebar. Renders nothing
+/// until the image is in hand (no placeholder box for realms without one).
+struct RealmLogoView: View {
+    let store: PerAccountStore
+
+    @State private var image: PlatformImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(platform: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 20, height: 20)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                    .help(store.realmName ?? store.connection.realmURL.host() ?? "")
+            }
+        }
+        .task(id: store.accountId) {
+            image = await AvatarLoader.shared.realmIcon(store: store)
+        }
+    }
 }
 
 /// Fetches and caches custom realm emoji images, pre-sized for inline text
