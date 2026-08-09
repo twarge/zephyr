@@ -54,7 +54,7 @@ struct LoginView: View {
             }
         }
         .padding(40)
-        .frame(minWidth: 460, minHeight: 380)
+        .macWindowMinSize(width: 460, height: 380)
     }
 
     private var realmForm: some View {

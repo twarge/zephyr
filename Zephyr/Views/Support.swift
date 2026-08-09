@@ -250,6 +250,21 @@ struct InitialsAvatar: View {
     }
 }
 
+extension View {
+    /// Window-content minimums are a macOS concern. On iPadOS, a declared
+    /// minimum makes the system SCALE the window's content ("squish")
+    /// whenever a resize goes below it, instead of re-laying out — so
+    /// there they pass through untouched.
+    @ViewBuilder
+    func macWindowMinSize(width: CGFloat, height: CGFloat) -> some View {
+        #if os(macOS)
+        frame(minWidth: width, minHeight: height)
+        #else
+        self
+        #endif
+    }
+}
+
 // MARK: - Titles and links
 
 extension ConversationKey {
