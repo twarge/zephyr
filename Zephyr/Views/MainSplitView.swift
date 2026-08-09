@@ -88,7 +88,13 @@ struct MainSplitView: View {
                 store: store, search: search, selection: $selection,
                 selectedAccount: $selectedAccount,
                 startDirectMessage: { newConversation = .directMessage(initialUsers: []) })
+                #if os(macOS)
                 .navigationSplitViewColumnWidth(min: 156, ideal: 156, max: 400)
+                #else
+                // The iPad's system sidebars (Mail, Notes) run ~320pt;
+                // the macOS-tuned 156 reads half-width there.
+                .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
+                #endif
                 #if os(macOS)
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.width
@@ -121,6 +127,12 @@ struct MainSplitView: View {
                 #endif
         } detail: {
             detailContent
+                // The toolbar belongs to the detail column: attached to the
+                // split view it never reached the iPad's navigation bar.
+                .toolbar { detailToolbar }
+                #if !os(macOS)
+                .toolbarTitleDisplayMode(.inline)
+                #endif
                 .popoverTip(QuickLookNavigationTip())
                 // Files dropped anywhere in the conversation area upload via
                 // the visible compose bar (nil when this view has none —
@@ -384,7 +396,10 @@ struct MainSplitView: View {
             model.pendingDestination = PendingDestination(
                 account: stored.account, destination: stored.destination)
         }
-        .toolbar {
+    }
+
+    @ToolbarContentBuilder
+    private var detailToolbar: some ToolbarContent {
             #if os(macOS)
             // With the system sidebar toggle removed (the realm logo owns
             // the sidebar section's leading slot), a collapsed sidebar
@@ -449,7 +464,6 @@ struct MainSplitView: View {
                     .help("Connection lost — reconnecting…")
                 }
             }
-        }
     }
 
     @AppStorage("badgePolicy") private var badgePolicy = BadgePolicy.dmsAndMentions.rawValue

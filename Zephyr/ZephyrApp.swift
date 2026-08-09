@@ -249,15 +249,14 @@ extension ZephyrApp {
 
 /// View-menu text sizing: steps map onto Dynamic Type sizes (0 is the
 /// system default).
-nonisolated func typeSizeForTextStep(_ step: Int) -> DynamicTypeSize {
-    switch step {
-    case ...(-2): .small
-    case -1: .medium
-    case 0: .large
-    case 1: .xLarge
-    case 2: .xxLarge
-    default: .xxxLarge
-    }
+/// The ⌘=/⌘− text-size step applied relative to the inherited Dynamic
+/// Type size — pinning to absolute sizes overrode the user's system text
+/// size on iOS (Mail tracks it; we clamped everyone to .large).
+nonisolated func typeSizeForTextStep(_ step: Int, from base: DynamicTypeSize) -> DynamicTypeSize {
+    guard step != 0 else { return base }
+    let cases = Array(DynamicTypeSize.allCases)
+    let baseIndex = cases.firstIndex(of: base) ?? 0
+    return cases[min(max(baseIndex + step, 0), cases.count - 1)]
 }
 
 struct RootView: View {

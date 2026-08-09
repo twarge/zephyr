@@ -24,6 +24,7 @@ struct AccountWindowView: View {
     @State private var accountId: Account.ID?
     /// View-menu text sizing, applied window-wide.
     @AppStorage("textSizeStep") private var textSizeStep = 0
+    @Environment(\.dynamicTypeSize) private var systemTypeSize
     #if os(macOS)
     @State private var hostWindow: NSWindow?
     #endif
@@ -48,7 +49,7 @@ struct AccountWindowView: View {
                     }
             }
         }
-        .dynamicTypeSize(typeSizeForTextStep(textSizeStep))
+        .dynamicTypeSize(typeSizeForTextStep(textSizeStep, from: systemTypeSize))
         .focusedSceneValue(\.windowAccount, $accountId)
         #if os(macOS)
         .background(WindowReader { window in hostWindow = window })
