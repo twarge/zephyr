@@ -451,11 +451,9 @@ struct SidebarView: View {
     }
 
     private static var searchPlacement: SearchFieldPlacement {
-        #if os(macOS)
-        return .sidebar
-        #else
-        return .automatic
-        #endif
+        // .automatic: the window toolbar on macOS (Mail-style), the
+        // sidebar's navigation bar on iPad.
+        .automatic
     }
 
     /// Runs the current query. Return finalizes it: the query is recorded in
