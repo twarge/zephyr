@@ -384,6 +384,19 @@ struct MainSplitView: View {
                 account: stored.account, destination: stored.destination)
         }
         .toolbar {
+            #if os(macOS)
+            // With the system sidebar toggle removed (the realm logo owns
+            // the sidebar section's leading slot), a collapsed sidebar
+            // would strand the user — this stand-in appears only then.
+            if columnVisibility == .detailOnly {
+                ToolbarItem(placement: .navigation) {
+                    Button("Show Sidebar", systemImage: "sidebar.leading") {
+                        withAnimation { columnVisibility = .automatic }
+                    }
+                    .help("Show Sidebar")
+                }
+            }
+            #endif
             // The server menu lives in the main toolbar. macOS hides it
             // with a single server (Settings lives in the app menu); iOS
             // keeps it — it's the only road to Settings there.
