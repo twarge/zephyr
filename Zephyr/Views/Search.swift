@@ -233,12 +233,11 @@ final class SidebarSearchModel {
     }
 }
 
-/// A hidden anchor placed directly beneath the sidebar search field: it
-/// tracks the search session (`isSearching`), presents the suggestions as a
-/// native popover to the right of the field (anchor rect reaches up to the
-/// field's vertical centerline so the arrow points at the field itself), and
-/// captures Return while the field is active — SwiftUI's onSubmit(of:
-/// .search) does not fire reliably for token search fields on macOS.
+/// A hidden anchor at the top of the sidebar: it tracks the search session
+/// (`isSearching`), presents the suggestions as a native popover with the
+/// system's default anchoring, and captures Return while the field is
+/// active — SwiftUI's onSubmit(of: .search) does not fire reliably for
+/// token search fields on macOS.
 struct SearchSuggestionsAnchor: View {
     let search: SidebarSearchModel
     let onSubmitSearch: () -> Void
@@ -247,26 +246,12 @@ struct SearchSuggestionsAnchor: View {
     @State private var showPopover = false
     @State private var keyMonitor: Any?
 
-    /// The search field sits just above this anchor; reach up to its
-    /// vertical centerline.
-    private static let fieldCenterlineOffset: CGFloat = -24
-
     var body: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .popover(
-                    isPresented: $showPopover,
-                    attachmentAnchor: .rect(
-                        .rect(
-                            CGRect(
-                                x: 0, y: Self.fieldCenterlineOffset,
-                                width: proxy.size.width, height: 8))),
-                    arrowEdge: .trailing
-                ) {
-                    SearchSuggestionsList(search: search)
-                }
-        }
-        .frame(height: 1)
+        Color.clear
+            .frame(height: 1)
+            .popover(isPresented: $showPopover) {
+                SearchSuggestionsList(search: search)
+            }
         .onChange(of: isSearching) {
             syncMonitor()
             syncPopover()
