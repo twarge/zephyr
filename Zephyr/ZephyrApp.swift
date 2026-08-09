@@ -9,7 +9,6 @@ struct ZephyrApp: App {
     #if os(macOS)
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
     #endif
-    @AppStorage("textSizeStep") private var textSizeStep = 0
 
     init() {
         // One tip per week at most, app-wide: discovery without fatigue.
@@ -185,17 +184,11 @@ extension ZephyrApp {
             Button("Find") { model.pendingCommand = .find }
                 .keyboardShortcut("f", modifiers: .command)
         }
-        // View additions: reload, and text sizing (Dynamic Type steps).
+        // View additions: reload. (Text size follows the system's Dynamic
+        // Type setting — no in-app override.)
         CommandGroup(before: .toolbar) {
             Button("Reload") { model.pendingCommand = .reload }
                 .keyboardShortcut("r", modifiers: [.command, .option])
-            Divider()
-            Button("Bigger Text") { textSizeStep = min(textSizeStep + 1, 3) }
-                .keyboardShortcut("=", modifiers: .command)
-            Button("Smaller Text") { textSizeStep = max(textSizeStep - 1, -2) }
-                .keyboardShortcut("-", modifiers: .command)
-            Button("Actual Text Size") { textSizeStep = 0 }
-                .keyboardShortcut("0", modifiers: .command)
             Divider()
         }
         CommandMenu("Message") {
@@ -249,16 +242,6 @@ extension ZephyrApp {
 
 /// View-menu text sizing: steps map onto Dynamic Type sizes (0 is the
 /// system default).
-/// The ⌘=/⌘− text-size step applied relative to the inherited Dynamic
-/// Type size — pinning to absolute sizes overrode the user's system text
-/// size on iOS (Mail tracks it; we clamped everyone to .large).
-nonisolated func typeSizeForTextStep(_ step: Int, from base: DynamicTypeSize) -> DynamicTypeSize {
-    guard step != 0 else { return base }
-    let cases = Array(DynamicTypeSize.allCases)
-    let baseIndex = cases.firstIndex(of: base) ?? 0
-    return cases[min(max(baseIndex + step, 0), cases.count - 1)]
-}
-
 struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase

@@ -64,7 +64,6 @@ struct HelpView: View {
         ("⌘⇧K", "Mark conversation as read"),
         ("⌘B  ⌘I  ⌘K", "Bold / italic / link while composing"),
         ("⌘⇧X  ⌘⇧M  ⌘⇧9", "Strikethrough / code / quote"),
-        ("⌘=  ⌘−", "Bigger / smaller text"),
         ("⌘/  or  ?", "Show the shortcuts sheet"),
     ]
 
