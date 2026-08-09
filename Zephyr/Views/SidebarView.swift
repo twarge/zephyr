@@ -744,20 +744,20 @@ private struct DirectMessageRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Label {
-                HStack(spacing: 6) {
-                    Text(conversation.key.displayTitle(in: store))
-                        .fontWeight(unreadCount > 0 ? .semibold : .regular)
-                        .lineLimit(1)
-                    if isBot {
-                        Image(systemName: "cpu")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
+                Text(conversation.key.displayTitle(in: store))
+                    .fontWeight(unreadCount > 0 ? .semibold : .regular)
+                    .lineLimit(1)
             } icon: {
                 PresenceDot(state: store.presenceState(of: participantIds.first ?? 0))
             }
             Spacer(minLength: 4)
+            // Bot marker joins the trailing icon stack, like channel locks.
+            if isBot {
+                Image(systemName: "cpu")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .help("Bot")
+            }
             if hasMention {
                 Text("@")
                     .font(.caption.bold())
