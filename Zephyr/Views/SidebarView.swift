@@ -339,10 +339,10 @@ struct SidebarView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        // The suggestions popover's anchor sits directly under the search
-        // field; inside the searchable subtree so it sees `isSearching`.
+        // Return capture lives inside the searchable subtree so it sees
+        // `isSearching`.
         .safeAreaInset(edge: .top, spacing: 0) {
-            SearchSuggestionsAnchor(search: search) {
+            SearchReturnCapture(search: search) {
                 runSearch(recordInRecents: true)
             }
         }
@@ -355,6 +355,16 @@ struct SidebarView: View {
             placement: Self.searchPlacement, prompt: "Filter or search"
         ) { token in
             Text(token.bubbleText)
+        }
+        // Native suggestions: the system anchors these to the search field
+        // itself, wherever the field lives (window toolbar on macOS).
+        // Picking one commits it into the tokens binding and clears the
+        // typed text; the tokens onChange below runs the search.
+        .searchSuggestions {
+            ForEach(search.suggestions) { token in
+                Label(token.suggestionTitle, systemImage: token.suggestionIcon)
+                    .searchCompletion(token)
+            }
         }
         .searchFocused($searchFocused)
         .onSubmit(of: .search) {

@@ -70,11 +70,11 @@ nonisolated enum SearchToken: Identifiable, Hashable, Codable {
     }
 }
 
-/// Shared state for the sidebar's dual-role field: filter text, committed
-/// token bubbles, and the lazily-loaded per-channel topic cache that both
-/// filtering and suggestions draw on. Owned by MainSplitView so the
-/// suggestions panel (floating over the detail column) sees the same state
-/// as the sidebar.
+/// Shared state for the window's dual-role search field: filter text,
+/// committed token bubbles, and the lazily-loaded per-channel topic cache
+/// that both filtering and suggestions draw on. Owned by MainSplitView so
+/// detail views (All Channels, Recent) can filter on the same state as the
+/// sidebar.
 @MainActor
 @Observable
 final class SidebarSearchModel {
@@ -224,49 +224,26 @@ final class SidebarSearchModel {
         }
         return result.filter { !tokens.contains($0) }
     }
-
-    /// Commits a suggestion as a token bubble (the caller's onChange runs the
-    /// search).
-    func commit(_ token: SearchToken) {
-        tokens.append(token)
-        filterText = ""
-    }
 }
 
-/// A hidden anchor at the top of the sidebar: it tracks the search session
-/// (`isSearching`), presents the suggestions as a native popover with the
-/// system's default anchoring, and captures Return while the field is
-/// active — SwiftUI's onSubmit(of: .search) does not fire reliably for
-/// token search fields on macOS.
-struct SearchSuggestionsAnchor: View {
+/// A hidden view inside the searchable subtree: it tracks the search
+/// session (`isSearching`) and captures Return while the field is active —
+/// SwiftUI's onSubmit(of: .search) does not fire reliably for token search
+/// fields on macOS. Suggestions themselves are native `.searchSuggestions`,
+/// anchored to the field by the system.
+struct SearchReturnCapture: View {
     let search: SidebarSearchModel
     let onSubmitSearch: () -> Void
 
     @Environment(\.isSearching) private var isSearching
-    @State private var showPopover = false
     @State private var keyMonitor: Any?
 
     var body: some View {
         Color.clear
             .frame(height: 1)
-            .popover(isPresented: $showPopover) {
-                SearchSuggestionsList(search: search)
-            }
-        .onChange(of: isSearching) {
-            syncMonitor()
-            syncPopover()
-        }
-        .onChange(of: search.filterText) { syncPopover() }
-        .onChange(of: search.tokens) { syncPopover() }
-        .onAppear {
-            syncMonitor()
-            syncPopover()
-        }
-        .onDisappear { removeMonitor() }
-    }
-
-    private func syncPopover() {
-        showPopover = isSearching && !search.suggestions.isEmpty
+            .onChange(of: isSearching) { syncMonitor() }
+            .onAppear { syncMonitor() }
+            .onDisappear { removeMonitor() }
     }
 
     private func syncMonitor() {
@@ -313,43 +290,6 @@ struct SearchSuggestionsAnchor: View {
             self.keyMonitor = nil
         }
         #endif
-    }
-}
-
-/// The popover's content: suggestion rows that commit to token bubbles.
-private struct SearchSuggestionsList: View {
-    let search: SidebarSearchModel
-    @State private var hovered: SearchToken?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            ForEach(search.suggestions) { token in
-                Button {
-                    search.commit(token)
-                } label: {
-                    Label(token.suggestionTitle, systemImage: token.suggestionIcon)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            hovered == token
-                                ? AnyShapeStyle(.quaternary)
-                                : AnyShapeStyle(.clear),
-                            in: RoundedRectangle(cornerRadius: 5))
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .onHover { isHovering in
-                    if isHovering {
-                        hovered = token
-                    } else if hovered == token {
-                        hovered = nil
-                    }
-                }
-            }
-        }
-        .padding(8)
-        .frame(width: 300)
     }
 }
 
