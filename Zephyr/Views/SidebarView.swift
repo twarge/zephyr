@@ -27,6 +27,8 @@ struct SidebarView: View {
     @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
     @State private var showOfflineUsers = false
     @State private var expandedInactiveSections: Set<String> = []
+    /// Channels whose topic list shows everything (past the inline cap).
+    @State private var expandedAllTopics: Set<Int> = []
 
     init(
         store: PerAccountStore, search: SidebarSearchModel,
@@ -555,7 +557,8 @@ struct SidebarView: View {
     @ViewBuilder
     private func topicRows(for streamId: Int) -> some View {
         if let topics = search.channelTopics[streamId] {
-            let shown = Array(topics.prefix(Self.maxInlineTopics))
+            let showAll = expandedAllTopics.contains(streamId)
+            let shown = showAll ? topics : Array(topics.prefix(Self.maxInlineTopics))
             let hasMore = topics.count > Self.maxInlineTopics
             ForEach(Array(shown.enumerated()), id: \.element.name) { index, topic in
                 SidebarTopicRow(
@@ -568,14 +571,29 @@ struct SidebarView: View {
                             .topic(streamId: streamId, topic: topic.name))))
             }
             if hasMore {
-                Text("All topics…")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 26)
-                    .background(alignment: .leading) {
-                        TopicRailView(color: channelColor(streamId), kind: .dotted)
+                // Expands in place; the rail's dotted end says "more
+                // below", the rounded cap closes the fully shown list.
+                Button {
+                    withAnimation(.snappy) {
+                        if showAll {
+                            expandedAllTopics.remove(streamId)
+                        } else {
+                            expandedAllTopics.insert(streamId)
+                        }
                     }
-                    .tag(Destination.channelTopics(streamId: streamId))
+                } label: {
+                    Text(showAll ? "Fewer topics…" : "All topics…")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 26)
+                .background(alignment: .leading) {
+                    TopicRailView(
+                        color: channelColor(streamId), kind: showAll ? .cap : .dotted)
+                }
             }
         } else {
             ProgressView()
