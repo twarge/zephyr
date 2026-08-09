@@ -764,6 +764,11 @@ struct MessageRow: View {
                 ? Color.yellow.opacity(0.22)
                 : isKeySelected ? Self.selectionColor.opacity(0.14) : .clear,
             in: RoundedRectangle(cornerRadius: 6))
+        // The whole row rect is clickable/right-clickable even where it's
+        // transparent — without this, only the drawn text (or a selected
+        // row's highlight fill) hit-tests, so clicks in the empty trailing
+        // space fall through.
+        .contentShape(.rect)
         // Click/tap selects (like the web app); simultaneous so links and
         // buttons inside the row keep working.
         .simultaneousGesture(TapGesture().onEnded {
