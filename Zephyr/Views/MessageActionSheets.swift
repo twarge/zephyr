@@ -76,6 +76,37 @@ struct ForwardMessageSheet: View {
     }
 }
 
+/// A custom reminder time, for anything the menu presets don't cover.
+struct RemindTimeSheet: View {
+    var onSet: (Date) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var date = Date.now.addingTimeInterval(3600)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Remind Me At")
+                .font(.headline)
+            DatePicker(
+                "Time", selection: $date, in: Date.now...,
+                displayedComponents: [.date, .hourAndMinute])
+                .labelsHidden()
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Set Reminder") {
+                    onSet(date)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .frame(minWidth: 280)
+    }
+}
+
 /// Who has read a message (server-filtered for privacy opt-outs).
 struct ReadReceiptsSheet: View {
     let store: PerAccountStore

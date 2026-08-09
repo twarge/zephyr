@@ -252,6 +252,12 @@ struct SidebarView: View {
                             "Outbox", icon: "tray.and.arrow.up", tag: .outbox,
                             badge: store.outbox.count)
                     }
+                    // Pending reminders: only surfaces while some exist.
+                    if !store.reminders.isEmpty {
+                        viewRow(
+                            "Reminders", icon: "clock", tag: .reminders,
+                            badge: store.reminders.count)
+                    }
                     viewRow(
                         "All channels", icon: "rectangle.stack", tag: .allChannels, badge: 0)
                 }

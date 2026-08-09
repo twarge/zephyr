@@ -28,6 +28,8 @@ public final class PerAccountStore {
     private var realmLogoSource: String?
     private var realmNightLogoUrl: String?
     private var realmNightLogoSource: String?
+    /// Pending reminders by reminder id (refetched, never event-decoded).
+    public private(set) var reminders: [Int: Reminder] = [:]
     public private(set) var users: [Int: User] = [:]
     public private(set) var channels: [Int: ZulipStream] = [:]
     public private(set) var subscriptions: [Int: Subscription] = [:]
@@ -340,15 +342,46 @@ public final class PerAccountStore {
         }
     }
 
+    // MARK: Reminders
+
+    /// Whether this realm's server has the reminders API (Zulip 11+).
+    public var supportsReminders: Bool {
+        zulipFeatureLevel >= ApiConnection.remindersFeatureLevel
+    }
+
     /// Schedules a server-side reminder about a message, delivered as a DM
-    /// from the reminders bot at the given time (Zulip Server 11+; older
-    /// servers reject the request and no reminder is created).
+    /// from the reminders bot at the given time. The refetch that follows
+    /// is the creation feedback — the message's clock icon appears.
     public func remindAboutMessage(_ messageId: Int, at date: Date) {
         let connection = connection
         Task {
             try? await connection.createReminder(
                 messageId: messageId, deliveryTimestamp: Int(date.timeIntervalSince1970))
+            await refreshReminders()
         }
+    }
+
+    public func cancelReminder(_ reminderId: Int) {
+        // Optimistic; the refetch confirms.
+        reminders.removeValue(forKey: reminderId)
+        let connection = connection
+        Task {
+            try? await connection.deleteReminder(reminderId: reminderId)
+            await refreshReminders()
+        }
+    }
+
+    /// Refetches pending reminders — the register snapshot doesn't carry
+    /// them, so launch, creation, cancellation, and reminder events all
+    /// funnel through here.
+    public func refreshReminders() async {
+        guard supportsReminders,
+              let fetched = try? await connection.getReminders() else { return }
+        reminders = Dictionary(uniqueKeysWithValues: fetched.map { ($0.reminderId, $0) })
+    }
+
+    public func reminderForMessage(_ messageId: Int) -> Reminder? {
+        reminders.values.first { $0.reminderTargetMessageId == messageId }
     }
 
     // MARK: Offline queue
@@ -1162,6 +1195,9 @@ public final class PerAccountStore {
             default:
                 break
             }
+
+        case .remindersChanged:
+            Task { await refreshReminders() }
 
         case .streamCreate(let streams):
             for stream in streams {

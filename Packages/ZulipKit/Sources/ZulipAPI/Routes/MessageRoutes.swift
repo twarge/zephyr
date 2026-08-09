@@ -59,6 +59,16 @@ public struct GetMessagesResult: Decodable, Sendable {
     public var anchor: Int?
 }
 
+/// A pending message reminder (Zulip Server 11+): the reminders bot DMs
+/// the user about the target message at the scheduled time.
+public struct Reminder: Decodable, Sendable, Hashable, Identifiable {
+    public var reminderId: Int
+    public var reminderTargetMessageId: Int
+    public var scheduledDeliveryTimestamp: Int
+
+    public var id: Int { reminderId }
+}
+
 /// The server-side progress of a narrow-scoped flag update.
 public struct NarrowFlagsResult: Decodable, Sendable {
     public var processedCount: Int
@@ -275,6 +285,22 @@ extension ApiConnection {
                     Param("message_id", String(messageId)),
                     Param("scheduled_delivery_timestamp", String(deliveryTimestamp)),
                 ]))
+    }
+
+    /// GET /reminders — the pending reminders.
+    public func getReminders() async throws -> [Reminder] {
+        struct GetRemindersResult: Decodable {
+            var reminders: [Reminder]
+        }
+        let result: GetRemindersResult = try await request(
+            ApiRequest(method: .get, path: "/api/v1/reminders"))
+        return result.reminders
+    }
+
+    /// DELETE /reminders/{id} — cancels a pending reminder.
+    public func deleteReminder(reminderId: Int) async throws {
+        _ = try await send(
+            ApiRequest(method: .delete, path: "/api/v1/reminders/\(reminderId)"))
     }
 
     /// GET /messages — anchor-based history fetch.

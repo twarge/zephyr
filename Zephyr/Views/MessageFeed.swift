@@ -656,6 +656,7 @@ struct MessageRow: View {
     @State private var showTranslation = false
     @State private var showReadReceipts = false
     @State private var showForward = false
+    @State private var showRemindPicker = false
     @State private var showEditHistory = false
 
     private var content: MessageContent {
@@ -847,6 +848,13 @@ struct MessageRow: View {
                 }
                 .opacity(controlsActive ? 1 : 0)
                 .allowsHitTesting(controlsActive)
+                if let reminder = store.reminderForMessage(message.id) {
+                    Image(systemName: "clock.fill")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .padding(5)
+                        .help("Reminder: \(Self.reminderTimeText(reminder))")
+                }
                 Button {
                     store.setStarred(!isStarred, messageId: message.id)
                 } label: {
@@ -901,6 +909,16 @@ struct MessageRow: View {
                 forwardMessage(to: destination)
             }
         }
+        .sheet(isPresented: $showRemindPicker) {
+            RemindTimeSheet { date in
+                remind(at: date)
+            }
+        }
+    }
+
+    static func reminderTimeText(_ reminder: Reminder) -> String {
+        Date(timeIntervalSince1970: TimeInterval(reminder.scheduledDeliveryTimestamp))
+            .formatted(date: .abbreviated, time: .shortened)
     }
 
     /// The message context menu — one builder, attached both to the row
@@ -941,11 +959,21 @@ struct MessageRow: View {
             Button("Seen By…", systemImage: "eye") {
                 showReadReceipts = true
             }
-            Menu("Remind Me About This") {
-                Button("In 1 Hour") { remind(at: .now.addingTimeInterval(3600)) }
-                Button("In 3 Hours") { remind(at: .now.addingTimeInterval(3 * 3600)) }
-                Button("Tomorrow at 9 AM") { remind(at: nextMorning(daysAhead: 1)) }
-                Button("Next Week at 9 AM") { remind(at: nextMorning(daysAhead: 7)) }
+            if store.supportsReminders {
+                if let reminder = store.reminderForMessage(message.id) {
+                    Button("Cancel Reminder", systemImage: "clock.badge.xmark") {
+                        store.cancelReminder(reminder.reminderId)
+                    }
+                } else {
+                    Menu("Remind Me About This") {
+                        Button("In 1 Hour") { remind(at: .now.addingTimeInterval(3600)) }
+                        Button("In 3 Hours") { remind(at: .now.addingTimeInterval(3 * 3600)) }
+                        Button("Tomorrow at 9 AM") { remind(at: nextMorning(daysAhead: 1)) }
+                        Button("Next Week at 9 AM") { remind(at: nextMorning(daysAhead: 7)) }
+                        Divider()
+                        Button("At a Custom Time…") { showRemindPicker = true }
+                    }
+                }
             }
             if message.type == .stream {
                 Button("Move to Topic…", systemImage: "arrow.turn.up.right") {

@@ -29,6 +29,7 @@
 		52EC40B9399E8AA2D4F65331 /* ZulipAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 5D28EB29BBDF0D08CC778000 /* ZulipAPI */; };
 		53D49ACBC473F8B9F2B5BD5E /* SharePickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DBB2BFB3C180FACDCB32F82 /* SharePickerSheet.swift */; };
 		54BFB8373908F2BE25281ECF /* ZulipModel in Frameworks */ = {isa = PBXBuildFile; productRef = E4D870E5241B561551F2791A /* ZulipModel */; };
+		5778BC649C0BB255015B12CC /* RemindersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8EB162FCCE5166524648043 /* RemindersView.swift */; };
 		5794DA3E0828FC47D382D330 /* ZephyrWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D409AD6B2CC607462E58207 /* ZephyrWidgets.swift */; };
 		5E2EA17274897B42F4A65347 /* UnreadSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */; };
 		5F0FCA79F46D92DA6EF1091E /* NarrowFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7EBB59257B9154EAF76D934 /* NarrowFeedView.swift */; };
@@ -154,6 +155,7 @@
 		D037A907658BA511667CA882 /* ZephyrShare.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ZephyrShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetachedWindow.swift; sourceTree = "<group>"; };
 		E7EBB59257B9154EAF76D934 /* NarrowFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NarrowFeedView.swift; sourceTree = "<group>"; };
+		E8EB162FCCE5166524648043 /* RemindersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersView.swift; sourceTree = "<group>"; };
 		EC11E5BCCDABAA47341BC0CA /* MessageActionSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageActionSheets.swift; sourceTree = "<group>"; };
 		FB37E72A9961DF2EB9503B4D /* ChannelTopicsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelTopicsView.swift; sourceTree = "<group>"; };
 		FC5410F479FB8AE6E80F4866 /* WebAuthSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthSession.swift; sourceTree = "<group>"; };
@@ -217,6 +219,7 @@
 				6948BF0E49980622700ED102 /* OutboxView.swift */,
 				3FE462CABA8309A90FD3A747 /* PDFAttachmentView.swift */,
 				475341E1FDF45E220243460A /* RecentConversationsView.swift */,
+				E8EB162FCCE5166524648043 /* RemindersView.swift */,
 				C0B6E7BF3930F81D1C28D6C1 /* Search.swift */,
 				BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */,
 				7DBB2BFB3C180FACDCB32F82 /* SharePickerSheet.swift */,
@@ -515,6 +518,7 @@
 				8D288550003242AB2596116F /* PDFAttachmentView.swift in Sources */,
 				3D07A493DA42E4D98B0DA530 /* Platform.swift in Sources */,
 				0B1CBDD1323F731109D06DEC /* RecentConversationsView.swift in Sources */,
+				5778BC649C0BB255015B12CC /* RemindersView.swift in Sources */,
 				7BFEB47B6DCAC3AD9BCA6C35 /* Search.swift in Sources */,
 				0A7AFFF808844CC0EE4BE1EE /* SettingsView.swift in Sources */,
 				7CA83B9202B397D38737BD29 /* ShareInbox.swift in Sources */,

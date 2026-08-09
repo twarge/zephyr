@@ -28,6 +28,12 @@ extension ApiConnection {
         "reaction", "typing", "realm_user", "subscription", "stream",
         "channel_folder", "realm_emoji", "submessage", "user_topic", "drafts", "heartbeat",
     ]
+
+    /// Event types only requested from servers new enough to know them
+    /// (registerQueue filters by feature level).
+    static let reminderEventTypes = ["reminder", "reminders"]
+    /// Reminders arrived with Zulip Server 11.
+    public static let remindersFeatureLevel = 344
     public static let fetchedEventTypes = [
         "realm", "realm_user", "stream", "subscription", "message",
         "update_message_flags", "recent_private_conversations", "channel_folders",
@@ -42,11 +48,15 @@ extension ApiConnection {
     public func registerQueue(
         idleQueueTimeoutSeconds: Int? = nil
     ) async throws -> (snapshot: InitialSnapshot, rawData: Data) {
+        var eventTypes = Self.subscribedEventTypes
+        if (featureLevel ?? 0) >= Self.remindersFeatureLevel {
+            eventTypes += Self.reminderEventTypes
+        }
         var params: [Param] = [
             Param("apply_markdown", "true"),
             Param("client_gravatar", "false"),
             Param("client_capabilities", try ZulipJSON.encodeString(ClientCapabilities())),
-            Param("event_types", try ZulipJSON.encodeString(Self.subscribedEventTypes)),
+            Param("event_types", try ZulipJSON.encodeString(eventTypes)),
             Param("fetch_event_types", try ZulipJSON.encodeString(Self.fetchedEventTypes)),
         ]
         if let idleQueueTimeoutSeconds, (featureLevel ?? 0) >= 481 {

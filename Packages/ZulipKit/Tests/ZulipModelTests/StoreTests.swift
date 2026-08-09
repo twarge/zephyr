@@ -181,6 +181,38 @@ struct StoreEventTests {
         #expect(data.contains(##""value": "#76ce90""##))
     }
 
+    @Test func reminderRefreshPopulatesAndCancelDeletes() async throws {
+        let transport = FakeTransport(
+            script: [
+                .json(#"""
+                    {"result": "success", "msg": "", "reminders": [
+                        {"reminder_id": 7, "reminder_target_message_id": 100,
+                         "scheduled_delivery_timestamp": 1800000000}]}
+                    """#),
+                .json(#"{"result": "success", "msg": ""}"#),
+                .json(#"{"result": "success", "msg": "", "reminders": []}"#),
+            ], defaultResponse: .hang)
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        await store.refreshReminders()
+        #expect(store.reminders[7]?.reminderTargetMessageId == 100)
+        #expect(store.reminderForMessage(100)?.reminderId == 7)
+
+        store.cancelReminder(7)
+        #expect(store.reminders.isEmpty)
+        try await eventually("delete and refetch sent") { transport.requests.count == 3 }
+        #expect(transport.requests[1].method == "DELETE")
+        #expect(transport.requests[1].path.hasSuffix("/reminders/7"))
+        #expect(transport.requests[2].method == "GET")
+    }
+
     @Test func remindAboutMessagePostsReminder() async throws {
         let transport = FakeTransport(
             defaultResponse: .json(#"{"result": "success", "msg": ""}"#))

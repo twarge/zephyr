@@ -13,6 +13,7 @@ nonisolated enum Destination: Hashable, Codable {
     case recentConversations
     case drafts
     case outbox
+    case reminders
     case combinedFeed
     case mentions
     case starred
@@ -162,6 +163,9 @@ struct MainSplitView: View {
         }
         #endif
         .environment(keys)
+        // Reminders aren't in the register snapshot; seed them once per
+        // store so message clock icons and the sidebar row can show.
+        .task(id: store.accountId) { await store.refreshReminders() }
         .navigationTitle(store.realmName ?? "Zephyr")
         // Narrow links navigate in-app: rewritten links inside message
         // content, and pasted/clicked web-app URLs on ANY signed-in realm
@@ -626,6 +630,9 @@ struct MainSplitView: View {
             case .outbox:
                 OutboxView(store: store, selection: $selection)
                     .id(Destination.outbox)
+            case .reminders:
+                RemindersView(store: store, selection: $selection)
+                    .id(Destination.reminders)
             case .combinedFeed:
                 NarrowFeedView(
                     store: store, title: "Combined feed", narrow: .combinedFeed,

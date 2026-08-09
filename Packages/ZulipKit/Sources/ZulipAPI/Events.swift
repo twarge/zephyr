@@ -26,6 +26,9 @@ public struct Event: Sendable {
         /// stream/update: realm-wide channel property changes (rename,
         /// description); reuses SubscriptionUpdateEvent's wire shape.
         case streamUpdate(SubscriptionUpdateEvent)
+        /// A reminder was created or removed — the payload isn't decoded;
+        /// the store refetches the list instead.
+        case remindersChanged
         case userTopic(UserTopicItem)
         case submessage(SubmessageEvent)
         case draftsAdd([ServerDraft])
@@ -210,6 +213,8 @@ extension Event: Decodable {
             kind = .streamUpdate(try SubscriptionUpdateEvent(from: decoder))
         case ("stream", "delete"):
             kind = .streamDelete(streamIds: try DeletedStreamsEnvelope(from: decoder).allIds)
+        case ("reminder", _), ("reminders", _):
+            kind = .remindersChanged
         case ("user_topic", _):
             kind = .userTopic(try UserTopicItem(from: decoder))
         case ("submessage", _):
