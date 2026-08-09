@@ -499,6 +499,8 @@ private struct MediaAttachmentChip: View {
         }
         #endif
         .quickLookPreview($quickLookURL)
+        // Drag out: the receiver gets the file.
+        .draggable(MediaDragItem(path: path, connection: connection))
     }
 
     private func download() async -> URL? {
@@ -522,6 +524,23 @@ func fetchMedia(path: String, connection: ApiConnection) async -> (Data, URLResp
     }
     guard let request else { return nil }
     return try? await ApiConnection.mediaSession.data(for: request)
+}
+
+/// A message attachment as a drag payload: the receiver gets the actual
+/// file — downloaded (or cache-served) under its real filename — so drops
+/// land in Finder and other apps as the attachment itself.
+nonisolated struct MediaDragItem: Transferable {
+    let path: String
+    let connection: ApiConnection
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .data) { item in
+            guard let url = await downloadMediaFile(
+                path: item.path, connection: item.connection)
+            else { throw CocoaError(.fileNoSuchFile) }
+            return SentTransferredFile(url)
+        }
+    }
 }
 
 /// Downloaded media files by source path, so gallery navigation and repeat
@@ -825,6 +844,8 @@ private struct MessageImageView: View {
         .task(id: node.src) { await load() }
         .accessibilityLabel(node.alt ?? "Image")
         .help("Click to select, Space for Quick Look, double-click to open")
+        // Drag out: the receiver gets the original file.
+        .draggable(MediaDragItem(path: node.originalSrc ?? node.src, connection: connection))
     }
 
     private func load() async {

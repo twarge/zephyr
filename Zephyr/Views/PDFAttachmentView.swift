@@ -125,6 +125,8 @@ struct PDFAttachmentView: View {
         .task(id: href) { await loadThumbnail() }
         .accessibilityLabel("PDF attachment: \(filename)")
         .help("Click to select, Space for Quick Look, double-click to open")
+        // Drag out: the receiver gets the PDF file.
+        .draggable(MediaDragItem(path: href, connection: connection))
     }
 
     private func loadThumbnail() async {
