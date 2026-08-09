@@ -497,12 +497,6 @@ struct MessageFeedList: View {
             }
             .scrollTargetLayout()
             .padding(.horizontal, 16)
-            // Exactly the viewport's width. A wide child (an image mid-
-            // load, a table) otherwise widens the whole stack, and the
-            // vertical-only scroll view parks a horizontal offset it never
-            // re-clamps — the iPad feed rendered shifted right with its
-            // trailing edge (the times) clipped off.
-            .containerRelativeFrame(.horizontal)
         }
         .defaultScrollAnchor(.bottom)
         .scrollPosition(id: $anchorId, anchor: .bottom)
@@ -512,11 +506,20 @@ struct MessageFeedList: View {
         // (offset never re-clamped), fixed by re-asserting the anchor
         // instead of waiting for a window resize to force re-layout.
         .onScrollGeometryChange(for: FeedGeometry.self) { geometry in
-            FeedGeometry(
+            #if os(macOS)
+            // The blank-view failure mode is macOS-only, and so is its
+            // rescue: on iPadOS these rects thrash during live window
+            // resizes, and the rescue's scroll re-assertions fought the
+            // resize until message views froze mid-scale.
+            let lost = geometry.contentSize.height > 0
+                && (geometry.visibleRect.minY >= geometry.contentSize.height - 1
+                    || geometry.visibleRect.maxY <= 0)
+            #else
+            let lost = false
+            #endif
+            return FeedGeometry(
                 nearBottom: geometry.contentSize.height - geometry.visibleRect.maxY < 60,
-                lost: geometry.contentSize.height > 0
-                    && (geometry.visibleRect.minY >= geometry.contentSize.height - 1
-                        || geometry.visibleRect.maxY <= 0))
+                lost: lost)
         } action: { old, new in
             nearBottom = new.nearBottom
             if new.lost, !old.lost {
