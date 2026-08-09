@@ -1,9 +1,10 @@
 import Foundation
 
-/// Debug performance probes. Enable with:
-///   defaults write com.twarge.zephyr perfLog -bool YES
-/// then run from a terminal (make run) and watch stdout. Render counts
-/// flush every 2 seconds; the store prints event summaries every 5.
+/// Debug performance probes. Enable with `make perf`, which launches the
+/// app with the `-perfLog YES` argument (UserDefaults' argument domain —
+/// the sandbox container blocks `defaults write` from outside) and keeps
+/// stdout in the terminal. Render counts flush every 2 seconds; the store
+/// prints event summaries every 5.
 @MainActor
 enum PerfLog {
     static let enabled = UserDefaults.standard.bool(forKey: "perfLog")

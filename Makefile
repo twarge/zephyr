@@ -55,6 +55,14 @@ run: mac
 	  -destination 'platform=macOS' -showBuildSettings build 2>/dev/null \
 	  | awk -F' = ' '/ BUILT_PRODUCTS_DIR/{print $$2; exit}')/Zephyr.app"
 
+# Performance probes: runs the app in the foreground with -perfLog YES
+# (the sandbox container blocks `defaults write` from outside, and `open`
+# would swallow stdout — the probes print there). Ctrl-C quits.
+perf: mac
+	@"$$(xcodebuild -project Zephyr.xcodeproj -scheme Zephyr \
+	  -destination 'platform=macOS' -showBuildSettings build 2>/dev/null \
+	  | awk -F' = ' '/ BUILT_PRODUCTS_DIR/{print $$2; exit}')/Zephyr.app/Contents/MacOS/Zephyr" -perfLog YES
+
 # The generated project is committed (CI needs no extra step); regenerate
 # after editing project.yml.
 generate:
