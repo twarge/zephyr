@@ -497,6 +497,12 @@ struct MessageFeedList: View {
             }
             .scrollTargetLayout()
             .padding(.horizontal, 16)
+            // Exactly the viewport's width. A wide child (an image mid-
+            // load, a table) otherwise widens the whole stack, and the
+            // vertical-only scroll view parks a horizontal offset it never
+            // re-clamps — the iPad feed rendered shifted right with its
+            // trailing edge (the times) clipped off.
+            .containerRelativeFrame(.horizontal)
         }
         .defaultScrollAnchor(.bottom)
         .scrollPosition(id: $anchorId, anchor: .bottom)
