@@ -32,7 +32,7 @@ struct ChannelFeedView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationTitle("#\(channelName)")
+        .navigationTitle(channelName)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ComposeBar(store: store, mode: .channel(streamId: streamId))
         }

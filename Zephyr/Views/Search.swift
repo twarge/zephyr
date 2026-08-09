@@ -415,7 +415,7 @@ nonisolated struct SearchQuery: Hashable, Codable {
         var parts = tokens.map(\.bubbleText)
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         if !trimmed.isEmpty {
-            parts.append("“\(trimmed)”")
+            parts.append(trimmed)
         }
         return parts.joined(separator: " ")
     }

@@ -24,7 +24,7 @@ struct TranscriptView: View {
             let display = TopicName.displayName(topic)
             let name = display.isEmpty ? "general chat" : display
             let resolved = TopicName.isResolved(topic) ? "✓ " : ""
-            return "#\(channelName(streamId)) › \(resolved)\(name)"
+            return "\(channelName(streamId)) › \(resolved)\(name)"
         }
         return conversation.displayTitle(in: store)
     }
