@@ -602,18 +602,18 @@ private struct ConversationHeaderRow: View {
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: glyph)
-                    .font(.callout.weight(.bold))
+                    .font(.body.weight(.bold))
                     .foregroundStyle(streamId == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(channelColor))
                 if isResolved {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
-                        .font(.caption)
+                        .font(.callout)
                 }
                 Text(label)
-                    .font(.callout.weight(.semibold))
+                    .font(.body.weight(.semibold))
                     .lineLimit(1)
                 Image(systemName: "chevron.right")
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.tertiary)
                 Spacer(minLength: 0)
             }
