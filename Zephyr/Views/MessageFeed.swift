@@ -828,6 +828,26 @@ struct MessageRow: View {
             // Top-aligned: the buttons' padding would otherwise center the
             // time a few points below its message's first line.
             HStack(alignment: .top, spacing: 2) {
+                Button {
+                    showReactionPicker = true
+                } label: {
+                    Image(systemName: "face.smiling")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(5)
+                        .background(.quaternary.opacity(0.6), in: .circle)
+                }
+                .buttonStyle(.plain)
+                .help("Add reaction")
+                .popover(isPresented: $showReactionPicker) {
+                    EmojiPickerView(store: store) { entry in
+                        store.toggleReaction(
+                            message: message, emojiName: entry.name,
+                            emojiCode: entry.code, reactionType: entry.reactionType)
+                    }
+                }
+                .opacity(controlsActive ? 1 : 0)
+                .allowsHitTesting(controlsActive)
                 if store.supportsReminders {
                     // Hover control and pending-reminder indicator in one:
                     // gray outline clock on hover, orange filled clock while
@@ -858,26 +878,6 @@ struct MessageRow: View {
                     .opacity(controlsActive || reminder != nil ? 1 : 0)
                     .allowsHitTesting(controlsActive || reminder != nil)
                 }
-                Button {
-                    showReactionPicker = true
-                } label: {
-                    Image(systemName: "face.smiling")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(5)
-                        .background(.quaternary.opacity(0.6), in: .circle)
-                }
-                .buttonStyle(.plain)
-                .help("Add reaction")
-                .popover(isPresented: $showReactionPicker) {
-                    EmojiPickerView(store: store) { entry in
-                        store.toggleReaction(
-                            message: message, emojiName: entry.name,
-                            emojiCode: entry.code, reactionType: entry.reactionType)
-                    }
-                }
-                .opacity(controlsActive ? 1 : 0)
-                .allowsHitTesting(controlsActive)
                 Button {
                     store.setStarred(!isStarred, messageId: message.id)
                 } label: {
