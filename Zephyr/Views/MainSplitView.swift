@@ -397,6 +397,19 @@ struct MainSplitView: View {
                 }
             }
             #endif
+            // "Up" from a topic view to its channel: the channel's own
+            // glyph in its color.
+            if case .conversation(.topic(let streamId, _)) = selection {
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        selection = .channel(streamId: streamId)
+                    } label: {
+                        Image(systemName: channelGlyph(streamId))
+                            .foregroundStyle(channelColor(streamId))
+                    }
+                    .help("Go to #\(channelName(streamId))")
+                }
+            }
             // The server menu lives in the main toolbar. macOS hides it
             // with a single server (Settings lives in the app menu); iOS
             // keeps it — it's the only road to Settings there.
@@ -582,6 +595,22 @@ struct MainSplitView: View {
     private func requestMessageAction(_ action: MessageActionRequest.Action) {
         guard let id = keys.selectedMessageId else { return }
         keys.messageActionRequest = MessageActionRequest(messageId: id, action: action)
+    }
+
+    private func channelName(_ streamId: Int) -> String {
+        store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel"
+    }
+
+    private func channelGlyph(_ streamId: Int) -> String {
+        let channel = store.channels[streamId]
+        if channel?.inviteOnly == true { return "lock.fill" }
+        if channel?.isWebPublic == true { return "globe" }
+        return "number"
+    }
+
+    private func channelColor(_ streamId: Int) -> Color {
+        store.subscriptions[streamId]?.color.flatMap(Color.init(zulipHex:))
+            ?? .stableColor(for: streamId)
     }
 
     private var pendingShareItemCount: Int {
