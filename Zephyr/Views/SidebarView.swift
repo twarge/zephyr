@@ -754,7 +754,7 @@ private struct DirectMessageRow: View {
             // Bot marker joins the trailing icon stack, like channel locks.
             if isBot {
                 Image(systemName: "cpu")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.tertiary)
                     .help("Bot")
             }
