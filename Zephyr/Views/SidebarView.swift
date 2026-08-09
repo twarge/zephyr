@@ -847,6 +847,7 @@ private struct ChannelRow: View {
                 Image(systemName: "lock.fill")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .help("Private channel")
             }
             if unreadCount > 0 && !subscription.muted {
                 CountBadge(count: unreadCount)
@@ -882,21 +883,24 @@ private struct SidebarTopicRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            if visibility == .followed {
-                Image(systemName: "plus.message.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.tint)
-            }
-            if TopicName.isResolved(topic.name) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.green)
-            }
             Text(TopicName.displayName(topic.name).isEmpty
                 ? "general chat" : TopicName.displayName(topic.name))
                 .font(.callout.weight(unreadCount > 0 ? .semibold : .regular))
                 .lineLimit(1)
             Spacer(minLength: 4)
+            // State icons trail, like the channel lock.
+            if visibility == .followed {
+                Image(systemName: "plus.message.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.tint)
+                    .help("Followed topic — new messages notify you")
+            }
+            if TopicName.isResolved(topic.name) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.green)
+                    .help("Resolved topic")
+            }
             if hasMention {
                 Text("@")
                     .font(.caption2.bold())
