@@ -742,6 +742,9 @@ struct MessageRow: View {
                 } else {
                     MessageContentView(
                         content: content, connection: store.connection)
+                        // Same menu over the text: selectable Text otherwise
+                        // substitutes the system edit menu on right-click.
+                        .contextMenu { messageMenu() }
                 }
                 if !message.reactions.isEmpty {
                     ReactionsRow(store: store, message: message)
@@ -852,6 +855,30 @@ struct MessageRow: View {
         // button vanishes under the pointer (flicker + missed clicks).
         .onHover { hovering = $0 }
         .contextMenu {
+            messageMenu()
+        }
+        // System translation UI, on-device (absent on platforms without
+        // the Translation framework).
+        .modifier(TranslationSheet(isPresented: $showTranslation, text: content.plainText))
+        .sheet(isPresented: $showMoveSheet) {
+            MoveTopicSheet(store: store, message: message)
+        }
+        .sheet(isPresented: $showReadReceipts) {
+            ReadReceiptsSheet(store: store, message: message)
+        }
+    }
+
+    /// The message context menu — one builder, attached both to the row
+    /// and to the selectable text subtree (whose system menu would
+    /// otherwise replace it).
+    @ViewBuilder
+    private func messageMenu() -> some View {
+        #if os(macOS)
+        // Falls back to quoting the whole message when nothing is selected.
+        Button("Reply Quoting Selection", systemImage: "text.quote") {
+            quoteAndReply(selectionOnly: true)
+        }
+        #endif
             Button("Reply Quoting Message", systemImage: "text.quote") {
                 quoteAndReply()
             }
@@ -892,16 +919,7 @@ struct MessageRow: View {
                     store.deleteMessage(message.id)
                 }
             }
-        }
-        // System translation UI, on-device (absent on platforms without
-        // the Translation framework).
-        .modifier(TranslationSheet(isPresented: $showTranslation, text: content.plainText))
-        .sheet(isPresented: $showMoveSheet) {
-            MoveTopicSheet(store: store, message: message)
-        }
-        .sheet(isPresented: $showReadReceipts) {
-            ReadReceiptsSheet(store: store, message: message)
-        }
+        
     }
 
     /// Zulip's quote-and-reply block, from the raw markdown:
@@ -909,9 +927,16 @@ struct MessageRow: View {
     ///   ```quote
     ///   …
     ///   ```
-    private func quoteAndReply() {
+    private func quoteAndReply(selectionOnly: Bool = false) {
+        // Read the selection before anything steals focus.
+        let selection = selectionOnly ? Platform.currentTextSelection() : nil
         Task {
-            let raw = await store.fetchRawContent(message.id) ?? content.plainText
+            let raw: String
+            if let selection {
+                raw = selection
+            } else {
+                raw = await store.fetchRawContent(message.id) ?? content.plainText
+            }
             let link = ConversationKey.permalink(to: message, in: store)
             let quote = """
                 @_**\(message.senderFullName)|\(message.senderId)** [said](\(link)):
