@@ -69,8 +69,8 @@ final class AvatarLoader {
     }
 }
 
-/// The realm's icon for the toolbar above the sidebar. Renders nothing
-/// until the image is in hand (no placeholder box for realms without one).
+/// The realm's icon for the toolbar above the sidebar, with the realm's
+/// initial as the stand-in while the image loads (or when there isn't one).
 struct RealmLogoView: View {
     let store: PerAccountStore
 
@@ -84,9 +84,16 @@ struct RealmLogoView: View {
                     .scaledToFill()
                     .frame(width: 20, height: 20)
                     .clipShape(RoundedRectangle(cornerRadius: 5))
-                    .help(store.realmName ?? store.connection.realmURL.host() ?? "")
+            } else {
+                let name = store.realmName ?? store.connection.realmURL.host() ?? "?"
+                Text(String(name.prefix(1)).uppercased())
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20, height: 20)
+                    .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
             }
         }
+        .help(store.realmName ?? store.connection.realmURL.host() ?? "")
         .task(id: store.accountId) {
             image = await AvatarLoader.shared.realmIcon(store: store)
         }

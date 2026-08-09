@@ -88,9 +88,11 @@ struct MainSplitView: View {
                 // The realm's logo rides the toolbar section above the
                 // sidebar; it disappears along with the sidebar when the
                 // window is too narrow (auto-collapse) or it's hidden.
+                // .navigation slots it beside the sidebar toggle, ahead of
+                // the greedy search field that would push it into overflow.
                 .toolbar {
                     if columnVisibility != .detailOnly {
-                        ToolbarItem(placement: .automatic) {
+                        ToolbarItem(placement: .navigation) {
                             RealmLogoView(store: store)
                         }
                     }
