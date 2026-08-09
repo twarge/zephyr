@@ -600,11 +600,10 @@ struct SidebarView: View {
     ) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.body)
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .frame(width: 18)
             Text(title)
-                .font(.body)
             Spacer(minLength: 4)
             if badge > 0 {
                 CountBadge(count: badge)
