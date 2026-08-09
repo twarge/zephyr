@@ -274,7 +274,6 @@ private struct ImageGalleryView: View {
                 MessageImageView(node: images[index], connection: connection, compact: true)
             }
         }
-        .frame(maxWidth: 480)
     }
 }
 
