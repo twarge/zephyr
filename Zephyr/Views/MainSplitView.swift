@@ -415,7 +415,7 @@ struct MainSplitView: View {
             // with a single server (Settings lives in the app menu); iOS
             // keeps it — it's the only road to Settings there.
             #if os(macOS)
-            if model.global.accounts.count > 1 {
+            if model.global.enabledAccounts.count > 1 {
                 ToolbarItem(placement: .automatic) {
                     ServerMenu(store: store, selectedAccount: $selectedAccount)
                         .popoverTip(PerWindowServersTip())
@@ -741,7 +741,7 @@ struct ServerMenu: View {
     var body: some View {
         Menu {
             ForEach(
-                Array(model.global.accounts.prefix(9).enumerated()), id: \.element.id
+                Array(model.global.enabledAccounts.prefix(9).enumerated()), id: \.element.id
             ) { index, account in
                 Button {
                     selectedAccount = account.id
@@ -755,7 +755,7 @@ struct ServerMenu: View {
                 .keyboardShortcut(
                     KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
             }
-            ForEach(model.global.accounts.dropFirst(9)) { account in
+            ForEach(model.global.enabledAccounts.dropFirst(9)) { account in
                 Button {
                     selectedAccount = account.id
                 } label: {

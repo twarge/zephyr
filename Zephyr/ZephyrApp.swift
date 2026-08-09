@@ -145,7 +145,7 @@ struct GoCommands: Commands {
                 .keyboardShortcut("o", modifiers: [.command, .shift])
             Divider()
             ForEach(
-                Array(model.global.accounts.prefix(9).enumerated()), id: \.element.id
+                Array(model.global.enabledAccounts.prefix(9).enumerated()), id: \.element.id
             ) { index, account in
                 Button(account.realmName ?? account.realmURL.host() ?? "Server \(index + 1)") {
                     windowAccount?.wrappedValue = account.id
@@ -154,7 +154,7 @@ struct GoCommands: Commands {
                     KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
                 .disabled(windowAccount == nil)
             }
-            ForEach(model.global.accounts.dropFirst(9)) { account in
+            ForEach(model.global.enabledAccounts.dropFirst(9)) { account in
                 Button(account.realmName ?? account.realmURL.host() ?? "Server") {
                     windowAccount?.wrappedValue = account.id
                 }

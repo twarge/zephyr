@@ -92,7 +92,7 @@ struct ConversationEntityQuery: EntityQuery, EntityStringQuery {
     static func candidates(matching text: String?) -> [ConversationEntity] {
         guard let model = AppModel.shared else { return [] }
         var out: [ConversationEntity] = []
-        for account in model.global.accounts {
+        for account in model.global.enabledAccounts {
             guard let store = model.global.stores[account.id] else { continue }
             let server = store.realmName ?? account.realmURL.host() ?? "server"
             for conversation in store.conversations.conversations.prefix(30) {
@@ -133,7 +133,7 @@ struct AccountEntity: AppEntity {
 struct AccountEntityQuery: EntityQuery {
     @MainActor
     private func all() -> [AccountEntity] {
-        (AppModel.shared?.global.accounts ?? []).map {
+        (AppModel.shared?.global.enabledAccounts ?? []).map {
             AccountEntity(id: $0.id, name: $0.realmName ?? $0.realmURL.host() ?? "Server")
         }
     }

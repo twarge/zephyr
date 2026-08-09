@@ -147,7 +147,7 @@ final class AppModel {
         connectivity = ConnectivityMonitor { [weak self] in
             self?.networkRestored()
         }
-        let accounts = global.accounts
+        let accounts = global.enabledAccounts
         guard !accounts.isEmpty else {
             phase = .needsAccount
             return
@@ -228,7 +228,7 @@ final class AppModel {
         Task { [weak self] in
             defer { self?.reconnecting.remove(accountId) }
             while let self, !self.global.hasLiveStore(accountId),
-                  self.global.accounts.contains(where: { $0.id == accountId }) {
+                  self.global.enabledAccounts.contains(where: { $0.id == accountId }) {
                 try? await Task.sleep(for: .seconds(15))
                 if (try? await self.global.perAccountStore(for: accountId)) != nil {
                     await self.global.stores[accountId]?.seedConversations()
@@ -254,7 +254,7 @@ final class AppModel {
     }
 
     func retry() async {
-        guard let account = global.accounts.first else {
+        guard let account = global.enabledAccounts.first else {
             phase = .needsAccount
             return
         }
@@ -272,7 +272,7 @@ final class AppModel {
         // recovering state and re-flushes; without this they'd sleep out
         // the rest of their retry backoff first.
         global.kickEventStreams()
-        for account in global.accounts {
+        for account in global.enabledAccounts {
             if global.hasLiveStore(account.id) {
                 global.stores[account.id]?.flushPending()
             } else {
@@ -338,7 +338,7 @@ final class AppModel {
         try? await global.removeAccount(accountId)
         if global.accounts.isEmpty {
             phase = .needsAccount
-        } else if defaultAccountId == accountId, let next = global.accounts.first {
+        } else if defaultAccountId == accountId, let next = global.enabledAccounts.first {
             phase = .ready(next.id)
         }
     }

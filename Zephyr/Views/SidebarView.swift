@@ -435,8 +435,8 @@ struct SidebarView: View {
         .onChange(of: collapsedSections) {
             AppStateStore.setCollapsedSections(collapsedSections, for: store.accountId)
         }
-        .onChange(of: model.global.accounts.count, initial: true) {
-            PerWindowServersTip.hasMultipleAccounts = model.global.accounts.count > 1
+        .onChange(of: model.global.enabledAccounts.count, initial: true) {
+            PerWindowServersTip.hasMultipleAccounts = model.global.enabledAccounts.count > 1
         }
     }
 

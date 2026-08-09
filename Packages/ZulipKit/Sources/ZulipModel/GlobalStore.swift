@@ -19,6 +19,12 @@ extension Duration {
 public final class GlobalStore: UpdateMachineDelegate {
     public private(set) var accounts: [Account]
     public private(set) var stores: [Account.ID: PerAccountStore] = [:]
+
+    /// The accounts that connect and appear in menus and windows —
+    /// disabled ones keep their credentials but are otherwise inert.
+    public var enabledAccounts: [Account] {
+        accounts.filter(\.isEnabled)
+    }
     /// Bumped whenever a store is created or replaced, so UI can re-resolve.
     public private(set) var storeGeneration = 0
 
@@ -99,6 +105,29 @@ public final class GlobalStore: UpdateMachineDelegate {
         try? accountsStore.save(accounts)
     }
 
+    /// Disables (disconnects and quiesces, credentials kept) or re-enables
+    /// an account. Re-enabling is lazy: windows and menus load the store on
+    /// first use, like launch does.
+    public func setAccountEnabled(_ accountId: Account.ID, enabled: Bool) {
+        guard let index = accounts.firstIndex(where: { $0.id == accountId }),
+              accounts[index].isEnabled != enabled else { return }
+        accounts[index].isDisabled = enabled ? nil : true
+        try? accountsStore.save(accounts)
+        if !enabled {
+            machines.removeValue(forKey: accountId)?.stop()
+            loadTasks[accountId]?.cancel()
+            loadTasks[accountId] = nil
+            provisionalStores.remove(accountId)
+            if let store = stores.removeValue(forKey: accountId) {
+                store.persistMessageCache(synchronously: true)
+                Task {
+                    try? await store.connection.deleteEventQueue(queueId: store.queueId)
+                }
+            }
+        }
+        storeGeneration += 1
+    }
+
     public func removeAccount(_ accountId: Account.ID) async throws {
         machines.removeValue(forKey: accountId)?.stop()
         if let store = stores.removeValue(forKey: accountId) {
@@ -166,6 +195,7 @@ public final class GlobalStore: UpdateMachineDelegate {
     public func installCachedStore(for accountId: Account.ID) async -> Bool {
         guard stores[accountId] == nil,
               let account = accounts.first(where: { $0.id == accountId }),
+              account.isEnabled,
               let apiKey = try? credentials.apiKey(
                 realmURL: account.realmURL, email: account.email),
               let url = snapshotCacheURL(for: accountId)
@@ -200,7 +230,8 @@ public final class GlobalStore: UpdateMachineDelegate {
     }
 
     private func loadStore(accountId: Account.ID) async throws -> PerAccountStore {
-        guard let account = accounts.first(where: { $0.id == accountId }) else {
+        guard let account = accounts.first(where: { $0.id == accountId }),
+              account.isEnabled else {
             throw ModelError.accountNotFound
         }
         guard let apiKey = try credentials.apiKey(realmURL: account.realmURL, email: account.email) else {

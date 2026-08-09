@@ -119,10 +119,29 @@ private struct AccountsSettings: View {
             List {
                 ForEach(
                     Array(model.global.accounts.enumerated()), id: \.element.id
-                ) { index, account in
+                ) { _, account in
                     HStack(spacing: 10) {
-                        if index < 9 {
-                            Text("⌘\(index + 1)")
+                        // Unchecked = disconnected but signed in: no events,
+                        // windows, menus, or notifications; the login stays.
+                        Toggle(
+                            "Enabled",
+                            isOn: Binding(
+                                get: { account.isEnabled },
+                                set: { model.global.setAccountEnabled(account.id, enabled: $0) }))
+                            .labelsHidden()
+                            #if os(macOS)
+                            .toggleStyle(.checkbox)
+                            #endif
+                            .help(
+                                account.isEnabled
+                                    ? "Disconnect this server (keeps the login)"
+                                    : "Reconnect this server")
+                        // ⌘N follows the enabled list (the Go menu's order);
+                        // disabled accounts have no shortcut.
+                        let enabledIndex = model.global.enabledAccounts
+                            .firstIndex { $0.id == account.id }
+                        if let enabledIndex, enabledIndex < 9 {
+                            Text("⌘\(enabledIndex + 1)")
                                 .font(.caption.weight(.medium))
                                 .monospacedDigit()
                                 .foregroundStyle(.secondary)
@@ -137,6 +156,7 @@ private struct AccountsSettings: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                        .opacity(account.isEnabled ? 1 : 0.5)
                         Spacer()
                         Button("Sign Out") {
                             Task { await model.signOut(accountId: account.id) }

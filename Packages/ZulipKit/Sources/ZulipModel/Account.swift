@@ -37,6 +37,12 @@ public struct Account: Codable, Sendable, Hashable, Identifiable {
     public var realmName: String?
     public var zulipVersion: String?
     public var zulipFeatureLevel: Int?
+    /// Disabled: credentials kept, but no connection, windows, or menus.
+    /// Optional so account lists saved before this field existed decode
+    /// (nil = enabled).
+    public var isDisabled: Bool?
+
+    public var isEnabled: Bool { isDisabled != true }
 
     public init(
         id: UUID = UUID(),

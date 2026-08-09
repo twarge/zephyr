@@ -55,7 +55,7 @@ struct AccountWindowView: View {
         #endif
         .onAppear {
             guard accountId == nil else { return }
-            let accounts = model.global.accounts
+            let accounts = model.global.enabledAccounts
             let valid = { (id: Account.ID?) in
                 accounts.first { $0.id == id }?.id
             }
@@ -73,11 +73,11 @@ struct AccountWindowView: View {
                 }
             }
         }
-        // A signed-out account falls back to whatever is left.
-        .onChange(of: model.global.accounts.map(\.id)) {
+        // A signed-out or disabled account falls back to whatever is left.
+        .onChange(of: model.global.enabledAccounts.map(\.id)) {
             if let accountId,
-               !model.global.accounts.contains(where: { $0.id == accountId }) {
-                self.accountId = model.global.accounts.first?.id
+               !model.global.enabledAccounts.contains(where: { $0.id == accountId }) {
+                self.accountId = model.global.enabledAccounts.first?.id
             }
         }
         // A notification click for another server hops this window (the
