@@ -607,8 +607,10 @@ struct SidebarView: View {
             Label {
                 Text(title)
             } icon: {
+                // Unstyled: the sidebar tints Label icons with the accent
+                // color itself, and dims them when the window is inactive
+                // (an explicit .tint would stay lit).
                 Image(systemName: icon)
-                    .foregroundStyle(.tint)
             }
             Spacer(minLength: 4)
             if badge > 0 {
