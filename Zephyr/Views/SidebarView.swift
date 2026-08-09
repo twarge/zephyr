@@ -593,11 +593,12 @@ struct SidebarView: View {
         _ title: String, icon: String, tag: Destination, badge: Int
     ) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.callout)
-                .foregroundStyle(.tint)
-                .frame(width: 18)
-            Text(title)
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: icon)
+                    .foregroundStyle(.tint)
+            }
             Spacer(minLength: 4)
             if badge > 0 {
                 CountBadge(count: badge)
@@ -683,18 +684,18 @@ private struct DraftRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: "pencil.line")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 18)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.callout)
-                    .lineLimit(1)
-                Text(text)
-                    .font(.caption)
+            Label {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .lineLimit(1)
+                    Text(text)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            } icon: {
+                Image(systemName: "pencil.line")
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
             Spacer(minLength: 0)
         }
@@ -710,10 +711,7 @@ private struct SidebarExpanderRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: "ellipsis.circle")
-                    .font(.caption)
-                Text(title)
-                    .font(.callout)
+                Label(title, systemImage: "ellipsis.circle")
                 Spacer(minLength: 0)
             }
             .foregroundStyle(.secondary)
@@ -736,11 +734,13 @@ private struct UserDirectMessageRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            PresenceDot(state: store.presenceState(of: user.userId))
-            Text(title)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            Label {
+                Text(title)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } icon: {
+                PresenceDot(state: store.presenceState(of: user.userId))
+            }
             Spacer(minLength: 4)
         }
         .padding(.vertical, 1)
@@ -770,14 +770,19 @@ private struct DirectMessageRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            PresenceDot(state: store.presenceState(of: participantIds.first ?? 0))
-            Text(conversation.key.displayTitle(in: store))
-                .font(.body.weight(unreadCount > 0 ? .semibold : .regular))
-                .lineLimit(1)
-            if isBot {
-                Image(systemName: "cpu")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+            Label {
+                HStack(spacing: 6) {
+                    Text(conversation.key.displayTitle(in: store))
+                        .fontWeight(unreadCount > 0 ? .semibold : .regular)
+                        .lineLimit(1)
+                    if isBot {
+                        Image(systemName: "cpu")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            } icon: {
+                PresenceDot(state: store.presenceState(of: participantIds.first ?? 0))
             }
             Spacer(minLength: 4)
             if hasMention {
@@ -808,25 +813,33 @@ private struct ChannelRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            if let onToggle {
-                Button(action: onToggle) {
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .contentShape(.rect)
+            Label {
+                HStack(spacing: 6) {
+                    Text(subscription.name)
+                        .fontWeight(unreadCount > 0 && !subscription.muted ? .semibold : .regular)
+                        .lineLimit(1)
+                    if subscription.muted {
+                        Image(systemName: "bell.slash.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
-                .buttonStyle(.plain)
-                .frame(width: 12)
-                .help(isExpanded ? "Hide topics" : "Show topics")
-            }
-            Text(subscription.name)
-                .font(.body.weight(unreadCount > 0 && !subscription.muted ? .semibold : .regular))
-                .lineLimit(1)
-            if subscription.muted {
-                Image(systemName: "bell.slash.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+            } icon: {
+                if let onToggle {
+                    Button(action: onToggle) {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isExpanded ? "Hide topics" : "Show topics")
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .hidden()
+                }
             }
             Spacer(minLength: 4)
             // Private-channel lock sits trailing, inside the unread badge.
