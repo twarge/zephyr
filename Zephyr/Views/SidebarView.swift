@@ -115,43 +115,76 @@ struct SidebarView: View {
     /// Everyone else: active human users with no 1:1 conversation yet, below
     /// the recency-ordered conversations. Selecting one opens an empty
     /// transcript ready to compose.
-    private var usersWithoutConversation: [User] {
-        let existingKeys = Set(
-            store.conversations.conversations.compactMap { conversation -> ConversationKey? in
-                if case .dm = conversation.key { return conversation.key }
-                return nil
-            })
-        let users = store.users.values
-            .filter { $0.isActive != false && !$0.isBot }
-            .filter {
-                !existingKeys.contains(
-                    Unreads.dmKey(participantIds: [$0.userId], selfUserId: store.selfUserId))
+    /// The DM people directory, in one pass. On a 60k-user realm the
+    /// previous three-property version filtered the whole user list
+    /// (building a string conversation key per user) and sorted it all
+    /// with ICU collation up to four times per body evaluation — the
+    /// seconds-long main-thread stalls that made the whole app feel slow.
+    /// Membership now checks an Int set, only the visible slice is
+    /// sorted, and ordering compares precomputed casefolded keys.
+    private struct Directory {
+        var visible: [User] = []
+        var hiddenCount = 0
+        var isEmpty: Bool { visible.isEmpty && hiddenCount == 0 }
+    }
+
+    private func makeDirectory() -> Directory {
+        // Existing 1:1 DM partners (and the self-DM), as plain ids.
+        var dmPartnerIds = Set<Int>()
+        var hasSelfDm = false
+        for conversation in store.conversations.conversations {
+            guard case .dm(let joined) = conversation.key else { continue }
+            let ids = joined.split(separator: ",").compactMap { Int($0) }
+            if ids.isEmpty {
+                hasSelfDm = true
+            } else if ids.count == 1 {
+                dmPartnerIds.insert(ids[0])
             }
-            .filter { user in
-                matchesFilter(
-                    user.userId == store.selfUserId ? "Yourself" : user.fullName)
+        }
+        let selfUserId = store.selfUserId
+        let candidates = store.users.values.filter { user in
+            guard user.isActive != false, !user.isBot else { return false }
+            if user.userId == selfUserId {
+                guard !hasSelfDm else { return false }
+            } else if dmPartnerIds.contains(user.userId) {
+                return false
             }
+            return matchesFilter(user.userId == selfUserId ? "Yourself" : user.fullName)
+        }
+        let shown = isFiltering || showOfflineUsers
+            ? candidates
+            : candidates.filter { store.presenceState(of: $0.userId) != .offline }
+        return Directory(
+            visible: sortedForDirectory(shown),
+            hiddenCount: candidates.count - shown.count)
+    }
+
+    private func sortedForDirectory(_ users: [User]) -> [User] {
+        let selfUserId = store.selfUserId
         // Yourself pins first (a self-DM is notes-to-self, like the web app).
-        func selfFirst(_ a: User, _ b: User) -> Bool? {
-            if a.userId == store.selfUserId { return true }
-            if b.userId == store.selfUserId { return false }
-            return nil
-        }
         if sortByActivity {
-            return users.sorted {
-                if let pinned = selfFirst($0, $1) { return pinned }
-                let (a, b) = (
-                    store.presence.lastSeen(of: $0.userId) ?? .distantPast,
-                    store.presence.lastSeen(of: $1.userId) ?? .distantPast)
-                if a != b { return a > b }
-                return $0.fullName.localizedCaseInsensitiveCompare($1.fullName)
-                    == .orderedAscending
+            return users
+                .map { user in
+                    (user: user,
+                     seen: store.presence.lastSeen(of: user.userId) ?? .distantPast,
+                     key: user.fullName.lowercased())
+                }
+                .sorted { a, b in
+                    if a.user.userId == selfUserId { return true }
+                    if b.user.userId == selfUserId { return false }
+                    if a.seen != b.seen { return a.seen > b.seen }
+                    return a.key < b.key
+                }
+                .map(\.user)
+        }
+        return users
+            .map { (user: $0, key: $0.fullName.lowercased()) }
+            .sorted { a, b in
+                if a.user.userId == selfUserId { return true }
+                if b.user.userId == selfUserId { return false }
+                return a.key < b.key
             }
-        }
-        return users.sorted {
-            if let pinned = selfFirst($0, $1) { return pinned }
-            return $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending
-        }
+            .map(\.user)
     }
 
     /// Unsent compose text, one row per conversation: typing and moving away
@@ -188,16 +221,6 @@ struct SidebarView: View {
 
     /// The no-conversation directory splits at presence: offline users hide
     /// behind "More conversations…" (filtering searches everyone).
-    private var visibleDirectoryUsers: [User] {
-        if isFiltering || showOfflineUsers { return usersWithoutConversation }
-        return usersWithoutConversation.filter {
-            store.presenceState(of: $0.userId) != .offline
-        }
-    }
-
-    private var hiddenDirectoryCount: Int {
-        usersWithoutConversation.count - visibleDirectoryUsers.count
-    }
 
     private var sortedSubscriptions: [Subscription] {
         PerfLog.time("sortedSubscriptions", over: 4) {
@@ -301,27 +324,29 @@ struct SidebarView: View {
                 }
             }
             Section(isExpanded: expansion("dms")) {
+                // Computed once per body pass — every row and the expander
+                // share it.
+                let directory = makeDirectory()
                 ForEach(dmRows) { conversation in
                     DirectMessageRow(store: store, conversation: conversation)
                         .tag(Destination.conversation(conversation.key))
                         .simultaneousGesture(
                             detachGesture(.conversation(conversation.key)))
                 }
-                ForEach(visibleDirectoryUsers) { user in
+                ForEach(directory.visible) { user in
                     let key = Unreads.dmKey(
                         participantIds: [user.userId], selfUserId: store.selfUserId)
                     UserDirectMessageRow(store: store, user: user)
                         .tag(Destination.conversation(key))
                         .simultaneousGesture(detachGesture(.conversation(key)))
                 }
-                if hiddenDirectoryCount > 0 {
+                if directory.hiddenCount > 0 {
                     SidebarExpanderRow(
-                        title: "More conversations… (\(hiddenDirectoryCount))"
+                        title: "More conversations… (\(directory.hiddenCount))"
                     ) {
                         showOfflineUsers = true
                     }
-                } else if showOfflineUsers && !isFiltering
-                    && !usersWithoutConversation.isEmpty {
+                } else if showOfflineUsers && !isFiltering && !directory.isEmpty {
                     SidebarExpanderRow(title: "Fewer conversations") {
                         showOfflineUsers = false
                     }
