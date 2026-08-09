@@ -23,7 +23,6 @@ struct SidebarView: View {
 
     @State private var collapsedSections: Set<String>
     @State private var expandedChannels: Set<Int>
-    @State private var showSettings = false
     @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
     @State private var showOfflineUsers = false
     @State private var expandedInactiveSections: Set<String> = []
@@ -382,75 +381,11 @@ struct SidebarView: View {
         .onChange(of: collapsedSections) {
             AppStateStore.setCollapsedSections(collapsedSections, for: store.accountId)
         }
-        // One menu covers it all: the window's server (label), switching
-        // servers (⌘1…⌘9), and account management.
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                serverMenu
-                    .popoverTip(PerWindowServersTip())
-            }
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .environment(model)
-        }
         .onChange(of: model.global.accounts.count, initial: true) {
             PerWindowServersTip.hasMultipleAccounts = model.global.accounts.count > 1
         }
     }
 
-    private var serverMenu: some View {
-        Menu {
-            ForEach(
-                Array(model.global.accounts.prefix(9).enumerated()), id: \.element.id
-            ) { index, account in
-                Button {
-                    selectedAccount = account.id
-                } label: {
-                    if account.id == store.accountId {
-                        Label(accountLabel(account), systemImage: "checkmark")
-                    } else {
-                        Text(accountLabel(account))
-                    }
-                }
-                .keyboardShortcut(
-                    KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
-            }
-            ForEach(model.global.accounts.dropFirst(9)) { account in
-                Button {
-                    selectedAccount = account.id
-                } label: {
-                    if account.id == store.accountId {
-                        Label(accountLabel(account), systemImage: "checkmark")
-                    } else {
-                        Text(accountLabel(account))
-                    }
-                }
-            }
-            Divider()
-            #if os(macOS)
-            SettingsLink {
-                Text("Accounts & Settings…")
-            }
-            #else
-            Button("Accounts & Settings…") {
-                showSettings = true
-            }
-            #endif
-            Button("Sign Out of This Server…") {
-                Task { await model.signOut(accountId: store.accountId) }
-            }
-        } label: {
-            Text(store.realmName
-                ?? store.connection.realmURL.host() ?? "Server")
-                .font(.callout.weight(.medium))
-        }
-        .help("Servers and accounts (⌘1–⌘9 switch this window)")
-    }
-
-    private func accountLabel(_ account: Account) -> String {
-        "\(account.realmName ?? account.realmURL.host() ?? "?") — \(account.email)"
-    }
 
     private static var searchPlacement: SearchFieldPlacement {
         // .automatic: the window toolbar on macOS (Mail-style), the
