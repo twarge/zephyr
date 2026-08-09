@@ -102,7 +102,7 @@ private struct PollView: View {
             }
         }
         .padding(10)
-        .frame(maxWidth: 420, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
     }
 
@@ -224,7 +224,7 @@ private struct TodoListView: View {
             }
         }
         .padding(10)
-        .frame(maxWidth: 420, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
     }
 
