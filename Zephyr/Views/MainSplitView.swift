@@ -34,6 +34,9 @@ struct MainSplitView: View {
     @State private var showOpenQuickly = false
     @State private var dropTargeted = false
     @State private var columnVisibility = NavigationSplitViewVisibility.automatic
+    /// Live sidebar column width — gates the realm logo, which hides
+    /// entirely when it wouldn't fit (never the overflow menu).
+    @State private var sidebarWidth: CGFloat = 300
     /// True while the narrow-window watcher hid the sidebar (so growing
     /// the window restores it; a user's manual collapse is left alone).
     @State private var autoCollapsedSidebar = false
@@ -86,19 +89,32 @@ struct MainSplitView: View {
                 startDirectMessage: { newConversation = .directMessage(initialUsers: []) })
                 .navigationSplitViewColumnWidth(min: 156, ideal: 156, max: 400)
                 #if os(macOS)
-                // The realm's logo rides the toolbar section above the
-                // sidebar (items declared in the sidebar column land there
-                // with .automatic; .navigation would put them in the
-                // content section). It disappears along with the sidebar
-                // when the window is too narrow or the sidebar is hidden,
-                // and the hidden shared background drops the glass lozenge
-                // so the logo sits directly on the toolbar.
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.width
+                } action: { width in
+                    sidebarWidth = width
+                }
+                // The realm's logo sits flush against the window controls:
+                // the system sidebar toggle (which would otherwise come
+                // first) is removed and re-added after the logo. When the
+                // sidebar is too narrow the logo hides outright rather
+                // than dropping into the toolbar's overflow menu, and the
+                // hidden shared background drops the glass lozenge.
+                .toolbar(removing: .sidebarToggle)
                 .toolbar {
                     if columnVisibility != .detailOnly {
-                        ToolbarItem(placement: .automatic) {
-                            RealmLogoView(store: store)
+                        if sidebarWidth >= 210 {
+                            ToolbarItem(placement: .automatic) {
+                                RealmLogoView(store: store)
+                            }
+                            .sharedBackgroundVisibility(.hidden)
                         }
-                        .sharedBackgroundVisibility(.hidden)
+                        ToolbarItem(placement: .automatic) {
+                            Button("Hide Sidebar", systemImage: "sidebar.leading") {
+                                withAnimation { columnVisibility = .detailOnly }
+                            }
+                            .help("Hide Sidebar")
+                        }
                     }
                 }
                 #endif
