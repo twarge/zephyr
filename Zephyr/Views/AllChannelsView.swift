@@ -31,7 +31,16 @@ struct AllChannelsView: View {
                 List(filtered) { channel in
                     ChannelBrowserRow(store: store, channel: channel, selection: $selection)
                 }
-                .searchable(text: $filter, prompt: "Filter channels")
+                // A plain filter field, NOT .searchable: the sidebar's
+                // search already owns the window toolbar's search slot, and
+                // a second toolbar search item crashes NSToolbar (duplicate
+                // com.apple.SwiftUI.search identifier).
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    TextField("Filter channels", text: $filter)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(10)
+                        .background(.bar)
+                }
             } else if let errorText {
                 ContentUnavailableView(
                     "Couldn't Load Channels", systemImage: "exclamationmark.triangle",
