@@ -266,6 +266,7 @@ struct ComposeBar: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 Button {
+                    LongFormComposeTip().invalidate(reason: .actionPerformed)
                     withAnimation(.snappy) {
                         expanded.toggle()
                     }

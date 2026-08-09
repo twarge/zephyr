@@ -12,7 +12,8 @@ struct ZephyrApp: App {
     @AppStorage("textSizeStep") private var textSizeStep = 0
 
     init() {
-        try? Tips.configure()
+        // One tip per week at most, app-wide: discovery without fatigue.
+        try? Tips.configure([.displayFrequency(.weekly)])
     }
 
     var body: some Scene {

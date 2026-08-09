@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import ZulipAPI
 import ZulipContent
 import ZulipModel
@@ -47,6 +48,7 @@ struct SidebarView: View {
     /// Double-clicking a sidebar entry opens it standalone in a new window.
     private func detachGesture(_ destination: Destination) -> some Gesture {
         TapGesture(count: 2).onEnded {
+            DetachWindowTip().invalidate(reason: .actionPerformed)
             openWindow(
                 value: DetachedWindow(accountId: store.accountId, destination: destination))
         }
@@ -227,6 +229,7 @@ struct SidebarView: View {
                     viewRow(
                         "Recent", icon: "clock", tag: .recentConversations,
                         badge: 0)
+                        .popoverTip(DetachWindowTip())
                     viewRow(
                         "Combined", icon: "line.3.horizontal", tag: .combinedFeed,
                         badge: store.unreads.totalCount)
@@ -382,11 +385,15 @@ struct SidebarView: View {
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 serverMenu
+                    .popoverTip(PerWindowServersTip())
             }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .environment(model)
+        }
+        .onChange(of: model.global.accounts.count, initial: true) {
+            PerWindowServersTip.hasMultipleAccounts = model.global.accounts.count > 1
         }
     }
 
@@ -959,6 +966,7 @@ private struct SidebarTopicRow: View {
                     .font(.caption2)
                     .foregroundStyle(.tint)
                     .help("Followed topic — new messages notify you")
+                    .popoverTip(TopicStateIconsTip())
             }
             if TopicName.isResolved(topic.name) {
                 Image(systemName: "checkmark.circle.fill")

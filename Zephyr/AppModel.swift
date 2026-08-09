@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftUI
+import TipKit
 import ZulipAPI
 import ZulipModel
 
@@ -140,6 +141,7 @@ final class AppModel {
 
     func start() async {
         guard case .launching = phase else { return }
+        DetachWindowTip.appOpened.sendDonation()
         connectivity = ConnectivityMonitor { [weak self] in
             self?.networkRestored()
         }

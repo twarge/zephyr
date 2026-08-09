@@ -86,6 +86,7 @@ struct MainSplitView: View {
                 .navigationSplitViewColumnWidth(min: 156, ideal: 156, max: 400)
         } detail: {
             detailContent
+                .popoverTip(QuickLookNavigationTip())
                 // Files dropped anywhere in the conversation area upload via
                 // the visible compose bar (nil when this view has none —
                 // the drop is refused).
@@ -206,6 +207,7 @@ struct MainSplitView: View {
             guard keys.hostWindow?.isKeyWindow != false else { return }
             #endif
             model.pendingOpenQuickly = false
+            OpenQuicklyTip().invalidate(reason: .actionPerformed)
             showOpenQuickly = true
         }
         // ⌘[ / ⌘]: this window's navigation history.

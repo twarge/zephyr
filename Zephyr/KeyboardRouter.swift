@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import ZulipAPI
 import ZulipModel
 #if canImport(AppKit)
@@ -62,6 +63,7 @@ final class KeyboardRouter {
     func selectMedia(_ id: String, quickLook: @escaping () -> Void) {
         selectedMediaId = id
         selectedMediaQuickLook = quickLook
+        QuickLookNavigationTip.imageSelected.sendDonation()
         blurCompose?()
         blurSearch?()
     }

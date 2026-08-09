@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 #if canImport(Translation)
 import Translation
 #endif
@@ -297,6 +298,11 @@ struct MessageFeedList: View {
         }
         .environment(quickLook)
         .quickLookPreview(Bindable(quickLook).selection, in: quickLook.items)
+        .onChange(of: quickLook.selection) { _, selection in
+            if selection != nil {
+                QuickLookNavigationTip().invalidate(reason: .actionPerformed)
+            }
+        }
         .onAppear {
             keys.activeFeed = model
             quickLook.orderedNodes = { orderedImageNodes() }
