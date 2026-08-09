@@ -541,11 +541,13 @@ func mediaDragProvider(path: String, connection: ApiConnection) -> NSItemProvide
     provider.registerFileRepresentation(
         for: contentType, visibility: .all
     ) { completion in
-        Task {
+        // NSItemProvider completion blocks are callable from any thread.
+        nonisolated(unsafe) let complete = completion
+        Task.detached {
             if let url = await downloadMediaFile(path: path, connection: connection) {
-                completion(url, false, nil)
+                complete(url, false, nil)
             } else {
-                completion(nil, false, CocoaError(.fileNoSuchFile))
+                complete(nil, false, CocoaError(.fileNoSuchFile))
             }
         }
         return nil
