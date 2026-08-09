@@ -608,9 +608,16 @@ private struct ConversationHeaderRow: View {
             onTap?(conversationKey)
         } label: {
             HStack(spacing: 7) {
-                Image(systemName: glyph)
-                    .font(.body.weight(.bold))
-                    .foregroundStyle(streamId == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(channelColor))
+                // The # (or lock/globe) marks the channel — shown only when
+                // the channel is part of the label. A topic-only header in
+                // a channel feed shouldn't wear a channel glyph.
+                if includeChannel || streamId == nil {
+                    Image(systemName: glyph)
+                        .font(.body.weight(.bold))
+                        .foregroundStyle(
+                            streamId == nil
+                                ? AnyShapeStyle(.secondary) : AnyShapeStyle(channelColor))
+                }
                 if isResolved {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
