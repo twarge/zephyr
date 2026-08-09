@@ -595,7 +595,7 @@ struct SidebarView: View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.tint)
                 .frame(width: 18)
             Text(title)
             Spacer(minLength: 4)
