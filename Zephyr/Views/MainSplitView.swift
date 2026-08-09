@@ -37,8 +37,14 @@ struct MainSplitView: View {
     /// Live sidebar column width — gates the realm logo, which hides
     /// entirely when it wouldn't fit (never the overflow menu).
     @State private var sidebarWidth: CGFloat = 300
-    /// The iOS sidebar gear's Settings sheet.
+    /// The iOS toolbar gear's Settings sheet.
     @State private var showSettingsSheet = false
+
+    /// Whether RealmLogoView will render an actual image (uploaded logo
+    /// or realm icon) rather than the initial-letter stand-in.
+    private var hasRealmImage: Bool {
+        store.realmLogoPath(dark: false) != nil || store.realmIconUrl != nil
+    }
     /// True while the narrow-window watcher hid the sidebar (so growing
     /// the window restores it; a user's manual collapse is left alone).
     @State private var autoCollapsedSidebar = false
@@ -96,25 +102,17 @@ struct MainSplitView: View {
                 // The iPad's system sidebars (Mail, Notes) run ~320pt;
                 // the macOS-tuned 156 reads half-width there.
                 .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
-                // A real sidebar navigation bar (title, logo, settings,
-                // compose): the iPadOS window controls dock into this row —
-                // without it they float over a bare strip.
-                .navigationTitle(store.realmName ?? "Zephyr")
+                // A real sidebar navigation bar: the iPadOS window controls
+                // dock into this row — without it they float over a bare
+                // strip. The realm's logo fills the bar (no glass lozenge,
+                // no redundant name when an image will render).
+                .navigationTitle(
+                    hasRealmImage ? "" : (store.realmName ?? "Zephyr"))
                 .toolbar {
-                    // The realm's logo, like the macOS sidebar toolbar.
                     ToolbarItem(placement: .topBarLeading) {
-                        RealmLogoView(store: store)
+                        RealmLogoView(store: store, height: 30)
                     }
-                    ToolbarItem(placement: .primaryAction) {
-                        Button("Settings", systemImage: "gear") {
-                            showSettingsSheet = true
-                        }
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Button("New Conversation", systemImage: "square.and.pencil") {
-                            model.pendingNewConversation = true
-                        }
-                    }
+                    .sharedBackgroundVisibility(.hidden)
                 }
                 .sheet(isPresented: $showSettingsSheet) {
                     SettingsView()
@@ -453,13 +451,25 @@ struct MainSplitView: View {
                 }
             }
             // The server menu shows only with multiple servers — Settings
-            // lives in the app menu on macOS and the sidebar gear on iOS.
+            // lives in the app menu on macOS and the toolbar gear on iOS.
             if model.global.enabledAccounts.count > 1 {
                 ToolbarItem(placement: .automatic) {
                     ServerMenu(store: store, selectedAccount: $selectedAccount)
                         .popoverTip(PerWindowServersTip())
                 }
             }
+            #if !os(macOS)
+            ToolbarItem(placement: .primaryAction) {
+                Button("Settings", systemImage: "gear") {
+                    showSettingsSheet = true
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button("New Conversation", systemImage: "square.and.pencil") {
+                    model.pendingNewConversation = true
+                }
+            }
+            #endif
             if store.isRecoveringEventStream {
                 ToolbarItem(placement: .automatic) {
                     // A broken chain link (SF Symbols has none): two

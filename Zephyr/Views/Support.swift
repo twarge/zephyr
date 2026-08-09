@@ -88,6 +88,9 @@ final class AvatarLoader {
 /// icon, else the realm's initial while loading.
 struct RealmLogoView: View {
     let store: PerAccountStore
+    /// The bar's available content height (macOS toolbars are shorter
+    /// than iPad navigation bars); width scales with it.
+    var height: CGFloat = 20
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var logo: PlatformImage?
@@ -99,21 +102,23 @@ struct RealmLogoView: View {
                 Image(platform: logo)
                     .resizable()
                     .scaledToFit()
-                    .frame(height: 20)
-                    .frame(maxWidth: 150, alignment: .leading)
+                    .frame(height: height)
+                    .frame(maxWidth: height * 7.5, alignment: .leading)
             } else if let icon {
                 Image(platform: icon)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 20, height: 20)
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                    .frame(width: height, height: height)
+                    .clipShape(RoundedRectangle(cornerRadius: height / 4))
             } else {
                 let name = store.realmName ?? store.connection.realmURL.host() ?? "?"
                 Text(String(name.prefix(1)).uppercased())
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 20, height: 20)
-                    .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
+                    .frame(width: height, height: height)
+                    .background(
+                        .quaternary.opacity(0.6),
+                        in: RoundedRectangle(cornerRadius: height / 4))
             }
         }
         .help(store.realmName ?? store.connection.realmURL.host() ?? "")
