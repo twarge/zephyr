@@ -5,6 +5,7 @@ import os
 import QuickLook
 import SwiftUI
 import Synchronization
+import UniformTypeIdentifiers
 import ZulipAPI
 import ZulipContent
 import ZulipMath
@@ -499,8 +500,8 @@ private struct MediaAttachmentChip: View {
         }
         #endif
         .quickLookPreview($quickLookURL)
-        // Drag out: the receiver gets the file.
-        .draggable(MediaDragItem(path: path, connection: connection))
+        // Drag out: the receiver gets the file, real name intact.
+        .onDrag { mediaDragProvider(path: path, connection: connection) }
     }
 
     private func download() async -> URL? {
@@ -526,21 +527,30 @@ func fetchMedia(path: String, connection: ApiConnection) async -> (Data, URLResp
     return try? await ApiConnection.mediaSession.data(for: request)
 }
 
-/// A message attachment as a drag payload: the receiver gets the actual
-/// file — downloaded (or cache-served) under its real filename — so drops
-/// land in Finder and other apps as the attachment itself.
-nonisolated struct MediaDragItem: Transferable {
-    let path: String
-    let connection: ApiConnection
-
-    static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: .data) { item in
-            guard let url = await downloadMediaFile(
-                path: item.path, connection: item.connection)
-            else { throw CocoaError(.fileNoSuchFile) }
-            return SentTransferredFile(url)
+/// A drag payload for message attachments: an item provider promising the
+/// downloaded file under its real filename and content type. (Transferable's
+/// FileRepresentation names drops after the exported content type — a
+/// dragged image landed in Finder as "data".)
+@MainActor
+func mediaDragProvider(path: String, connection: ApiConnection) -> NSItemProvider {
+    let filename = (path as NSString).lastPathComponent.removingPercentEncoding
+        .flatMap { $0.isEmpty ? nil : $0 } ?? "file"
+    let contentType = UTType(filenameExtension: (filename as NSString).pathExtension) ?? .data
+    let provider = NSItemProvider()
+    provider.suggestedName = filename
+    provider.registerFileRepresentation(
+        for: contentType, visibility: .all
+    ) { completion in
+        Task {
+            if let url = await downloadMediaFile(path: path, connection: connection) {
+                completion(url, false, nil)
+            } else {
+                completion(nil, false, CocoaError(.fileNoSuchFile))
+            }
         }
+        return nil
     }
+    return provider
 }
 
 /// Downloaded media files by source path, so gallery navigation and repeat
@@ -844,8 +854,8 @@ private struct MessageImageView: View {
         .task(id: node.src) { await load() }
         .accessibilityLabel(node.alt ?? "Image")
         .help("Click to select, Space for Quick Look, double-click to open")
-        // Drag out: the receiver gets the original file.
-        .draggable(MediaDragItem(path: node.originalSrc ?? node.src, connection: connection))
+        // Drag out: the receiver gets the original file, real name intact.
+        .onDrag { mediaDragProvider(path: node.originalSrc ?? node.src, connection: connection) }
     }
 
     private func load() async {
