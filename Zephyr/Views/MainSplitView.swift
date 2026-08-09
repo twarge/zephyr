@@ -90,8 +90,12 @@ struct MainSplitView: View {
     }
 
     var body: some View {
+        stageThree
+    }
+
+    private var stageOne: some View {
         let _ = PerfLog.render("MainSplit")
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        return NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
                 store: store, search: search, selection: $selection,
                 selectedAccount: $selectedAccount,
@@ -109,10 +113,16 @@ struct MainSplitView: View {
                 .navigationTitle(
                     hasRealmImage ? "" : (store.realmName ?? "Zephyr"))
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        RealmLogoView(store: store, height: 30)
+                    if #available(iOS 26.0, *) {
+                        ToolbarItem(placement: .topBarLeading) {
+                            RealmLogoView(store: store, height: 30)
+                        }
+                        .sharedBackgroundVisibility(.hidden)
+                    } else {
+                        ToolbarItem(placement: .topBarLeading) {
+                            RealmLogoView(store: store, height: 30)
+                        }
                     }
-                    .sharedBackgroundVisibility(.hidden)
                 }
                 .sheet(isPresented: $showSettingsSheet) {
                     SettingsView()
@@ -251,6 +261,14 @@ struct MainSplitView: View {
                 return .systemAction
             })
         .quickLookPreview($downloadPreviewURL)
+    }
+
+    // The body chain is split into stages (body → stageTwo → stageThree):
+    // as one expression it exceeded the type checker's budget on the iOS
+    // build, with the timeout landing on whichever closure the checker
+    // happened to be inside.
+    private var stageTwo: some View {
+        stageOne
         .sheet(item: $newConversation) { mode in
             NewConversationSheet(store: store, selection: $selection, mode: mode)
         }
@@ -312,6 +330,10 @@ struct MainSplitView: View {
                 selection = destination
             }
         }
+    }
+
+    private var stageThree: some View {
+        stageTwo
         // Share-extension inbox: offer the destination picker when items
         // arrive (app activation, or the extension's zephyr:// nudge).
         .onChange(of: scenePhase, initial: true) {
@@ -364,35 +386,10 @@ struct MainSplitView: View {
             keys.store = store
             model.ensureDraftSync(store.accountId)
         }
+        // Single-call closures: inline bodies here pushed the whole body
+        // chain past the type checker's budget on the iOS build.
         .onChange(of: selection) {
-            if case .conversation(let key) = selection {
-                model.activeConversation =
-                    ActiveConversation(account: store.accountId, key: key)
-            } else if model.activeConversation?.account == store.accountId {
-                model.activeConversation = nil
-            }
-            keys.currentDestination = selection
-            keys.selectedMessageId = nil
-            #if os(iOS)
-            detailFocused = true
-            #endif
-            // Open Quickly's recency: any channel-scoped destination counts
-            // as a visit.
-            let visitedChannel: Int? = switch selection {
-            case .channel(let id), .channelTopics(let id): id
-            case .conversation(.topic(let id, _)): id
-            default: nil
-            }
-            if let visitedChannel {
-                AppStateStore.noteChannelVisit(visitedChannel, for: store.accountId)
-            }
-            AppStateStore.setSelection(selection, for: store.accountId)
-            if let selection,
-               let data = try? JSONEncoder().encode(
-                StoredWindowState(account: store.accountId, destination: selection)),
-               let string = String(data: data, encoding: .utf8) {
-                storedDestination = string
-            }
+            selectionChanged()
         }
         .onChange(of: model.pendingDestination) {
             consumePendingDestination()
@@ -403,27 +400,69 @@ struct MainSplitView: View {
         }
         // Handoff: the current conversation continues on another device.
         .userActivity("com.twarge.zephyr.conversation", isActive: selection != nil) { activity in
-            activity.title = store.realmName ?? "Zephyr"
-            activity.isEligibleForHandoff = true
-            if let selection,
-               let data = try? JSONEncoder().encode(
-                StoredWindowState(account: store.accountId, destination: selection)) {
-                activity.addUserInfoEntries(from: ["state": data])
-            }
+            configureHandoff(activity)
         }
         .onContinueUserActivity("com.twarge.zephyr.conversation") { activity in
-            guard let data = activity.userInfo?["state"] as? Data,
-                  let stored = try? JSONDecoder().decode(StoredWindowState.self, from: data)
-            else { return }
-            // Routed like a notification click: the key window hops
-            // accounts if needed, then navigates.
-            model.pendingDestination = PendingDestination(
-                account: stored.account, destination: stored.destination)
+            continueHandoff(activity)
         }
     }
 
+    private func selectionChanged() {
+        if case .conversation(let key) = selection {
+            model.activeConversation =
+                ActiveConversation(account: store.accountId, key: key)
+        } else if model.activeConversation?.account == store.accountId {
+            model.activeConversation = nil
+        }
+        keys.currentDestination = selection
+        keys.selectedMessageId = nil
+        #if os(iOS)
+        detailFocused = true
+        #endif
+        // Open Quickly's recency: any channel-scoped destination counts
+        // as a visit.
+        if let visitedChannel = visitedChannelId(for: selection) {
+            AppStateStore.noteChannelVisit(visitedChannel, for: store.accountId)
+        }
+        AppStateStore.setSelection(selection, for: store.accountId)
+        if let selection,
+           let data = try? JSONEncoder().encode(
+            StoredWindowState(account: store.accountId, destination: selection)),
+           let string = String(data: data, encoding: .utf8) {
+            storedDestination = string
+        }
+    }
+
+    private func configureHandoff(_ activity: NSUserActivity) {
+        activity.title = store.realmName ?? "Zephyr"
+        activity.isEligibleForHandoff = true
+        if let selection,
+           let data = try? JSONEncoder().encode(
+            StoredWindowState(account: store.accountId, destination: selection)) {
+            activity.addUserInfoEntries(from: ["state": data])
+        }
+    }
+
+    /// Routed like a notification click: the key window hops accounts if
+    /// needed, then navigates.
+    private func continueHandoff(_ activity: NSUserActivity) {
+        guard let data = activity.userInfo?["state"] as? Data,
+              let stored = try? JSONDecoder().decode(StoredWindowState.self, from: data)
+        else { return }
+        model.pendingDestination = PendingDestination(
+            account: stored.account, destination: stored.destination)
+    }
+
+    // Split into leading/trailing halves: one builder with every item
+    // exceeded the type checker's budget.
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
+        detailLeadingToolbar
+        detailTrailingToolbar
+    }
+
+    @ToolbarContentBuilder
+    private var detailLeadingToolbar: some ToolbarContent {
             #if os(macOS)
             // With the system sidebar toggle removed (the realm logo owns
             // the sidebar section's leading slot), a collapsed sidebar
@@ -450,6 +489,10 @@ struct MainSplitView: View {
                     .help("Go to #\(channelName(streamId))")
                 }
             }
+    }
+
+    @ToolbarContentBuilder
+    private var detailTrailingToolbar: some ToolbarContent {
             // The server menu shows only with multiple servers — Settings
             // lives in the app menu on macOS and the toolbar gear on iOS.
             if model.global.enabledAccounts.count > 1 {
@@ -638,6 +681,19 @@ struct MainSplitView: View {
     private func requestMessageAction(_ action: MessageActionRequest.Action) {
         guard let id = keys.selectedMessageId else { return }
         keys.messageActionRequest = MessageActionRequest(messageId: id, action: action)
+    }
+
+    /// A plain function, not an inline switch expression: the latter blew
+    /// the type checker's budget inside the onChange closure.
+    private func visitedChannelId(for selection: Destination?) -> Int? {
+        switch selection {
+        case .channel(let id), .channelTopics(let id):
+            return id
+        case .conversation(.topic(let id, _)):
+            return id
+        default:
+            return nil
+        }
     }
 
     private func channelName(_ streamId: Int) -> String {
