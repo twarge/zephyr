@@ -125,10 +125,12 @@ public final class UpdateMachine {
                 if consecutiveFailures >= 2 {
                     store.isRecoveringEventStream = true
                 }
-                var delay = backoff.next()
-                if let apiError = error as? ApiError, let retryAfter = apiError.retryAfterSeconds {
-                    delay = .seconds(retryAfter)
-                }
+                // Always advance the backoff; the server's Retry-After wins
+                // when present. (A let: the sleep task's sendable closure
+                // captures it.)
+                let backoffDelay = backoff.next()
+                let delay = (error as? ApiError)?.retryAfterSeconds
+                    .map { Duration.seconds($0) } ?? backoffDelay
                 logger.debug("event poll failed (attempt \(consecutiveFailures)); retrying")
                 // Interruptible: kick() cancels just the inner sleep (retry
                 // now, fresh backoff); stopping the machine cancels the

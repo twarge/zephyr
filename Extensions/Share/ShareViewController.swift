@@ -19,11 +19,15 @@ final class ShareViewController: NSViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         ShareIngest.run(context: extensionContext) { [weak self] in
-            // Best effort: bring the app up so the picker appears now.
-            if let url = URL(string: "zephyr://share") {
-                self?.extensionContext?.open(url)
+            // extensionContext is main-actor-isolated; the ingest callback
+            // isn't.
+            Task { @MainActor in
+                // Best effort: bring the app up so the picker appears now.
+                if let url = URL(string: "zephyr://share") {
+                    self?.extensionContext?.open(url)
+                }
+                self?.extensionContext?.completeRequest(returningItems: nil)
             }
-            self?.extensionContext?.completeRequest(returningItems: nil)
         }
     }
 }
@@ -40,7 +44,11 @@ final class ShareViewController: UIViewController {
         host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         host.didMove(toParent: self)
         ShareIngest.run(context: extensionContext) { [weak self] in
-            self?.extensionContext?.completeRequest(returningItems: nil)
+            // extensionContext is main-actor-isolated; the ingest callback
+            // isn't.
+            Task { @MainActor in
+                self?.extensionContext?.completeRequest(returningItems: nil)
+            }
         }
     }
 }

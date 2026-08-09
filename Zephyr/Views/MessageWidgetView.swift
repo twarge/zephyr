@@ -267,11 +267,11 @@ private struct TodoListView: View {
     }
 
     private func taskLine(_ task: MessageWidget.TodoList.Task) -> Text {
-        var line = Text(task.title).fontWeight(.semibold)
-        if let detail = task.detail {
-            line = line + Text(": \(detail)")
+        guard let detail = task.detail else {
+            return Text(task.title).fontWeight(.semibold)
         }
-        return line
+        // Text interpolation replaces the deprecated Text `+`.
+        return Text("\(Text(task.title).fontWeight(.semibold)): \(detail)")
     }
 
     private func addTask() {
