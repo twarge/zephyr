@@ -16,15 +16,18 @@ struct MoveTopicSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Move to Topic")
                 .font(.headline)
-            TopicAutocompleteField(store: store, streamId: message.streamId, topic: $topic)
-                // The suggestion card overlays the picker below it.
-                .zIndex(1)
             Picker("Apply to:", selection: $propagateMode) {
                 Text("This message only").tag("change_one")
                 Text("This and later messages").tag("change_later")
                 Text("The entire topic").tag("change_all")
             }
             .pickerStyle(.inline)
+            // The compose bar's popover behavior: the field sits low and
+            // the measured card floats up over the picker, so the sheet's
+            // bounds never clip the suggestions.
+            TopicAutocompleteField(
+                store: store, streamId: message.streamId, topic: $topic, dropUp: true)
+                .zIndex(1)
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
