@@ -355,10 +355,6 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        // The overlay scroller floats over the content's right edge and
-        // wins clicks while visible; this gutter keeps the trailing targets
-        // (disclosure chevrons, badges) out from under it.
-        .contentMargins(.trailing, 10, for: .scrollContent)
         // One field, two roles: typing filters the sidebar live (suggestions
         // pop over beside the field); committed tokens search immediately;
         // Return searches the free text and records it in Recent Searches.
@@ -922,8 +918,11 @@ private struct ChannelRow: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        // Same glyph, comfortable hit area.
+                        // Same glyph, comfortable hit area — nudged in from
+                        // the edge so the overlay scroller (which wins
+                        // clicks while visible) doesn't cover the target.
                         .frame(width: 26, height: 26)
+                        .padding(.trailing, 8)
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
