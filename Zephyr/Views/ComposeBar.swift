@@ -174,6 +174,7 @@ struct ComposeBar: View {
 
     @State private var text = ""
     @State private var topicText = ""
+    @State private var topicPrefill = ""
     @State private var suggestions: [ComposeSuggestion] = []
     @State private var selectedSuggestion = 0
     @State private var tokenTriggerIndex: String.Index?
@@ -236,13 +237,6 @@ struct ComposeBar: View {
             if !suggestions.isEmpty {
                 suggestionsCard
             }
-            if case .channel(let streamId) = mode {
-                TopicAutocompleteField(
-                    store: store, streamId: streamId, topic: $topicText,
-                    plainStyle: true, dropUp: true,
-                    onCommit: { messageFocused = true })
-                    .frame(maxWidth: 260)
-            }
             if !uploads.isEmpty {
                 HStack(spacing: 6) {
                     ForEach(uploads) { item in
@@ -282,6 +276,14 @@ struct ComposeBar: View {
                 .padding(.bottom, 7)
                 .help(expanded ? "Compact message field" : "Long-form message field")
                 .popoverTip(LongFormComposeTip())
+                VStack(alignment: .leading, spacing: 6) {
+                if case .channel(let streamId) = mode {
+                    TopicAutocompleteField(
+                        store: store, streamId: streamId, topic: $topicText,
+                        plainStyle: true, dropUp: true,
+                        onCommit: { messageFocused = true })
+                        .frame(maxWidth: 260)
+                }
                 if expanded {
                     expandedEditor
                 } else {
@@ -303,6 +305,7 @@ struct ComposeBar: View {
                             suggestions = []
                             return .handled
                         }
+                }
                 }
                 if expanded {
                     Button {
@@ -371,6 +374,10 @@ struct ComposeBar: View {
                 }
             }
             consumeShareSeed()
+            syncTopicPrefill()
+        }
+        .onChange(of: keys.activeFeed?.messages.last?.id) {
+            syncTopicPrefill()
         }
         .onDisappear {
             keys.unregisterUpload(owner: uploadOwnerId)
@@ -781,6 +788,17 @@ struct ComposeBar: View {
             ShareInbox.clear(item)
         }
         messageFocused = true
+    }
+
+    /// Channel mode: the topic field follows the conversation shown at
+    /// the bottom of the feed, until the user types their own.
+    private func syncTopicPrefill() {
+        guard case .channel = mode else { return }
+        guard let last = keys.activeFeed?.messages.last else { return }
+        if topicText.isEmpty || topicText == topicPrefill {
+            topicText = last.subject
+            topicPrefill = last.subject
+        }
     }
 
     // MARK: Send

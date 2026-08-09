@@ -30,6 +30,7 @@ struct TopicAutocompleteField: View {
     /// Distinguishes an accept (which must keep the card closed) from
     /// typing in the topic binding's onChange.
     @State private var accepting = false
+    @State private var cardHeight: CGFloat = 0
     @FocusState private var focused: Bool
 
     /// No selection is the default so Return keeps a freshly typed new
@@ -52,12 +53,22 @@ struct TopicAutocompleteField: View {
     var body: some View {
         Group {
             if dropUp {
-                VStack(alignment: .leading, spacing: 6) {
-                    if !suggestions.isEmpty {
-                        card
+                // Floating popover-style card above the field: measured
+                // height, so it never pushes layout or covers the field.
+                // (A real NSPopover would steal keyboard focus.)
+                styledField
+                    .overlay(alignment: .topLeading) {
+                        if !suggestions.isEmpty {
+                            card
+                                .onGeometryChange(for: CGFloat.self) {
+                                    $0.size.height
+                                } action: { height in
+                                    cardHeight = height
+                                }
+                                .offset(y: -(cardHeight + 6))
+                                .opacity(cardHeight > 0 ? 1 : 0)
+                        }
                     }
-                    styledField
-                }
             } else {
                 styledField
                     .overlay(alignment: .bottomLeading) {
@@ -91,10 +102,9 @@ struct TopicAutocompleteField: View {
         if plainStyle {
             field
                 .textFieldStyle(.plain)
-                .font(.callout)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 17))
         } else {
             field
                 .textFieldStyle(.roundedBorder)
