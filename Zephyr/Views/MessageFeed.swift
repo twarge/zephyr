@@ -670,6 +670,10 @@ struct MessageRow: View {
         (message.flags ?? []).contains("starred")
     }
 
+    private var isUnread: Bool {
+        !(message.flags ?? []).contains("read")
+    }
+
     /// The system selection highlight (follows the user's accent setting).
     static var selectionColor: Color {
         #if os(macOS)
@@ -769,6 +773,17 @@ struct MessageRow: View {
         // row's highlight fill) hit-tests, so clicks in the empty trailing
         // space fall through.
         .contentShape(.rect)
+        // Web-style unread marker: an accent line on the left that melts
+        // away when the message is marked read. Always present (at zero
+        // opacity once read) so the disappearance animates.
+        .overlay(alignment: .leading) {
+            Capsule()
+                .fill(.tint)
+                .frame(width: 3)
+                .padding(.vertical, 2)
+                .opacity(isUnread ? 1 : 0)
+                .animation(.easeOut(duration: 0.6), value: isUnread)
+        }
         // Click/tap selects (like the web app); simultaneous so links and
         // buttons inside the row keep working.
         .simultaneousGesture(TapGesture().onEnded {
