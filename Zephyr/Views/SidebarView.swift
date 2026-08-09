@@ -557,7 +557,8 @@ struct SidebarView: View {
         ForEach(Array(rails.keys).sorted(), id: \.self) { streamId in
             if let info = rails[streamId], info.maxY > info.minY {
                 let anchorX = (info.originFrame?.minX ?? info.minX) - origin.x
-                let x = anchorX + 7
+                // Centered under the channel row's # icon.
+                let x = anchorX + 22
                 let top: CGFloat = {
                     if let channelRow = info.originFrame {
                         return channelRow.maxY - origin.y - 1
@@ -581,7 +582,7 @@ struct SidebarView: View {
                 if info.endKind == .dotted, let end = info.endFrame {
                     Path { path in
                         path.move(to: CGPoint(x: x, y: end.minY + 3 - origin.y))
-                        path.addLine(to: CGPoint(x: x, y: end.maxY - 6 - origin.y))
+                        path.addLine(to: CGPoint(x: x, y: end.maxY + 6 - origin.y))
                     }
                     .stroke(
                         channelColor(streamId),
@@ -876,6 +877,8 @@ private struct ChannelRow: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        // Same glyph, comfortable hit area.
+                        .frame(width: 26, height: 26)
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
