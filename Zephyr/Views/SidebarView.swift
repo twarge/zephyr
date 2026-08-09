@@ -245,7 +245,9 @@ struct SidebarView: View {
                     viewRow(
                         "Mentions", icon: "at", tag: .mentions,
                         badge: store.unreads.mentionIds.count)
-                    viewRow("Starred", icon: "star", tag: .starred, badge: 0)
+                    viewRow(
+                        "Starred", icon: "star", tag: .starred,
+                        badge: store.starredMessageIds.count)
                     // Unsent messages: only surfaces while something waits.
                     if !store.outbox.isEmpty {
                         viewRow(

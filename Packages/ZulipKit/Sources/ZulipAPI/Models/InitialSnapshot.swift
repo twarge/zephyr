@@ -35,6 +35,8 @@ public struct InitialSnapshot: Decodable, Sendable {
     public var streams: [ZulipStream]?
     public var subscriptions: [Subscription]?
     public var unreadMsgs: UnreadMessagesSnapshot?
+    /// Every starred message id (the sidebar count; ids only, not bodies).
+    public var starredMessages: [Int]?
     public var recentPrivateConversations: [RecentPrivateConversation]?
     public var channelFolders: [ChannelFolder]?
     /// Per-topic visibility overrides (muted/unmuted/followed).

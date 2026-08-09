@@ -30,6 +30,9 @@ public final class PerAccountStore {
     private var realmNightLogoSource: String?
     /// Pending reminders by reminder id (refetched, never event-decoded).
     public private(set) var reminders: [Int: Reminder] = [:]
+    /// Every starred message id, server-wide (the sidebar count) — the
+    /// cached message window only holds a slice of them.
+    public private(set) var starredMessageIds: Set<Int> = []
     public private(set) var users: [Int: User] = [:]
     public private(set) var channels: [Int: ZulipStream] = [:]
     public private(set) var subscriptions: [Int: Subscription] = [:]
@@ -129,6 +132,7 @@ public final class PerAccountStore {
         eventQueueLongpollTimeoutSeconds = snapshot.eventQueueLongpollTimeoutSeconds ?? 90
         realmName = snapshot.realmName
         realmIconUrl = snapshot.realmIconUrl
+        starredMessageIds = Set(snapshot.starredMessages ?? [])
         realmLogoUrl = snapshot.realmLogoUrl
         realmLogoSource = snapshot.realmLogoSource
         realmNightLogoUrl = snapshot.realmNightLogoUrl
@@ -733,6 +737,12 @@ public final class PerAccountStore {
     }
 
     public func setStarred(_ starred: Bool, messageId: Int) {
+        // Optimistic; the flags event confirms.
+        if starred {
+            starredMessageIds.insert(messageId)
+        } else {
+            starredMessageIds.remove(messageId)
+        }
         if var message = messages[messageId] {
             var flags = Set(message.flags ?? [])
             if starred { flags.insert("starred") } else { flags.remove("starred") }
@@ -1091,6 +1101,17 @@ public final class PerAccountStore {
                 }
                 message.flags = Array(flags)
                 messages[id] = message
+            }
+            if e.flag == "starred" {
+                switch op {
+                case .add: starredMessageIds.formUnion(e.messages)
+                case .remove:
+                    if e.all {
+                        starredMessageIds = []
+                    } else {
+                        starredMessageIds.subtract(e.messages)
+                    }
+                }
             }
             unreads.handleFlagsEvent(
                 op: op, flag: e.flag, ids: e.messages, all: e.all,

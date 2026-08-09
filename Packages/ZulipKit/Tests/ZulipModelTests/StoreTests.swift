@@ -233,6 +233,23 @@ struct StoreEventTests {
         #expect(request.formValue("scheduled_delivery_timestamp") == "1800000000")
     }
 
+    @Test func starFlagsMaintainStarredCount() throws {
+        let store = try makeStore()
+        #expect(store.starredMessageIds.isEmpty)
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.flagsEventJSON(
+                    eventId: 1, op: "add", flag: "starred", messages: [100, 101])))
+        #expect(store.starredMessageIds == [100, 101])
+        store.setStarred(true, messageId: 102)
+        #expect(store.starredMessageIds.count == 3)
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.flagsEventJSON(
+                    eventId: 2, op: "remove", flag: "starred", messages: [100])))
+        #expect(store.starredMessageIds == [101, 102])
+    }
+
     @Test func readFlagClearsUnread() throws {
         let store = try makeStore()
         try store.handleEvent(
