@@ -19,6 +19,10 @@ struct MessageContentView: View {
                 BlockNodeView(block: content.blocks[index], connection: connection)
             }
         }
+        // Message text is selectable/copyable (propagates to every Text in
+        // the content tree; row click-to-select still works — that's a tap,
+        // selection is a drag).
+        .textSelection(.enabled)
     }
 }
 
