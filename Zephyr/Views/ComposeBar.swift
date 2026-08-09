@@ -173,6 +173,7 @@ struct ComposeBar: View {
     let mode: Mode
 
     @State private var text = ""
+    @State private var draftSaveTask: Task<Void, Never>?
     @State private var topicText = ""
     @State private var topicPrefill = ""
     @State private var suggestions: [ComposeSuggestion] = []
@@ -381,12 +382,13 @@ struct ComposeBar: View {
             syncTopicPrefill()
         }
         .onDisappear {
+            flushDraftSave()
             keys.unregisterUpload(owner: uploadOwnerId)
             keys.unregisterComposeInsertion(owner: uploadOwnerId)
         }
         .onChange(of: text) {
             if case .fixed(let destination, _) = mode {
-                DraftStore.shared.setDraft(text, for: destination, account: store.accountId)
+                scheduleDraftSave(for: destination)
             }
             if let destination {
                 if text.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -804,6 +806,29 @@ struct ComposeBar: View {
 
     // MARK: Send
 
+    /// Draft writes coalesce to one per typing pause: the sidebar's Drafts
+    /// section observes the DraftStore, so per-keystroke writes re-rendered
+    /// the whole sidebar with every character.
+    private func scheduleDraftSave(for destination: SendDestination) {
+        draftSaveTask?.cancel()
+        let text = text
+        draftSaveTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            DraftStore.shared.setDraft(text, for: destination, account: store.accountId)
+        }
+    }
+
+    /// Writes any pending draft immediately (leaving the conversation).
+    private func flushDraftSave() {
+        guard draftSaveTask != nil else { return }
+        draftSaveTask?.cancel()
+        draftSaveTask = nil
+        if case .fixed(let destination, _) = mode {
+            DraftStore.shared.setDraft(text, for: destination, account: store.accountId)
+        }
+    }
+
     private func send() {
         guard suggestions.isEmpty else { return }
         guard canSend, let destination else { return }
@@ -812,6 +837,10 @@ struct ComposeBar: View {
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         store.send(content, to: destination)
         store.typingStopped(in: destination)
+        // A pending debounced save of the pre-send text must not outlive
+        // the clear.
+        draftSaveTask?.cancel()
+        draftSaveTask = nil
         text = ""
         DraftStore.shared.setDraft("", for: destination, account: store.accountId)
     }
