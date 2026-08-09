@@ -10,33 +10,6 @@ extension FocusedValues {
 /// One window's account scope. Every window picks its own server (all
 /// accounts stay connected concurrently), so switching here never changes
 /// what another window shows.
-#if os(iOS)
-/// Relaxes the hosting scene's minimum size. SwiftUI derives the scene
-/// minimum from the content's regular-mode layout (sidebar + detail runs
-/// 700pt+), and iPadOS SCALES a window resized below the scene minimum
-/// ("squish") instead of re-laying out — the window can never get narrow
-/// enough to collapse into the compact layout. An explicit small minimum
-/// lets resizes reflow all the way down.
-struct SceneMinimumSizeRelaxer: UIViewRepresentable {
-    private static let minimum = CGSize(width: 340, height: 440)
-
-    func makeUIView(context: Context) -> UIView {
-        UIView()
-    }
-
-    func updateUIView(_ view: UIView, context: Context) {
-        // The window attaches after make; updates re-run on layout, which
-        // also re-asserts if the system recomputes.
-        DispatchQueue.main.async {
-            guard let restrictions = view.window?.windowScene?.sizeRestrictions else { return }
-            if restrictions.minimumSize != Self.minimum {
-                restrictions.minimumSize = Self.minimum
-            }
-        }
-    }
-}
-#endif
-
 struct AccountWindowView: View {
     @Environment(AppModel.self) private var model
     /// The account this window opens on when it has no restored state:
@@ -77,8 +50,6 @@ struct AccountWindowView: View {
         .focusedSceneValue(\.windowAccount, $accountId)
         #if os(macOS)
         .background(WindowReader { window in hostWindow = window })
-        #else
-        .background(SceneMinimumSizeRelaxer())
         #endif
         .onAppear {
             guard accountId == nil else { return }
