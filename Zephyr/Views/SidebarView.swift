@@ -347,14 +347,15 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .coordinateSpace(name: "sidebar")
         // The topic thread rails draw here, over the whole list: rows are
         // clipped to their cells, so per-row segments can't join across
         // macOS's inter-row spacing — they just report frames instead.
         .overlayPreferenceValue(TopicRailKey.self) { rails in
-            railOverlay(rails)
-                .allowsHitTesting(false)
-                .dimsWhenWindowInactive()
+            GeometryReader { proxy in
+                railOverlay(rails, origin: proxy.frame(in: .global).origin)
+            }
+            .allowsHitTesting(false)
+            .dimsWhenWindowInactive()
         }
         // One field, two roles: typing filters the sidebar live (suggestions
         // pop over beside the field); committed tokens search immediately;
@@ -452,6 +453,7 @@ struct SidebarView: View {
                         store: store, subscription: subscription,
                         isExpanded: expandedChannels.contains(streamId),
                         onToggle: isFiltering ? nil : { toggleChannel(streamId) })
+                        .topicRailSegment(streamId: streamId, kind: .origin)
                         .tag(Destination.channel(streamId: streamId))
                         .simultaneousGesture(
                             detachGesture(.channel(streamId: streamId)))
@@ -548,22 +550,29 @@ struct SidebarView: View {
         }
     }
 
-    /// One continuous rail per expanded channel, in List coordinates.
+    /// One continuous rail per expanded channel: hangs from just under
+    /// the channel row's # icon down past the topics.
     @ViewBuilder
-    private func railOverlay(_ rails: [Int: TopicRailInfo]) -> some View {
+    private func railOverlay(_ rails: [Int: TopicRailInfo], origin: CGPoint) -> some View {
         ForEach(Array(rails.keys).sorted(), id: \.self) { streamId in
             if let info = rails[streamId], info.maxY > info.minY {
-                let x = info.minX - 3
+                let anchorX = (info.originFrame?.minX ?? info.minX) - origin.x
+                let x = anchorX + 7
+                let top: CGFloat = {
+                    if let channelRow = info.originFrame {
+                        return channelRow.maxY - origin.y - 1
+                    }
+                    return info.minY - origin.y - 4
+                }()
                 let solidEnd: CGFloat = {
                     switch info.endKind {
-                    case .cap: return (info.endFrame?.maxY ?? info.maxY) - 5
-                    case .dotted: return info.endFrame?.minY ?? info.maxY
-                    case .through, nil: return info.maxY
+                    case .cap: return (info.endFrame?.maxY ?? info.maxY) - 5 - origin.y
+                    case .dotted: return (info.endFrame?.minY ?? info.maxY) - origin.y
+                    case .origin, .through, nil: return info.maxY - origin.y
                     }
                 }()
                 Path { path in
-                    // Reaches up toward the disclosure triangle.
-                    path.move(to: CGPoint(x: x, y: info.minY - 4))
+                    path.move(to: CGPoint(x: x, y: top))
                     path.addLine(to: CGPoint(x: x, y: solidEnd))
                 }
                 .stroke(
@@ -571,8 +580,8 @@ struct SidebarView: View {
                     style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 if info.endKind == .dotted, let end = info.endFrame {
                     Path { path in
-                        path.move(to: CGPoint(x: x, y: end.minY + 3))
-                        path.addLine(to: CGPoint(x: x, y: end.maxY - 6))
+                        path.move(to: CGPoint(x: x, y: end.minY + 3 - origin.y))
+                        path.addLine(to: CGPoint(x: x, y: end.maxY - 6 - origin.y))
                     }
                     .stroke(
                         channelColor(streamId),
@@ -826,38 +835,32 @@ private struct ChannelRow: View {
         store.unreads.unreadCount(inChannel: subscription.streamId)
     }
 
+    private var channelColor: Color {
+        subscription.color.flatMap(Color.init(zulipHex:))
+            ?? .stableColor(for: subscription.streamId)
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             Label {
-                HStack(spacing: 6) {
-                    Text(subscription.name)
-                        .fontWeight(unreadCount > 0 && !subscription.muted ? .semibold : .regular)
-                        .lineLimit(1)
-                    if subscription.muted {
-                        Image(systemName: "bell.slash.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
+                Text(subscription.name)
+                    .fontWeight(unreadCount > 0 && !subscription.muted ? .semibold : .regular)
+                    .lineLimit(1)
             } icon: {
-                if let onToggle {
-                    Button(action: onToggle) {
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .help(isExpanded ? "Hide topics" : "Show topics")
-                } else {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .hidden()
-                }
+                Image(systemName: "number")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(channelColor)
+                    .dimsWhenWindowInactive()
             }
             Spacer(minLength: 4)
-            // Private-channel lock sits trailing, inside the unread badge.
+            // Trailing stack: state icons, badge, then the disclosure at
+            // the far right.
+            if subscription.muted {
+                Image(systemName: "bell.slash.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .help("Muted channel")
+            }
             if store.channels[subscription.streamId]?.inviteOnly == true {
                 Image(systemName: "lock.fill")
                     .font(.caption2)
@@ -866,6 +869,17 @@ private struct ChannelRow: View {
             }
             if unreadCount > 0 && !subscription.muted {
                 CountBadge(count: unreadCount)
+            }
+            if let onToggle {
+                Button(action: onToggle) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .help(isExpanded ? "Hide topics" : "Show topics")
             }
         }
         .opacity(subscription.muted ? 0.6 : 1)
@@ -879,12 +893,15 @@ private struct ChannelRow: View {
 /// under the disclosure triangle, ending in a rounded cap after the last
 /// topic or fading into dashes at the "All topics…" row.
 enum TopicRailKind: Equatable {
+    /// The channel row itself: where the rail hangs from.
+    case origin
     case through
     case cap
     case dotted
 }
 
 struct TopicRailInfo: Equatable {
+    var originFrame: CGRect?
     var minX: CGFloat = .infinity
     var minY: CGFloat = .infinity
     var maxY: CGFloat = -.infinity
@@ -892,6 +909,9 @@ struct TopicRailInfo: Equatable {
     var endFrame: CGRect?
 
     mutating func merge(_ other: TopicRailInfo) {
+        if let origin = other.originFrame {
+            originFrame = origin
+        }
         minX = min(minX, other.minX)
         minY = min(minY, other.minY)
         maxY = max(maxY, other.maxY)
@@ -916,15 +936,19 @@ extension View {
     func topicRailSegment(streamId: Int, kind: TopicRailKind) -> some View {
         background(
             GeometryReader { proxy in
-                let frame = proxy.frame(in: .named("sidebar"))
-                Color.clear.preference(
-                    key: TopicRailKey.self,
-                    value: [
-                        streamId: TopicRailInfo(
-                            minX: frame.minX, minY: frame.minY, maxY: frame.maxY,
-                            endKind: kind == .through ? nil : kind,
-                            endFrame: kind == .through ? nil : frame)
-                    ])
+                // Global space; the overlay subtracts its own origin —
+                // immune to inset/coordinate-space drift.
+                let frame = proxy.frame(in: .global)
+                let info: TopicRailInfo = {
+                    if kind == .origin {
+                        return TopicRailInfo(originFrame: frame)
+                    }
+                    return TopicRailInfo(
+                        minX: frame.minX, minY: frame.minY, maxY: frame.maxY,
+                        endKind: kind == .through ? nil : kind,
+                        endFrame: kind == .through ? nil : frame)
+                }()
+                Color.clear.preference(key: TopicRailKey.self, value: [streamId: info])
             })
     }
 }
