@@ -146,10 +146,13 @@ struct NewConversationSheet: View {
             }
 
             if let channel = selectedChannel {
+                // The compose bar's popover-style card. It drops downward
+                // here — that's where this sheet has room (message field +
+                // buttons) — capped so the sheet's bounds never clip it.
                 TopicAutocompleteField(
-                    store: store, streamId: channel.streamId, topic: $topicText)
+                    store: store, streamId: channel.streamId, topic: $topicText,
+                    maxSuggestions: 5)
                     .frame(maxWidth: 280)
-                    // The suggestion card overlays the fields below it.
                     .zIndex(1)
             }
 

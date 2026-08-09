@@ -19,6 +19,9 @@ struct TopicAutocompleteField: View {
     /// overlay floated over neighboring rows) vs. an overlay dropping
     /// below the field (sheets, where growth would jump the layout).
     var dropUp = false
+    /// Cap on visible suggestions — sheets with limited room in the card's
+    /// direction pass fewer so their bounds never clip it.
+    var maxSuggestions = 8
     /// Return with no selection, and every accept, land here (e.g. focus
     /// the message field).
     var onCommit: (() -> Void)?
@@ -47,7 +50,7 @@ struct TopicAutocompleteField: View {
            matches[0].caseInsensitiveCompare(typed) == .orderedSame {
             return []
         }
-        return Array(matches.prefix(8))
+        return Array(matches.prefix(maxSuggestions))
     }
 
     var body: some View {
