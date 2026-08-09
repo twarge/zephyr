@@ -27,6 +27,8 @@ enum AppCommand: Equatable {
     case copyReference
     case translate
     case moveToTopic
+    case forward
+    case markUnreadFromHere
     case markConversationRead
     case find
     case reload

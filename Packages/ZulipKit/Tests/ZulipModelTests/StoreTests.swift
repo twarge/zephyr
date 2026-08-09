@@ -87,6 +87,73 @@ struct StoreEventTests {
         #expect(request.formValue("new_name") == "engineering")
     }
 
+    @Test func markUnreadFromHereRemovesReadOverNarrowUntilNewest() async throws {
+        let transport = FakeTransport(
+            script: [
+                // First batch stops short; the second reaches the newest.
+                .json(#"""
+                    {"result": "success", "msg": "", "processed_count": 5000,
+                     "updated_count": 5000, "first_processed_id": 100,
+                     "last_processed_id": 5099, "found_oldest": false, "found_newest": false}
+                    """#),
+                .json(#"""
+                    {"result": "success", "msg": "", "processed_count": 40,
+                     "updated_count": 40, "first_processed_id": 5100,
+                     "last_processed_id": 5139, "found_oldest": false, "found_newest": true}
+                    """#),
+            ], defaultResponse: .hang)
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 100), flags: ["read"])))
+
+        store.markUnreadFromHere(try #require(store.messages[100]))
+        try await eventually("both batches sent") { transport.requests.count == 2 }
+
+        let first = transport.requests[0]
+        #expect(first.path.hasSuffix("/messages/flags/narrow"))
+        #expect(first.formValue("op") == "remove")
+        #expect(first.formValue("flag") == "read")
+        #expect(first.formValue("anchor") == "100")
+        #expect(first.formValue("include_anchor") == "true")
+        #expect(first.formValue("num_before") == "0")
+        let narrow = try #require(first.formValue("narrow"))
+        #expect(narrow.contains(#""operand":10"#))
+        #expect(narrow.contains("greetings"))
+
+        let second = transport.requests[1]
+        #expect(second.formValue("anchor") == "5099")
+        #expect(second.formValue("include_anchor") == "false")
+    }
+
+    @Test func remindAboutMessagePostsReminder() async throws {
+        let transport = FakeTransport(
+            defaultResponse: .json(#"{"result": "success", "msg": ""}"#))
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        store.remindAboutMessage(100, at: Date(timeIntervalSince1970: 1_800_000_000))
+        try await eventually("reminder sent") { transport.requests.count == 1 }
+        let request = transport.requests[0]
+        #expect(request.path.hasSuffix("/reminders"))
+        #expect(request.formValue("message_id") == "100")
+        #expect(request.formValue("scheduled_delivery_timestamp") == "1800000000")
+    }
+
     @Test func readFlagClearsUnread() throws {
         let store = try makeStore()
         try store.handleEvent(

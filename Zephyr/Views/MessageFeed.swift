@@ -305,6 +305,7 @@ struct MessageFeedList: View {
         }
         .onAppear {
             keys.activeFeed = model
+            keys.readMarkingPaused = false
             quickLook.orderedNodes = { orderedImageNodes() }
         }
         .onDisappear {
@@ -383,7 +384,7 @@ struct MessageFeedList: View {
     /// Seen-in-view read marking, batched so a scroll doesn't spam the
     /// flags endpoint.
     private func noteSeen(_ message: Message) {
-        guard marksReadOnView,
+        guard marksReadOnView, !keys.readMarkingPaused,
               !(message.flags ?? []).contains("read") else { return }
         pendingReadIds.insert(message.id)
         readFlushTask?.cancel()
@@ -654,6 +655,7 @@ struct MessageRow: View {
     @State private var showMoveSheet = false
     @State private var showTranslation = false
     @State private var showReadReceipts = false
+    @State private var showForward = false
     @State private var showEditHistory = false
 
     private var content: MessageContent {
@@ -792,6 +794,10 @@ struct MessageRow: View {
                 if message.type == .stream {
                     showMoveSheet = true
                 }
+            case .forward:
+                showForward = true
+            case .markUnreadFromHere:
+                markUnreadFromHere()
             }
         }
         .overlay(alignment: .topTrailing) {
@@ -869,6 +875,12 @@ struct MessageRow: View {
         .sheet(isPresented: $showReadReceipts) {
             ReadReceiptsSheet(store: store, message: message)
         }
+        .sheet(isPresented: $showForward) {
+            ForwardMessageSheet(store: store) { destination in
+                showForward = false
+                forwardMessage(to: destination)
+            }
+        }
     }
 
     /// The message context menu — one builder, attached both to the row
@@ -885,8 +897,14 @@ struct MessageRow: View {
             Button("Reply Quoting Message", systemImage: "text.quote") {
                 quoteAndReply()
             }
+            Button("Forward Message…", systemImage: "arrowshape.turn.up.right") {
+                showForward = true
+            }
             Button(isStarred ? "Unstar" : "Star", systemImage: "star") {
                 store.setStarred(!isStarred, messageId: message.id)
+            }
+            Button("Mark as Unread from Here", systemImage: "message.badge") {
+                markUnreadFromHere()
             }
             Button("Copy Text", systemImage: "doc.on.doc") {
                 Platform.copyToPasteboard(content.plainText)
@@ -902,6 +920,12 @@ struct MessageRow: View {
             #endif
             Button("Seen By…", systemImage: "eye") {
                 showReadReceipts = true
+            }
+            Menu("Remind Me About This") {
+                Button("In 1 Hour") { remind(at: .now.addingTimeInterval(3600)) }
+                Button("In 3 Hours") { remind(at: .now.addingTimeInterval(3 * 3600)) }
+                Button("Tomorrow at 9 AM") { remind(at: nextMorning(daysAhead: 1)) }
+                Button("Next Week at 9 AM") { remind(at: nextMorning(daysAhead: 7)) }
             }
             if message.type == .stream {
                 Button("Move to Topic…", systemImage: "arrow.turn.up.right") {
@@ -930,6 +954,47 @@ struct MessageRow: View {
     ///   ```quote
     ///   …
     ///   ```
+    /// The quoted block shared by quote-and-reply and forwarding.
+    private func quoteBlock(_ raw: String) -> String {
+        let link = ConversationKey.permalink(to: message, in: store)
+        return """
+            @_**\(message.senderFullName)|\(message.senderId)** [said](\(link)):
+            ```quote
+            \(raw)
+            ```
+
+            """
+    }
+
+    /// The web app's "Mark as unread from here", with visibility-based read
+    /// marking paused so the on-screen rows don't immediately re-mark.
+    private func markUnreadFromHere() {
+        keys.readMarkingPaused = true
+        store.markUnreadFromHere(message)
+    }
+
+    private func remind(at date: Date) {
+        store.remindAboutMessage(message.id, at: date)
+    }
+
+    private func nextMorning(daysAhead: Int) -> Date {
+        let calendar = Calendar.current
+        let day = calendar.date(byAdding: .day, value: daysAhead, to: .now) ?? .now
+        return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: day) ?? day
+    }
+
+    /// Quotes this message into another conversation's compose field.
+    private func forwardMessage(to destination: Destination) {
+        Task {
+            let raw = await store.fetchRawContent(message.id) ?? content.plainText
+            let quote = quoteBlock(raw)
+            keys.navigate?(destination)
+            try? await Task.sleep(for: .milliseconds(300))
+            keys.insertIntoCompose?(quote)
+            keys.focusCompose?()
+        }
+    }
+
     private func quoteAndReply(selectionOnly: Bool = false) {
         // Read the selection before anything steals focus.
         let selection = selectionOnly ? Platform.currentTextSelection() : nil
@@ -940,14 +1005,7 @@ struct MessageRow: View {
             } else {
                 raw = await store.fetchRawContent(message.id) ?? content.plainText
             }
-            let link = ConversationKey.permalink(to: message, in: store)
-            let quote = """
-                @_**\(message.senderFullName)|\(message.senderId)** [said](\(link)):
-                ```quote
-                \(raw)
-                ```
-
-                """
+            let quote = quoteBlock(raw)
             // Cross-conversation feeds have no compose: jump to the
             // message's conversation first, then insert.
             if keys.insertIntoCompose == nil,

@@ -209,8 +209,10 @@ extension ZephyrApp {
                 .keyboardShortcut("c", modifiers: [.command, .shift])
             Button("Translate") { model.pendingCommand = .translate }
             Button("Move to Topic…") { model.pendingCommand = .moveToTopic }
+            Button("Forward Message…") { model.pendingCommand = .forward }
             Divider()
             Button("Mark Conversation as Read") { model.pendingCommand = .markConversationRead }
+            Button("Mark as Unread from Here") { model.pendingCommand = .markUnreadFromHere }
                 .keyboardShortcut("k", modifiers: [.command, .shift])
         }
         CommandMenu("Format") {

@@ -289,6 +289,43 @@ public final class PerAccountStore {
         performOrQueue(.updateFlags(messageIds: ids, add: true, flag: "read"))
     }
 
+    /// The web app's "Mark as unread from here": clears the read flag on
+    /// this message and everything after it in its conversation, across the
+    /// full server-side history. Local unreads refile when the resulting
+    /// update_message_flags events arrive.
+    public func markUnreadFromHere(_ message: Message) {
+        guard let key = Unreads.conversationKey(for: message, selfUserId: selfUserId)
+        else { return }
+        let narrow = key.narrow(selfUserId: selfUserId).apiElements
+        let connection = connection
+        Task {
+            var anchor = MessageAnchor.id(message.id)
+            var includeAnchor = true
+            // Bounded continuation; each batch covers up to 5000 messages.
+            for _ in 0..<20 {
+                guard let result = try? await connection.updateMessageFlagsForNarrow(
+                    anchor: anchor, includeAnchor: includeAnchor,
+                    numBefore: 0, numAfter: 5000,
+                    narrow: narrow, op: .remove, flag: "read")
+                else { return }
+                guard !result.foundNewest, let last = result.lastProcessedId else { return }
+                anchor = .id(last)
+                includeAnchor = false
+            }
+        }
+    }
+
+    /// Schedules a server-side reminder about a message, delivered as a DM
+    /// from the reminders bot at the given time (Zulip Server 11+; older
+    /// servers reject the request and no reminder is created).
+    public func remindAboutMessage(_ messageId: Int, at date: Date) {
+        let connection = connection
+        Task {
+            try? await connection.createReminder(
+                messageId: messageId, deliveryTimestamp: Int(date.timeIntervalSince1970))
+        }
+    }
+
     // MARK: Offline queue
 
     /// Runs one idempotent server mutation, or records it for replay when the

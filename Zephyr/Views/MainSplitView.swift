@@ -512,6 +512,10 @@ struct MainSplitView: View {
             requestMessageAction(.translate)
         case .moveToTopic:
             requestMessageAction(.moveToTopic)
+        case .forward:
+            requestMessageAction(.forward)
+        case .markUnreadFromHere:
+            requestMessageAction(.markUnreadFromHere)
         case .markConversationRead:
             if case .conversation(let key) = selection {
                 store.markConversationRead(key)

@@ -59,6 +59,14 @@ public struct GetMessagesResult: Decodable, Sendable {
     public var anchor: Int?
 }
 
+/// The server-side progress of a narrow-scoped flag update.
+public struct NarrowFlagsResult: Decodable, Sendable {
+    public var processedCount: Int
+    public var updatedCount: Int
+    public var lastProcessedId: Int?
+    public var foundNewest: Bool
+}
+
 public enum FlagOp: String, Sendable {
     case add
     case remove
@@ -233,6 +241,39 @@ extension ApiConnection {
                     Param("messages", "[\(messages.map(String.init).joined(separator: ","))]"),
                     Param("op", op.rawValue),
                     Param("flag", flag),
+                ]))
+    }
+
+    /// POST /messages/flags/narrow — flag updates across a narrow's full
+    /// server-side history. One call covers a bounded batch; the caller
+    /// continues from `lastProcessedId` until `foundNewest`.
+    public func updateMessageFlagsForNarrow(
+        anchor: MessageAnchor, includeAnchor: Bool, numBefore: Int, numAfter: Int,
+        narrow: [NarrowElement], op: FlagOp, flag: String
+    ) async throws -> NarrowFlagsResult {
+        try await request(
+            ApiRequest(
+                method: .post, path: "/api/v1/messages/flags/narrow",
+                params: [
+                    Param("anchor", anchor.apiValue),
+                    Param("include_anchor", includeAnchor ? "true" : "false"),
+                    Param("num_before", String(numBefore)),
+                    Param("num_after", String(numAfter)),
+                    Param("narrow", try ZulipJSON.encodeString(narrow)),
+                    Param("op", op.rawValue),
+                    Param("flag", flag),
+                ]))
+    }
+
+    /// POST /reminders — schedules a reminder about a message, delivered as
+    /// a DM from the reminders bot at the given time (Zulip Server 11+).
+    public func createReminder(messageId: Int, deliveryTimestamp: Int) async throws {
+        _ = try await send(
+            ApiRequest(
+                method: .post, path: "/api/v1/reminders",
+                params: [
+                    Param("message_id", String(messageId)),
+                    Param("scheduled_delivery_timestamp", String(deliveryTimestamp)),
                 ]))
     }
 

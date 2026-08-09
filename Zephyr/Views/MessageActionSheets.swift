@@ -49,6 +49,30 @@ struct MoveTopicSheet: View {
     }
 }
 
+/// "Forward message to…": pick any conversation; the quoted message lands
+/// in its compose field, ready to annotate and send.
+struct ForwardMessageSheet: View {
+    let store: PerAccountStore
+    var open: (Destination) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Label("Forward message to…", systemImage: "arrowshape.turn.up.right")
+                    .font(.headline)
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(12)
+            Divider()
+            OpenQuicklyView(store: store, open: open)
+        }
+    }
+}
+
 /// Who has read a message (server-filtered for privacy opt-outs).
 struct ReadReceiptsSheet: View {
     let store: PerAccountStore

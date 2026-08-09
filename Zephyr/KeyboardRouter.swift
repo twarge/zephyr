@@ -42,6 +42,10 @@ final class KeyboardRouter {
     /// A menu-bar action aimed at the selected message; the owning row
     /// consumes it (same pattern as editRequestId).
     var messageActionRequest: MessageActionRequest?
+    /// Set by "Mark as Unread from Here": suppresses visibility-based read
+    /// marking so the freshly unread messages don't immediately re-mark;
+    /// cleared when a feed (re)appears.
+    var readMarkingPaused = false
     /// Message-link (/near/) navigation: the conversation to open anchored
     /// at a message, and the message to flash once visible.
     @ObservationIgnored var pendingNear: (key: ConversationKey, messageId: Int)?
@@ -422,6 +426,8 @@ struct MessageActionRequest: Equatable {
         case copyReference
         case translate
         case moveToTopic
+        case forward
+        case markUnreadFromHere
     }
 
     var messageId: Int
