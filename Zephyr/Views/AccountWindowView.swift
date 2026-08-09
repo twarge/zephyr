@@ -10,6 +10,50 @@ extension FocusedValues {
 /// One window's account scope. Every window picks its own server (all
 /// accounts stay connected concurrently), so switching here never changes
 /// what another window shows.
+#if os(iOS)
+/// Relaxes the hosting scene's minimum size. SwiftUI derives the scene
+/// minimum from the content's regular-mode layout (sidebar + detail runs
+/// far past compact widths), and iPadOS never re-lays-out a window sized
+/// outside the scene's allowed range — it scales the frozen canvas
+/// instead ("Conversion error! {{0,1200},{1600,0}} …" in the log, a
+/// fullscreen-sized layout stretched by the resize). An explicit small
+/// minimum keeps every window size in range, so resizes deliver real
+/// layout passes. (An earlier version read `window` from updateUIView,
+/// which runs before attachment — it never applied; this one hooks
+/// didMoveToWindow.)
+struct SceneMinimumSizeRelaxer: UIViewRepresentable {
+    func makeUIView(context: Context) -> RelaxerView {
+        RelaxerView()
+    }
+
+    func updateUIView(_ view: RelaxerView, context: Context) {}
+
+    final class RelaxerView: UIView {
+        private static let minimum = CGSize(width: 340, height: 440)
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            apply()
+        }
+
+        // Re-asserts if the system recomputes restrictions after layout.
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            apply()
+        }
+
+        private func apply() {
+            guard let restrictions = window?.windowScene?.sizeRestrictions else { return }
+            if restrictions.minimumSize != Self.minimum {
+                print(
+                    "scene minimumSize was \(restrictions.minimumSize); relaxing to \(Self.minimum)")
+                restrictions.minimumSize = Self.minimum
+            }
+        }
+    }
+}
+#endif
+
 struct AccountWindowView: View {
     @Environment(AppModel.self) private var model
     /// The account this window opens on when it has no restored state:
@@ -50,6 +94,8 @@ struct AccountWindowView: View {
         .focusedSceneValue(\.windowAccount, $accountId)
         #if os(macOS)
         .background(WindowReader { window in hostWindow = window })
+        #else
+        .background(SceneMinimumSizeRelaxer())
         #endif
         .onAppear {
             guard accountId == nil else { return }
