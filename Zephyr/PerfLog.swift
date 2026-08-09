@@ -34,6 +34,27 @@ enum PerfLog {
         }
     }
 
+    /// Prints whenever the main thread stalls: a 100ms heartbeat whose
+    /// oversleep is, to within a tick, how long the main thread was busy
+    /// or blocked. Correlate the timestamps with what you were doing.
+    static func startWatchdogIfEnabled() {
+        guard enabled else { return }
+        Task { @MainActor in
+            let clock = ContinuousClock()
+            var last = clock.now
+            while true {
+                try? await Task.sleep(for: .milliseconds(100))
+                let elapsed = clock.now - last
+                let ms = Double(elapsed.components.seconds) * 1000
+                    + Double(elapsed.components.attoseconds) / 1e15
+                if ms > 200 {
+                    print(String(format: "perf hitch: main thread stalled ~%.0f ms", ms - 100))
+                }
+                last = clock.now
+            }
+        }
+    }
+
     /// Times a closure, printing when it exceeds the threshold.
     static func time<T>(
         _ label: String, over thresholdMs: Double = 8, _ body: () -> T

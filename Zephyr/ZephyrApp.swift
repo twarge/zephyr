@@ -14,6 +14,7 @@ struct ZephyrApp: App {
     init() {
         // One tip per week at most, app-wide: discovery without fatigue.
         try? Tips.configure([.displayFrequency(.weekly)])
+        PerfLog.startWatchdogIfEnabled()
     }
 
     var body: some Scene {
