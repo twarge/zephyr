@@ -54,12 +54,26 @@ final class AvatarLoader {
 
     /// The realm's square icon (the register snapshot carries its URL).
     func realmIcon(store: PerAccountStore) async -> PlatformImage? {
-        let key = "\(store.connection.realmURL.absoluteString)|realm-icon" as NSString
+        await realmImage(path: store.realmIconUrl, cacheKey: "realm-icon", store: store)
+    }
+
+    /// The realm's wide organization logo, when uploaded (night variant in
+    /// dark appearance).
+    func realmLogo(store: PerAccountStore, dark: Bool) async -> PlatformImage? {
+        await realmImage(
+            path: store.realmLogoPath(dark: dark),
+            cacheKey: dark ? "realm-logo-night" : "realm-logo", store: store)
+    }
+
+    private func realmImage(
+        path: String?, cacheKey: String, store: PerAccountStore
+    ) async -> PlatformImage? {
+        let key = "\(store.connection.realmURL.absoluteString)|\(cacheKey)" as NSString
         if let hit = cache.object(forKey: key) {
             return hit
         }
-        guard let iconUrl = store.realmIconUrl,
-              let url = URL(string: iconUrl, relativeTo: store.connection.realmURL),
+        guard let path,
+              let url = URL(string: path, relativeTo: store.connection.realmURL),
               let (data, _) = try? await ApiConnection.mediaSession.data(
                   for: URLRequest(url: url.absoluteURL)),
               let image = PlatformImage(data: data)
@@ -69,17 +83,26 @@ final class AvatarLoader {
     }
 }
 
-/// The realm's icon for the toolbar above the sidebar, with the realm's
-/// initial as the stand-in while the image loads (or when there isn't one).
+/// The realm's branding for the toolbar above the sidebar: the wide
+/// uploaded organization logo when there is one, else the square realm
+/// icon, else the realm's initial while loading.
 struct RealmLogoView: View {
     let store: PerAccountStore
 
-    @State private var image: PlatformImage?
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var logo: PlatformImage?
+    @State private var icon: PlatformImage?
 
     var body: some View {
         Group {
-            if let image {
-                Image(platform: image)
+            if let logo {
+                Image(platform: logo)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 20)
+                    .frame(maxWidth: 150, alignment: .leading)
+            } else if let icon {
+                Image(platform: icon)
                     .resizable()
                     .scaledToFill()
                     .frame(width: 20, height: 20)
@@ -94,8 +117,12 @@ struct RealmLogoView: View {
             }
         }
         .help(store.realmName ?? store.connection.realmURL.host() ?? "")
-        .task(id: store.accountId) {
-            image = await AvatarLoader.shared.realmIcon(store: store)
+        .task(id: "\(store.accountId)|\(colorScheme == .dark)") {
+            logo = await AvatarLoader.shared.realmLogo(
+                store: store, dark: colorScheme == .dark)
+            if logo == nil {
+                icon = await AvatarLoader.shared.realmIcon(store: store)
+            }
         }
     }
 }

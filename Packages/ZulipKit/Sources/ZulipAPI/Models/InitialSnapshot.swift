@@ -13,6 +13,13 @@ public struct InitialSnapshot: Decodable, Sendable {
     public var realmName: String?
     /// The realm's square icon (absolute, or relative to the realm URL).
     public var realmIconUrl: String?
+    /// The wide organization logo and its night-theme variant. The source
+    /// fields say whether each is uploaded ("U") or the generic default
+    /// ("D") — the default is Zulip's own logo, not the realm's.
+    public var realmLogoUrl: String?
+    public var realmLogoSource: String?
+    public var realmNightLogoUrl: String?
+    public var realmNightLogoSource: String?
     public var maxMessageLength: Int?
     /// Static JSON mapping unicode emoji codepoints to shortcode names.
     public var serverEmojiDataUrl: String?

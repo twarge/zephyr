@@ -86,15 +86,18 @@ struct MainSplitView: View {
                 .navigationSplitViewColumnWidth(min: 156, ideal: 156, max: 400)
                 #if os(macOS)
                 // The realm's logo rides the toolbar section above the
-                // sidebar; it disappears along with the sidebar when the
-                // window is too narrow (auto-collapse) or it's hidden.
-                // .navigation slots it beside the sidebar toggle, ahead of
-                // the greedy search field that would push it into overflow.
+                // sidebar (items declared in the sidebar column land there
+                // with .automatic; .navigation would put them in the
+                // content section). It disappears along with the sidebar
+                // when the window is too narrow or the sidebar is hidden,
+                // and the hidden shared background drops the glass lozenge
+                // so the logo sits directly on the toolbar.
                 .toolbar {
                     if columnVisibility != .detailOnly {
-                        ToolbarItem(placement: .navigation) {
+                        ToolbarItem(placement: .automatic) {
                             RealmLogoView(store: store)
                         }
+                        .sharedBackgroundVisibility(.hidden)
                     }
                 }
                 #endif

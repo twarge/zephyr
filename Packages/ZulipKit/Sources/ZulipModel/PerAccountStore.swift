@@ -24,6 +24,10 @@ public final class PerAccountStore {
     public private(set) var realmName: String?
     /// The realm's square icon (absolute, or relative to the realm URL).
     public private(set) var realmIconUrl: String?
+    private var realmLogoUrl: String?
+    private var realmLogoSource: String?
+    private var realmNightLogoUrl: String?
+    private var realmNightLogoSource: String?
     public private(set) var users: [Int: User] = [:]
     public private(set) var channels: [Int: ZulipStream] = [:]
     public private(set) var subscriptions: [Int: Subscription] = [:]
@@ -123,6 +127,10 @@ public final class PerAccountStore {
         eventQueueLongpollTimeoutSeconds = snapshot.eventQueueLongpollTimeoutSeconds ?? 90
         realmName = snapshot.realmName
         realmIconUrl = snapshot.realmIconUrl
+        realmLogoUrl = snapshot.realmLogoUrl
+        realmLogoSource = snapshot.realmLogoSource
+        realmNightLogoUrl = snapshot.realmNightLogoUrl
+        realmNightLogoSource = snapshot.realmNightLogoSource
         serverEmojiDataUrl = snapshot.serverEmojiDataUrl
         typingStartedWaitMs = snapshot.serverTypingStartedWaitPeriodMilliseconds ?? 10000
         typingStoppedWaitMs = snapshot.serverTypingStoppedWaitPeriodMilliseconds ?? 5000
@@ -721,6 +729,20 @@ public final class PerAccountStore {
             try? await connection.setSubscriptionProperty(
                 streamId: streamId, property: "is_muted", value: muted)
         }
+    }
+
+    /// The wide organization logo to show, if the realm uploaded one — the
+    /// generic default ("D") is Zulip's own logo, so it's skipped in favor
+    /// of the realm icon. Dark appearance prefers an uploaded night
+    /// variant.
+    public func realmLogoPath(dark: Bool) -> String? {
+        if dark, realmNightLogoSource == "U", let url = realmNightLogoUrl {
+            return url
+        }
+        if realmLogoSource == "U" {
+            return realmLogoUrl
+        }
+        return nil
     }
 
     /// Per-user pin: pinned channels sort to the top of their section.
