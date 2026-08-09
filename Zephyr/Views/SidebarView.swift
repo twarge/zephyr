@@ -347,16 +347,6 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        // The topic thread rails draw here, over the whole list: rows are
-        // clipped to their cells, so per-row segments can't join across
-        // macOS's inter-row spacing — they just report frames instead.
-        .overlayPreferenceValue(TopicRailKey.self) { rails in
-            GeometryReader { proxy in
-                railOverlay(rails, origin: proxy.frame(in: .global).origin)
-            }
-            .allowsHitTesting(false)
-            .dimsWhenWindowInactive()
-        }
         // One field, two roles: typing filters the sidebar live (suggestions
         // pop over beside the field); committed tokens search immediately;
         // Return searches the free text and records it in Recent Searches.
@@ -453,7 +443,6 @@ struct SidebarView: View {
                         store: store, subscription: subscription,
                         isExpanded: expandedChannels.contains(streamId),
                         onToggle: isFiltering ? nil : { toggleChannel(streamId) })
-                        .topicRailSegment(streamId: streamId, kind: .origin)
                         .tag(Destination.channel(streamId: streamId))
                         .simultaneousGesture(
                             detachGesture(.channel(streamId: streamId)))
@@ -507,10 +496,9 @@ struct SidebarView: View {
             let shown = showAll ? topics : Array(topics.prefix(Self.maxInlineTopics))
             let hasMore = topics.count > Self.maxInlineTopics
             ForEach(Array(shown.enumerated()), id: \.element.name) { index, topic in
-                SidebarTopicRow(store: store, streamId: streamId, topic: topic)
-                    .topicRailSegment(
-                        streamId: streamId,
-                        kind: index == shown.count - 1 && !hasMore ? .cap : .through)
+                SidebarTopicRow(
+                    store: store, streamId: streamId, topic: topic,
+                    rail: index == shown.count - 1 && !hasMore ? .cap : .through)
                     .tag(Destination.conversation(
                         .topic(streamId: streamId, topic: topic.name)))
                     .simultaneousGesture(
@@ -529,66 +517,30 @@ struct SidebarView: View {
                         }
                     }
                 } label: {
-                    Text(showAll ? "Fewer topics…" : "All topics…")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(.rect)
+                    Label {
+                        Text(showAll ? "Fewer topics…" : "All topics…")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    } icon: {
+                        TopicRailTick(
+                            color: channelColor(streamId),
+                            kind: showAll ? .cap : .dotted)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .padding(.leading, 26)
-                .topicRailSegment(streamId: streamId, kind: showAll ? .cap : .dotted)
             }
         } else {
-            ProgressView()
-                .controlSize(.small)
-                .padding(.leading, 26)
-                .topicRailSegment(streamId: streamId, kind: .cap)
+            Label {
+                ProgressView()
+                    .controlSize(.small)
+            } icon: {
+                TopicRailTick(color: channelColor(streamId), kind: .cap)
+            }
                 // Channels restored as expanded from last session reach here
                 // without a disclosure click — kick the fetch ourselves.
                 .onAppear { search.refreshTopics(streamId) }
-        }
-    }
-
-    /// One continuous rail per expanded channel: hangs from just under
-    /// the channel row's # icon down past the topics.
-    @ViewBuilder
-    private func railOverlay(_ rails: [Int: TopicRailInfo], origin: CGPoint) -> some View {
-        ForEach(Array(rails.keys).sorted(), id: \.self) { streamId in
-            if let info = rails[streamId], info.maxY > info.minY {
-                let anchorX = (info.originFrame?.minX ?? info.minX) - origin.x
-                // Centered under the channel row's # icon.
-                let x = anchorX + 22
-                let top: CGFloat = {
-                    if let channelRow = info.originFrame {
-                        return channelRow.maxY - origin.y - 1
-                    }
-                    return info.minY - origin.y - 4
-                }()
-                let solidEnd: CGFloat = {
-                    switch info.endKind {
-                    case .cap: return (info.endFrame?.maxY ?? info.maxY) - 5 - origin.y
-                    case .dotted: return (info.endFrame?.minY ?? info.maxY) - origin.y
-                    case .origin, .through, nil: return info.maxY - origin.y
-                    }
-                }()
-                Path { path in
-                    path.move(to: CGPoint(x: x, y: top))
-                    path.addLine(to: CGPoint(x: x, y: solidEnd))
-                }
-                .stroke(
-                    channelColor(streamId),
-                    style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                if info.endKind == .dotted, let end = info.endFrame {
-                    Path { path in
-                        path.move(to: CGPoint(x: x, y: end.minY + 3 - origin.y))
-                        path.addLine(to: CGPoint(x: x, y: end.maxY + 6 - origin.y))
-                    }
-                    .stroke(
-                        channelColor(streamId),
-                        style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [2, 4]))
-                }
-            }
         }
     }
 
@@ -890,69 +842,43 @@ private struct ChannelRow: View {
     }
 }
 
-/// The topic thread rail: rows report their frames (and whether they end
-/// the run) through this preference; the List-level overlay draws one
-/// continuous channel-colored line per expanded channel — solid from just
-/// under the disclosure triangle, ending in a rounded cap after the last
-/// topic or fading into dashes at the "All topics…" row.
+/// The topic thread rail, one segment per row in the Label icon column —
+/// the same column as the channel's # icon, so alignment is the system's.
+/// `.through` rows get a full tick, `.cap` ends the list with a shorter
+/// rounded tick, `.dotted` fades out at "All topics…".
 enum TopicRailKind: Equatable {
-    /// The channel row itself: where the rail hangs from.
-    case origin
     case through
     case cap
     case dotted
 }
 
-struct TopicRailInfo: Equatable {
-    var originFrame: CGRect?
-    var minX: CGFloat = .infinity
-    var minY: CGFloat = .infinity
-    var maxY: CGFloat = -.infinity
-    var endKind: TopicRailKind?
-    var endFrame: CGRect?
+struct TopicRailTick: View {
+    let color: Color
+    let kind: TopicRailKind
 
-    mutating func merge(_ other: TopicRailInfo) {
-        if let origin = other.originFrame {
-            originFrame = origin
-        }
-        minX = min(minX, other.minX)
-        minY = min(minY, other.minY)
-        maxY = max(maxY, other.maxY)
-        if let kind = other.endKind {
-            endKind = kind
-            endFrame = other.endFrame
-        }
-    }
-}
-
-struct TopicRailKey: PreferenceKey {
-    static let defaultValue: [Int: TopicRailInfo] = [:]
-
-    static func reduce(value: inout [Int: TopicRailInfo], nextValue: () -> [Int: TopicRailInfo]) {
-        for (streamId, info) in nextValue() {
-            value[streamId, default: TopicRailInfo()].merge(info)
-        }
-    }
-}
-
-extension View {
-    func topicRailSegment(streamId: Int, kind: TopicRailKind) -> some View {
-        background(
-            GeometryReader { proxy in
-                // Global space; the overlay subtracts its own origin —
-                // immune to inset/coordinate-space drift.
-                let frame = proxy.frame(in: .global)
-                let info: TopicRailInfo = {
-                    if kind == .origin {
-                        return TopicRailInfo(originFrame: frame)
+    var body: some View {
+        Group {
+            switch kind {
+            case .through:
+                Capsule()
+                    .fill(color)
+                    .frame(width: 2, height: 24)
+            case .cap:
+                Capsule()
+                    .fill(color)
+                    .frame(width: 2, height: 16)
+                    .frame(height: 24, alignment: .top)
+            case .dotted:
+                VStack(spacing: 3) {
+                    ForEach(0..<4, id: \.self) { _ in
+                        Capsule()
+                            .fill(color)
+                            .frame(width: 2, height: 3)
                     }
-                    return TopicRailInfo(
-                        minX: frame.minX, minY: frame.minY, maxY: frame.maxY,
-                        endKind: kind == .through ? nil : kind,
-                        endFrame: kind == .through ? nil : frame)
-                }()
-                Color.clear.preference(key: TopicRailKey.self, value: [streamId: info])
-            })
+                }
+            }
+        }
+        .dimsWhenWindowInactive()
     }
 }
 
@@ -961,6 +887,14 @@ private struct SidebarTopicRow: View {
     let store: PerAccountStore
     let streamId: Int
     let topic: ChannelTopic
+    /// The thread-rail tick beside this row (nil while filtering, where
+    /// rows appear without their disclosure context).
+    var rail: TopicRailKind?
+
+    private var channelColor: Color {
+        store.subscriptions[streamId]?.color.flatMap(Color.init(zulipHex:))
+            ?? .stableColor(for: streamId)
+    }
 
     private var key: ConversationKey {
         .topic(streamId: streamId, topic: topic.name)
@@ -981,10 +915,18 @@ private struct SidebarTopicRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Text(TopicName.displayName(topic.name).isEmpty
-                ? "general chat" : TopicName.displayName(topic.name))
-                .font(.callout.weight(unreadCount > 0 ? .semibold : .regular))
-                .lineLimit(1)
+            Label {
+                Text(TopicName.displayName(topic.name).isEmpty
+                    ? "general chat" : TopicName.displayName(topic.name))
+                    .font(.callout.weight(unreadCount > 0 ? .semibold : .regular))
+                    .lineLimit(1)
+            } icon: {
+                if let rail {
+                    TopicRailTick(color: channelColor, kind: rail)
+                } else {
+                    Color.clear.frame(width: 2)
+                }
+            }
             Spacer(minLength: 4)
             // State icons trail, like the channel lock.
             if visibility == .followed {
@@ -1013,7 +955,6 @@ private struct SidebarTopicRow: View {
                 CountBadge(count: unreadCount)
             }
         }
-        .padding(.leading, 26)
         .padding(.vertical, 1)
         .opacity(visibility == .muted ? 0.5 : 1)
         .contextMenu {
