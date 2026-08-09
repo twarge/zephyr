@@ -7,15 +7,15 @@ import ZulipModel
 /// readable without subscribing).
 struct AllChannelsView: View {
     let store: PerAccountStore
+    let search: SidebarSearchModel
     @Binding var selection: Destination?
 
     @State private var channels: [ZulipStream]?
     @State private var errorText: String?
-    @State private var filter = ""
 
     private var filtered: [ZulipStream] {
         guard let channels else { return [] }
-        let trimmed = filter.trimmingCharacters(in: .whitespaces)
+        let trimmed = search.filterText.trimmingCharacters(in: .whitespaces)
         return channels
             .filter {
                 trimmed.isEmpty
@@ -28,18 +28,11 @@ struct AllChannelsView: View {
     var body: some View {
         Group {
             if channels != nil {
+                // Filtered by the shared toolbar search field, NOT its own
+                // .searchable: a second toolbar search item crashes
+                // NSToolbar (duplicate com.apple.SwiftUI.search identifier).
                 List(filtered) { channel in
                     ChannelBrowserRow(store: store, channel: channel, selection: $selection)
-                }
-                // A plain filter field, NOT .searchable: the sidebar's
-                // search already owns the window toolbar's search slot, and
-                // a second toolbar search item crashes NSToolbar (duplicate
-                // com.apple.SwiftUI.search identifier).
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    TextField("Filter channels", text: $filter)
-                        .textFieldStyle(.roundedBorder)
-                        .padding(10)
-                        .background(.bar)
                 }
             } else if let errorText {
                 ContentUnavailableView(

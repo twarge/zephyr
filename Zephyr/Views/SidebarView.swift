@@ -844,8 +844,8 @@ private struct ChannelRow: View {
 
 /// The topic thread rail, one segment per row in the Label icon column —
 /// the same column as the channel's # icon, so alignment is the system's.
-/// `.through` rows get a full tick, `.cap` ends the list with a shorter
-/// rounded tick, `.dotted` fades out at "All topics…".
+/// `.through` rows get a full tick, `.cap` ends the list with an L-shaped
+/// foot pointing at the final topic, `.dotted` fades out at "All topics…".
 enum TopicRailKind: Equatable {
     case through
     case cap
@@ -864,10 +864,18 @@ struct TopicRailTick: View {
                     .fill(color)
                     .frame(width: 2, height: 24)
             case .cap:
-                Capsule()
-                    .fill(color)
-                    .frame(width: 2, height: 16)
-                    .frame(height: 24, alignment: .top)
+                // └ — the foot overflows the 2pt frame to the right so the
+                // vertical bar stays exactly on the rail line above it.
+                ZStack(alignment: .topLeading) {
+                    Capsule()
+                        .fill(color)
+                        .frame(width: 2, height: 14)
+                    Capsule()
+                        .fill(color)
+                        .frame(width: 8, height: 2)
+                        .offset(y: 12)
+                }
+                .frame(width: 2, height: 24, alignment: .topLeading)
             case .dotted:
                 VStack(spacing: 3) {
                     ForEach(0..<4, id: \.self) { _ in

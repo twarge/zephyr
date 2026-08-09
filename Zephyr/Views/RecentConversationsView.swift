@@ -11,12 +11,12 @@ import ZulipModel
 /// cache) supplies participants, timestamps, and participation.
 struct RecentConversationsView: View {
     let store: PerAccountStore
+    let search: SidebarSearchModel
     @Binding var selection: Destination?
 
     @AppStorage("recentIncludeDMs") private var includeDMs = false
     @AppStorage("recentUnreadOnly") private var unreadOnly = false
     @AppStorage("recentParticipatedOnly") private var participatedOnly = false
-    @State private var filterText = ""
 
     fileprivate struct Row: Identifiable {
         var key: ConversationKey
@@ -37,7 +37,8 @@ struct RecentConversationsView: View {
             else { continue }
             messagesByKey[key, default: []].append(message)
         }
-        let filter = filterText.trimmingCharacters(in: .whitespaces).lowercased()
+        // Filtered by the shared toolbar search field, like All Channels.
+        let filter = search.filterText.trimmingCharacters(in: .whitespaces).lowercased()
 
         var out: [Row] = []
         for conversation in store.conversations.conversations {
@@ -90,15 +91,6 @@ struct RecentConversationsView: View {
                 }
                 .toggleStyle(.button)
                 .controlSize(.small)
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                    TextField("Filter topics", text: $filterText)
-                        .textFieldStyle(.plain)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -155,14 +147,14 @@ private struct RecentConversationRow: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .font(.callout)
+                .font(.body)
                 .lineLimit(1)
-                .frame(width: 150, alignment: .leading)
+                .frame(width: 160, alignment: .leading)
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 Text(row.title)
-                    .font(.callout.weight(.medium))
+                    .font(.body.weight(.medium))
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 if row.unreadCount > 0 {
@@ -183,10 +175,12 @@ private struct RecentConversationRow: View {
                         Text("")
                     }
                 }
-                .font(.caption)
+                // The same small-caps time treatment as the message feed.
+                .font(.body.smallCaps())
+                .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .frame(width: 92, alignment: .trailing)
+                .frame(width: 118, alignment: .trailing)
             }
             .contentShape(.rect)
         }

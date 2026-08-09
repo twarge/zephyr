@@ -597,7 +597,7 @@ struct MainSplitView: View {
                 ChannelTopicsView(store: store, streamId: streamId, selection: $selection)
                     .id(streamId)
             case .recentConversations:
-                RecentConversationsView(store: store, selection: $selection)
+                RecentConversationsView(store: store, search: search, selection: $selection)
                     .id(Destination.recentConversations)
             case .drafts:
                 DraftsView(store: store, selection: $selection)
@@ -626,7 +626,7 @@ struct MainSplitView: View {
                     useMatchHighlights: true, selection: $selection)
                     .id(query)
             case .allChannels:
-                AllChannelsView(store: store, selection: $selection)
+                AllChannelsView(store: store, search: search, selection: $selection)
             case nil:
                 ContentUnavailableView(
                     "No Conversation Selected",
