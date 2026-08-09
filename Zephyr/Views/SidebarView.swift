@@ -465,8 +465,14 @@ struct SidebarView: View {
                             }
                         }
                     if isFiltering {
-                        ForEach(topicMatches.prefix(8), id: \.name) { topic in
-                            SidebarTopicRow(store: store, streamId: streamId, topic: topic)
+                        // Same rail as the unfiltered list; dotted when the
+                        // 8-row cap hides further matches ("more below").
+                        let matches = Array(topicMatches.prefix(8))
+                        ForEach(Array(matches.enumerated()), id: \.element.name) { index, topic in
+                            SidebarTopicRow(
+                                store: store, streamId: streamId, topic: topic,
+                                rail: index < matches.count - 1 ? .through
+                                    : topicMatches.count > matches.count ? .dotted : .cap)
                                 .tag(Destination.conversation(
                                     .topic(streamId: streamId, topic: topic.name)))
                                 .simultaneousGesture(
@@ -905,8 +911,7 @@ private struct SidebarTopicRow: View {
     let store: PerAccountStore
     let streamId: Int
     let topic: ChannelTopic
-    /// The thread-rail tick beside this row (nil while filtering, where
-    /// rows appear without their disclosure context).
+    /// The thread-rail tick beside this row.
     var rail: TopicRailKind?
 
     private var channelColor: Color {
