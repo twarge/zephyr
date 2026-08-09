@@ -299,10 +299,24 @@ public final class PerAccountStore {
     public func markUnreadFromHere(_ message: Message) {
         guard let key = Unreads.conversationKey(for: message, selfUserId: selfUserId)
         else { return }
-        let narrow = key.narrow(selfUserId: selfUserId).apiElements
+        removeReadFlag(
+            narrow: key.narrow(selfUserId: selfUserId).apiElements,
+            startingAt: .id(message.id))
+    }
+
+    /// The web app's "Mark all messages as unread" for a channel.
+    public func markChannelUnread(_ streamId: Int) {
+        removeReadFlag(
+            narrow: [NarrowElement("channel", .int(streamId))], startingAt: .oldest)
+    }
+
+    /// Clears the read flag from the anchor to the narrow's newest message,
+    /// server-side over the full history. Local unreads refile when the
+    /// resulting update_message_flags events arrive.
+    private func removeReadFlag(narrow: [NarrowElement], startingAt start: MessageAnchor) {
         let connection = connection
         Task {
-            var anchor = MessageAnchor.id(message.id)
+            var anchor = start
             var includeAnchor = true
             // Bounded continuation; each batch covers up to 5000 messages.
             for _ in 0..<20 {
@@ -709,6 +723,46 @@ public final class PerAccountStore {
         }
     }
 
+    /// Per-user pin: pinned channels sort to the top of their section.
+    public func setChannelPinned(_ streamId: Int, pinned: Bool) {
+        // Optimistic; the subscription/update event confirms.
+        if var subscription = subscriptions[streamId] {
+            subscription.pinToTop = pinned
+            subscriptions[streamId] = subscription
+        }
+        let connection = connection
+        Task {
+            try? await connection.setSubscriptionProperty(
+                streamId: streamId, property: "pin_to_top", value: pinned)
+        }
+    }
+
+    /// Per-user "notify on all messages" in a channel.
+    public func setChannelNotifies(_ streamId: Int, notifies: Bool) {
+        if var subscription = subscriptions[streamId] {
+            subscription.desktopNotifications = notifies
+            subscriptions[streamId] = subscription
+        }
+        let connection = connection
+        Task {
+            try? await connection.setSubscriptionProperty(
+                streamId: streamId, property: "desktop_notifications", value: notifies)
+        }
+    }
+
+    /// Per-user channel color ("#rrggbb").
+    public func setChannelColor(_ streamId: Int, hex: String) {
+        if var subscription = subscriptions[streamId] {
+            subscription.color = hex
+            subscriptions[streamId] = subscription
+        }
+        let connection = connection
+        Task {
+            try? await connection.setSubscriptionProperty(
+                streamId: streamId, property: "color", value: hex)
+        }
+    }
+
     public func topicVisibility(streamId: Int, topic: String) -> TopicVisibilityPolicy {
         topicVisibility[TopicKey(streamId: streamId, topic: topic)] ?? .none
     }
@@ -1057,6 +1111,9 @@ public final class PerAccountStore {
                 subscription.isMuted = e.boolValue ?? subscription.isMuted
             case "pin_to_top":
                 subscription.pinToTop = e.boolValue ?? subscription.pinToTop
+            case "desktop_notifications":
+                subscription.desktopNotifications =
+                    e.boolValue ?? subscription.desktopNotifications
             case "color":
                 subscription.color = e.stringValue ?? subscription.color
             default:

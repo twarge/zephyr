@@ -71,6 +71,20 @@ extension ApiConnection {
                 ]))
     }
 
+    /// String-valued subscription property (color).
+    public func setSubscriptionProperty(
+        streamId: Int, property: String, value: String
+    ) async throws {
+        _ = try await send(
+            ApiRequest(
+                method: .post, path: "/api/v1/users/me/subscriptions/properties",
+                params: [
+                    Param(
+                        "subscription_data",
+                        "[{\"stream_id\": \(streamId), \"property\": \(jsonString(property)), \"value\": \(jsonString(value))}]")
+                ]))
+    }
+
     private func jsonString(_ value: String) -> String {
         let escaped = value
             .replacingOccurrences(of: "\\", with: "\\\\")

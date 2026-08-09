@@ -250,6 +250,17 @@ extension ConversationKey {
         return "\(base)/#narrow/\(narrow)/near/\(message.id)"
     }
 
+    /// The web-app permalink to a channel ("copy link to channel").
+    @MainActor
+    static func channelLink(streamId: Int, in store: PerAccountStore) -> String {
+        var base = store.connection.realmURL.absoluteString
+        while base.hasSuffix("/") { base.removeLast() }
+        let name = (store.channels[streamId]?.name
+            ?? store.subscriptions[streamId]?.name ?? "")
+            .replacingOccurrences(of: " ", with: "-")
+        return "\(base)/#narrow/channel/\(streamId)-\(encodeHashComponent(name))"
+    }
+
     func displayTitle(in store: PerAccountStore) -> String {
         switch self {
         case .dm(let joined):

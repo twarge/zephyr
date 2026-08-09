@@ -134,6 +134,53 @@ struct StoreEventTests {
         #expect(second.formValue("include_anchor") == "false")
     }
 
+    @Test func markChannelUnreadStartsAtOldestWithChannelNarrow() async throws {
+        let transport = FakeTransport(
+            defaultResponse: .json(#"""
+                {"result": "success", "msg": "", "processed_count": 1,
+                 "updated_count": 1, "first_processed_id": 1,
+                 "last_processed_id": 1, "found_oldest": true, "found_newest": true}
+                """#))
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        store.markChannelUnread(10)
+        try await eventually("flags sent") { transport.requests.count == 1 }
+        let request = transport.requests[0]
+        #expect(request.path.hasSuffix("/messages/flags/narrow"))
+        #expect(request.formValue("anchor") == "oldest")
+        #expect(request.formValue("op") == "remove")
+        let narrow = try #require(request.formValue("narrow"))
+        #expect(narrow.contains(#""operator":"channel""#))
+        #expect(narrow.contains(#""operand":10"#))
+    }
+
+    @Test func setChannelColorSendsStringPropertyAndAppliesOptimistically() async throws {
+        let transport = FakeTransport(
+            defaultResponse: .json(#"{"result": "success", "msg": ""}"#))
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        store.setChannelColor(10, hex: "#76ce90")
+        #expect(store.subscriptions[10]?.color == "#76ce90")
+        try await eventually("property sent") { transport.requests.count == 1 }
+        let data = try #require(transport.requests[0].formValue("subscription_data"))
+        #expect(data.contains(#""property": "color""#))
+        #expect(data.contains(##""value": "#76ce90""##))
+    }
+
     @Test func remindAboutMessagePostsReminder() async throws {
         let transport = FakeTransport(
             defaultResponse: .json(#"{"result": "success", "msg": ""}"#))

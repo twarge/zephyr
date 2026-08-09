@@ -1,3 +1,6 @@
+#if canImport(AppKit)
+import AppKit
+#endif
 import SwiftUI
 import TipKit
 import ZulipAPI
@@ -31,6 +34,8 @@ struct SidebarView: View {
     /// The channel being renamed via its context menu, if any.
     @State private var renameChannelId: Int?
     @State private var renameChannelText = ""
+    /// The channel whose color picker is open, if any.
+    @State private var colorChannelId: Int?
 
     init(
         store: PerAccountStore, search: SidebarSearchModel,
@@ -350,6 +355,10 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        // The overlay scroller floats over the content's right edge and
+        // wins clicks while visible; this gutter keeps the trailing targets
+        // (disclosure chevrons, badges) out from under it.
+        .contentMargins(.trailing, 10, for: .scrollContent)
         // One field, two roles: typing filters the sidebar live (suggestions
         // pop over beside the field); committed tokens search immediately;
         // Return searches the free text and records it in Recent Searches.
@@ -403,6 +412,15 @@ struct SidebarView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("The channel is renamed for everyone.")
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { colorChannelId != nil },
+                set: { if !$0 { colorChannelId = nil } })
+        ) {
+            if let streamId = colorChannelId {
+                ChannelColorSheet(store: store, streamId: streamId)
+            }
         }
         .onChange(of: expandedChannels) {
             AppStateStore.setExpandedChannels(expandedChannels, for: store.accountId)
@@ -488,9 +506,34 @@ struct SidebarView: View {
                             Button(subscription.muted ? "Unmute Channel" : "Mute Channel") {
                                 store.setChannelMuted(streamId, muted: !subscription.muted)
                             }
+                            Toggle(
+                                "Notify on All Messages",
+                                isOn: Binding(
+                                    get: { subscription.desktopNotifications == true },
+                                    set: { store.setChannelNotifies(streamId, notifies: $0) }))
+                            Button(
+                                (subscription.pinToTop ?? false)
+                                    ? "Unpin Channel" : "Pin Channel to Top"
+                            ) {
+                                store.setChannelPinned(
+                                    streamId, pinned: !(subscription.pinToTop ?? false))
+                            }
+                            Divider()
+                            Button("Copy Link to Channel") {
+                                Platform.copyToPasteboard(
+                                    ConversationKey.channelLink(streamId: streamId, in: store))
+                            }
+                            Button("Mark All Messages as Unread") {
+                                keys.readMarkingPaused = true
+                                store.markChannelUnread(streamId)
+                            }
+                            Divider()
                             Button("Rename Channel…") {
                                 renameChannelText = subscription.name
                                 renameChannelId = streamId
+                            }
+                            Button("Change Color…") {
+                                colorChannelId = streamId
                             }
                             Button("Unsubscribe") {
                                 store.unsubscribe(fromChannel: subscription.name)
@@ -1129,5 +1172,87 @@ extension Color {
     /// A stable per-id hue for avatars/badges without server colors.
     static func stableColor(for id: Int) -> Color {
         Color(hue: Double((id &* 2654435761) % 360) / 360, saturation: 0.55, brightness: 0.75)
+    }
+
+    /// The inverse of `init(zulipHex:)`, for writing colors back.
+    var zulipHexString: String {
+        #if os(macOS)
+        let platform = NSColor(self).usingColorSpace(.sRGB) ?? .gray
+        let red = platform.redComponent
+        let green = platform.greenComponent
+        let blue = platform.blueComponent
+        #else
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        UIColor(self).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        #endif
+        return String(
+            format: "#%02x%02x%02x",
+            Int((red * 255).rounded()), Int((green * 255).rounded()),
+            Int((blue * 255).rounded()))
+    }
+}
+
+/// "Change Color…": Zulip web's default stream palette plus a custom
+/// picker. Picking a swatch applies immediately.
+private struct ChannelColorSheet: View {
+    let store: PerAccountStore
+    let streamId: Int
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var custom: Color = .accentColor
+
+    private static let palette = [
+        "#76ce90", "#fae589", "#a6c7e5", "#e79ab5", "#bfd56f", "#f4ae55",
+        "#b0a5fd", "#addfe5", "#f5ce6e", "#c2726a", "#94c849", "#bd86e5",
+        "#ee7e4a", "#a6dcbf", "#95a5fd", "#53a063", "#9987e1", "#e4523d",
+        "#c2c2c2", "#4f8de4", "#c6a8ad", "#e7cc4d", "#c8bebf", "#a47462",
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Channel Color")
+                .font(.headline)
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.fixed(28)), count: 6), spacing: 8
+            ) {
+                ForEach(Self.palette, id: \.self) { hex in
+                    Button {
+                        store.setChannelColor(streamId, hex: hex)
+                        dismiss()
+                    } label: {
+                        Circle()
+                            .fill(Color(zulipHex: hex) ?? .gray)
+                            .frame(width: 24, height: 24)
+                            .overlay {
+                                if store.subscriptions[streamId]?.color?.lowercased() == hex {
+                                    Image(systemName: "checkmark")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            HStack {
+                ColorPicker("Custom", selection: $custom, supportsOpacity: false)
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Set") {
+                    store.setChannelColor(streamId, hex: custom.zulipHexString)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .frame(width: 244)
+        .onAppear {
+            if let hex = store.subscriptions[streamId]?.color,
+               let color = Color(zulipHex: hex) {
+                custom = color
+            }
+        }
     }
 }
