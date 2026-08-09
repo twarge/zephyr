@@ -26,6 +26,8 @@ private struct PollView: View {
     @State private var newOption = ""
     @State private var editedQuestion = ""
     @State private var showQuestionEditor = false
+    @State private var showAddField = false
+    @FocusState private var addFieldFocused: Bool
 
     /// Only the poll's author can set or change the question (web parity).
     private var isAuthor: Bool {
@@ -60,6 +62,20 @@ private struct PollView: View {
                         .padding(10)
                     }
                 }
+                // Anyone may extend a poll (the widget protocol has no add
+                // permission — only the question is author-gated), so the
+                // reveal button shows for everyone.
+                Button {
+                    withAnimation(.snappy) { showAddField.toggle() }
+                    addFieldFocused = showAddField
+                } label: {
+                    Image(systemName: "plus.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(showAddField ? 45 : 0))
+                }
+                .buttonStyle(.plain)
+                .help(showAddField ? "Done adding options" : "Add an option")
             }
             ForEach(poll.options, id: \.key) { option in
                 let voted = option.voterIds.contains(store.selfUserId)
@@ -92,13 +108,16 @@ private struct PollView: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
-            // Anyone can extend the poll, like the web widget.
-            HStack(spacing: 6) {
-                TextField("New option", text: $newOption)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(addOption)
-                Button("Add", action: addOption)
-                    .disabled(newOption.trimmingCharacters(in: .whitespaces).isEmpty)
+            // Hidden until the header's + reveals it.
+            if showAddField {
+                HStack(spacing: 6) {
+                    TextField("New option", text: $newOption)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($addFieldFocused)
+                        .onSubmit(addOption)
+                    Button("Add", action: addOption)
+                        .disabled(newOption.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
             }
         }
         .padding(10)
@@ -139,6 +158,8 @@ private struct TodoListView: View {
     @State private var newTaskNote = ""
     @State private var editedTitle = ""
     @State private var showTitleEditor = false
+    @State private var showAddField = false
+    @FocusState private var addFieldFocused: Bool
 
     /// Only the list's author can rename it (web parity).
     private var isAuthor: Bool {
@@ -173,6 +194,20 @@ private struct TodoListView: View {
                         .padding(10)
                     }
                 }
+                // Anyone may extend a list (the widget protocol has no add
+                // permission — only the title is author-gated), so the
+                // reveal button shows for everyone.
+                Button {
+                    withAnimation(.snappy) { showAddField.toggle() }
+                    addFieldFocused = showAddField
+                } label: {
+                    Image(systemName: "plus.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(showAddField ? 45 : 0))
+                }
+                .buttonStyle(.plain)
+                .help(showAddField ? "Done adding tasks" : "Add a task")
             }
             ForEach(list.tasks, id: \.key) { task in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -210,17 +245,20 @@ private struct TodoListView: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
-            // Anyone can extend the list, like the web widget.
-            HStack(spacing: 6) {
-                TextField("New task", text: $newTask)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(addTask)
-                TextField("Note (optional)", text: $newTaskNote)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 140)
-                    .onSubmit(addTask)
-                Button("Add", action: addTask)
-                    .disabled(newTask.trimmingCharacters(in: .whitespaces).isEmpty)
+            // Hidden until the header's + reveals it.
+            if showAddField {
+                HStack(spacing: 6) {
+                    TextField("New task", text: $newTask)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($addFieldFocused)
+                        .onSubmit(addTask)
+                    TextField("Note (optional)", text: $newTaskNote)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 140)
+                        .onSubmit(addTask)
+                    Button("Add", action: addTask)
+                        .disabled(newTask.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
             }
         }
         .padding(10)
