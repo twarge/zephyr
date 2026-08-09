@@ -94,6 +94,17 @@ struct MainSplitView: View {
                 // The iPad's system sidebars (Mail, Notes) run ~320pt;
                 // the macOS-tuned 156 reads half-width there.
                 .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
+                // A real sidebar navigation bar (title + compose): the
+                // iPadOS window controls dock into this row — without it
+                // they float over a bare strip.
+                .navigationTitle(store.realmName ?? "Zephyr")
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("New Conversation", systemImage: "square.and.pencil") {
+                            model.pendingNewConversation = true
+                        }
+                    }
+                }
                 #endif
                 #if os(macOS)
                 .onGeometryChange(for: CGFloat.self) { proxy in
