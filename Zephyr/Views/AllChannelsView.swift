@@ -88,6 +88,146 @@ struct AllChannelsView: View {
     }
 }
 
+/// Channel subscriber management: who's in, add someone, remove someone.
+/// Permissions are server-enforced; refusals surface inline.
+struct ManageSubscribersSheet: View {
+    let store: PerAccountStore
+    let streamId: Int
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var subscriberIds: Set<Int>?
+    @State private var query = ""
+    @State private var errorText: String?
+
+    private var channelName: String {
+        store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "?"
+    }
+
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Non-subscribers matching the query (add candidates).
+    private var addCandidates: [User] {
+        guard let subscriberIds, !trimmedQuery.isEmpty else { return [] }
+        return Array(
+            store.users.values
+                .filter {
+                    $0.isActive != false && !subscriberIds.contains($0.userId)
+                        && $0.fullName.localizedCaseInsensitiveContains(trimmedQuery)
+                }
+                .sorted { $0.fullName.lowercased() < $1.fullName.lowercased() }
+                .prefix(6))
+    }
+
+    /// Subscribers (query-filtered), casefold-sorted — big channels have
+    /// thousands, so no ICU collation here.
+    private var subscribers: [User] {
+        guard let subscriberIds else { return [] }
+        return subscriberIds
+            .compactMap { store.users[$0] }
+            .filter {
+                trimmedQuery.isEmpty
+                    || $0.fullName.localizedCaseInsensitiveContains(trimmedQuery)
+            }
+            .map { (user: $0, key: $0.fullName.lowercased()) }
+            .sorted { $0.key < $1.key }
+            .map(\.user)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("#\(channelName) subscribers", systemImage: "person.2")
+                    .font(.headline)
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            TextField("Find or add a person…", text: $query)
+                .textFieldStyle(.roundedBorder)
+            if let errorText {
+                Text(errorText)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+            }
+            if subscriberIds == nil {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    if !addCandidates.isEmpty {
+                        Section("Add") {
+                            ForEach(addCandidates, id: \.userId) { user in
+                                row(user, subscribed: false)
+                            }
+                        }
+                    }
+                    Section("Subscribed (\(subscriberIds?.count ?? 0))") {
+                        ForEach(subscribers, id: \.userId) { user in
+                            row(user, subscribed: true)
+                        }
+                    }
+                }
+                .listStyle(.plain)
+            }
+        }
+        .padding(14)
+        .frame(width: 360, height: 440)
+        .task {
+            do {
+                subscriberIds = Set(try await store.fetchSubscribers(streamId: streamId))
+            } catch {
+                errorText = (error as? ApiError)?.message ?? error.localizedDescription
+            }
+        }
+    }
+
+    private func row(_ user: User, subscribed: Bool) -> some View {
+        HStack(spacing: 8) {
+            AvatarView(store: store, userId: user.userId, size: 22)
+            Text(user.userId == store.selfUserId ? "\(user.fullName) (you)" : user.fullName)
+                .lineLimit(1)
+            Spacer()
+            if subscribed {
+                Button("Remove") { remove(user) }
+                    .controlSize(.small)
+            } else {
+                Button("Add") { add(user) }
+                    .controlSize(.small)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(.vertical, 1)
+    }
+
+    private func add(_ user: User) {
+        errorText = nil
+        Task {
+            do {
+                try await store.addSubscriber(userId: user.userId, toChannel: streamId)
+                subscriberIds?.insert(user.userId)
+                query = ""
+            } catch {
+                errorText = (error as? ApiError)?.message ?? error.localizedDescription
+            }
+        }
+    }
+
+    private func remove(_ user: User) {
+        errorText = nil
+        Task {
+            do {
+                try await store.removeSubscriber(userId: user.userId, fromChannel: streamId)
+                subscriberIds?.remove(user.userId)
+            } catch {
+                errorText = (error as? ApiError)?.message ?? error.localizedDescription
+            }
+        }
+    }
+}
+
 /// An archived channel: dimmed, with restore (admin-gated server-side;
 /// refusals show inline).
 private struct ArchivedChannelRow: View {

@@ -77,6 +77,44 @@ extension ApiConnection {
             ApiRequest(method: .delete, path: "/api/v1/streams/\(streamId)"))
     }
 
+    /// GET /streams/{stream_id}/members — the subscriber user ids.
+    public func getSubscribers(streamId: Int) async throws -> [Int] {
+        struct GetSubscribersResult: Decodable {
+            var subscribers: [Int]
+        }
+        let result: GetSubscribersResult = try await request(
+            ApiRequest(method: .get, path: "/api/v1/streams/\(streamId)/members"))
+        return result.subscribers
+    }
+
+    /// POST /users/me/subscriptions with principals — subscribes other
+    /// users to the channel (permission-gated server-side).
+    public func subscribe(userIds: [Int], toChannel name: String) async throws {
+        _ = try await send(
+            ApiRequest(
+                method: .post, path: "/api/v1/users/me/subscriptions",
+                params: [
+                    Param("subscriptions", "[{\"name\": \(jsonString(name))}]"),
+                    Param(
+                        "principals",
+                        "[\(userIds.map(String.init).joined(separator: ","))]"),
+                ]))
+    }
+
+    /// DELETE /users/me/subscriptions with principals — unsubscribes other
+    /// users from the channel (permission-gated server-side).
+    public func unsubscribe(userIds: [Int], fromChannel name: String) async throws {
+        _ = try await send(
+            ApiRequest(
+                method: .delete, path: "/api/v1/users/me/subscriptions",
+                params: [
+                    Param("subscriptions", "[\(jsonString(name))]"),
+                    Param(
+                        "principals",
+                        "[\(userIds.map(String.init).joined(separator: ","))]"),
+                ]))
+    }
+
     /// POST /users/me/subscriptions.
     public func subscribe(toChannel name: String) async throws {
         _ = try await send(

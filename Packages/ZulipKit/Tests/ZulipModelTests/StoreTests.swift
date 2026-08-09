@@ -108,6 +108,34 @@ struct StoreEventTests {
         #expect(transport.requests[1].formValue("is_archived") == "false")
     }
 
+    @Test func subscriberManagementUsesPrincipals() async throws {
+        let transport = FakeTransport(
+            script: [
+                .json(#"{"result": "success", "msg": "", "subscribers": [1, 5]}"#),
+            ], defaultResponse: .json(#"{"result": "success", "msg": ""}"#))
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        let subscribers = try await store.fetchSubscribers(streamId: 10)
+        #expect(subscribers == [1, 5])
+
+        try await store.addSubscriber(userId: 7, toChannel: 10)
+        #expect(transport.requests[1].method == "POST")
+        #expect(transport.requests[1].formValue("principals") == "[7]")
+
+        // DELETE params ride the query string.
+        try await store.removeSubscriber(userId: 5, fromChannel: 10)
+        #expect(transport.requests[2].method == "DELETE")
+        #expect(transport.requests[2].queryValue("principals") == "[5]")
+        #expect(transport.requests[2].queryValue("subscriptions")?.contains("general") == true)
+    }
+
     @Test func archivedStreamEventRemovesChannelAndSubscription() throws {
         let store = try makeStore()
         #expect(store.subscriptions[10] != nil)

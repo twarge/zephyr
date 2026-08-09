@@ -41,6 +41,8 @@ struct SidebarView: View {
     /// The channel whose description is being edited, if any.
     @State private var descriptionChannelId: Int?
     @State private var descriptionChannelText = ""
+    /// The channel whose subscriber sheet is open, if any.
+    @State private var subscribersChannelId: Int?
 
     init(
         store: PerAccountStore, search: SidebarSearchModel,
@@ -478,6 +480,15 @@ struct SidebarView: View {
                 ChannelColorSheet(store: store, streamId: streamId)
             }
         }
+        .sheet(
+            isPresented: Binding(
+                get: { subscribersChannelId != nil },
+                set: { if !$0 { subscribersChannelId = nil } })
+        ) {
+            if let streamId = subscribersChannelId {
+                ManageSubscribersSheet(store: store, streamId: streamId)
+            }
+        }
         .alert(
             "Archive Channel",
             isPresented: Binding(
@@ -611,6 +622,9 @@ struct SidebarView: View {
                                 descriptionChannelText = store.channels[streamId]?.description
                                     ?? subscription.description ?? ""
                                 descriptionChannelId = streamId
+                            }
+                            Button("Manage Subscribers…") {
+                                subscribersChannelId = streamId
                             }
                             Button("Change Color…") {
                                 colorChannelId = streamId

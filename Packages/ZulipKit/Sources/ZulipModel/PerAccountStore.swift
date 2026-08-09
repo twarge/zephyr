@@ -965,6 +965,24 @@ public final class PerAccountStore {
         }
     }
 
+    // MARK: Subscriber management (throws so sheets can surface refusals)
+
+    public func fetchSubscribers(streamId: Int) async throws -> [Int] {
+        try await connection.getSubscribers(streamId: streamId)
+    }
+
+    public func addSubscriber(userId: Int, toChannel streamId: Int) async throws {
+        guard let name = channels[streamId]?.name ?? subscriptions[streamId]?.name
+        else { return }
+        try await connection.subscribe(userIds: [userId], toChannel: name)
+    }
+
+    public func removeSubscriber(userId: Int, fromChannel streamId: Int) async throws {
+        guard let name = channels[streamId]?.name ?? subscriptions[streamId]?.name
+        else { return }
+        try await connection.unsubscribe(userIds: [userId], fromChannel: name)
+    }
+
     /// Restores an archived channel (admin-gated; feature level 388).
     /// Throws so the channel browser can surface refusals.
     public func unarchiveChannel(_ streamId: Int) async throws {
