@@ -618,9 +618,6 @@ private struct ConversationHeaderRow: View {
                 Text(label)
                     .font(.body.weight(.semibold))
                     .lineLimit(1)
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 10)
