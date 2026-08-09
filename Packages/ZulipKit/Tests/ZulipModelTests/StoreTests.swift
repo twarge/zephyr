@@ -233,6 +233,35 @@ struct StoreEventTests {
         #expect(request.formValue("scheduled_delivery_timestamp") == "1800000000")
     }
 
+    @Test func resolveTopicMovesWholeTopicWithPrefix() async throws {
+        let transport = FakeTransport(
+            defaultResponse: .json(#"{"result": "success", "msg": ""}"#))
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 100), flags: ["read"])))
+
+        store.setTopicResolved(streamId: 10, topic: "greetings", resolved: true)
+        try await eventually("move sent") { transport.requests.count == 1 }
+        let request = transport.requests[0]
+        #expect(request.path.hasSuffix("/messages/100"))
+        #expect(request.formValue("topic") == "✔ greetings")
+        #expect(request.formValue("propagate_mode") == "change_all")
+
+        // Already-resolved is a no-op.
+        store.setTopicResolved(streamId: 10, topic: "✔ done", resolved: true)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(transport.requests.count == 1)
+    }
+
     @Test func starFlagsMaintainStarredCount() throws {
         let store = try makeStore()
         #expect(store.starredMessageIds.isEmpty)

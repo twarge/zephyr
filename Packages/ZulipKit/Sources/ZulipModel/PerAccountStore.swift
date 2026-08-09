@@ -982,6 +982,43 @@ public final class PerAccountStore {
         }
     }
 
+    private func newestCachedMessageId(streamId: Int, topic: String) -> Int? {
+        messages.values
+            .filter { $0.streamId == streamId && $0.subject == topic }
+            .map(\.id).max()
+    }
+
+    /// Resolves or unresolves a topic (web parity: a whole-topic move that
+    /// adds or strips the ✔ prefix), anchored at its newest cached message.
+    public func setTopicResolved(streamId: Int, topic: String, resolved: Bool) {
+        guard TopicName.isResolved(topic) != resolved,
+              let anchor = newestCachedMessageId(streamId: streamId, topic: topic)
+        else { return }
+        let newName = resolved
+            ? TopicName.resolvedPrefix + TopicName.displayName(topic)
+            : TopicName.displayName(topic)
+        moveMessage(anchor, toTopic: newName, propagateMode: "change_all")
+    }
+
+    /// Renames a topic wholesale, anchored at its newest cached message; a
+    /// resolved topic stays resolved under its new name.
+    public func renameTopic(streamId: Int, topic: String, to newDisplayName: String) {
+        let trimmed = newDisplayName.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed != TopicName.displayName(topic),
+              let anchor = newestCachedMessageId(streamId: streamId, topic: topic)
+        else { return }
+        let newName = TopicName.isResolved(topic)
+            ? TopicName.resolvedPrefix + trimmed : trimmed
+        moveMessage(anchor, toTopic: newName, propagateMode: "change_all")
+    }
+
+    /// The whole conversation back to unread, across its full server-side
+    /// history (the header's "Mark All as Unread").
+    public func markConversationUnread(_ key: ConversationKey) {
+        removeReadFlag(
+            narrow: key.narrow(selfUserId: selfUserId).apiElements, startingAt: .oldest)
+    }
+
     public func fetchReadReceipts(_ messageId: Int) async -> [Int]? {
         try? await connection.getReadReceipts(messageId: messageId)
     }

@@ -563,6 +563,10 @@ private struct ConversationHeaderRow: View {
     let includeChannel: Bool
     let onTap: ((ConversationKey) -> Void)?
 
+    @Environment(KeyboardRouter.self) private var keys: KeyboardRouter?
+    @State private var showRename = false
+    @State private var renameText = ""
+
     private var streamId: Int? {
         if case .topic(let id, _) = conversationKey { return id }
         return nil
@@ -641,6 +645,72 @@ private struct ConversationHeaderRow: View {
         .buttonStyle(.plain)
         .padding(.top, 8)
         .help("Open this conversation")
+        .contextMenu {
+            switch conversationKey {
+            case .topic(let streamId, let topic):
+                topicMenu(streamId: streamId, topic: topic)
+            case .dm:
+                Button("Mark as Read") {
+                    store.markConversationRead(conversationKey)
+                }
+                Button("Copy Link to Conversation", systemImage: "link") {
+                    Platform.copyToPasteboard(conversationKey.link(in: store))
+                }
+            }
+        }
+        .alert("Rename Topic", isPresented: $showRename) {
+            TextField("Topic", text: $renameText)
+            Button("Rename") {
+                if case .topic(let streamId, let topic) = conversationKey {
+                    store.renameTopic(streamId: streamId, topic: topic, to: renameText)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every message in the topic moves to the new name.")
+        }
+    }
+
+    @ViewBuilder
+    private func topicMenu(streamId: Int, topic: String) -> some View {
+        let visibility = store.topicVisibility(streamId: streamId, topic: topic)
+        Button(visibility == .muted ? "Unmute Topic" : "Mute Topic") {
+            store.setTopicVisibility(
+                streamId: streamId, topic: topic,
+                policy: visibility == .muted ? .none : .muted)
+        }
+        Button(visibility == .followed ? "Unfollow Topic" : "Follow Topic") {
+            store.setTopicVisibility(
+                streamId: streamId, topic: topic,
+                policy: visibility == .followed ? .none : .followed)
+        }
+        Button(
+            isResolved ? "Unresolve Topic" : "Resolve Topic",
+            systemImage: isResolved ? "checkmark.circle.badge.xmark" : "checkmark.circle"
+        ) {
+            store.setTopicResolved(streamId: streamId, topic: topic, resolved: !isResolved)
+        }
+        Button("Rename Topic…") {
+            renameText = TopicName.displayName(topic)
+            showRename = true
+        }
+        Divider()
+        Button("Mark Topic as Read") {
+            store.markConversationRead(conversationKey)
+        }
+        Button("Mark All as Unread") {
+            keys?.readMarkingPaused = true
+            store.markConversationUnread(conversationKey)
+        }
+        Button("Copy Link to Topic", systemImage: "link") {
+            Platform.copyToPasteboard(conversationKey.link(in: store))
+        }
+        if includeChannel {
+            Divider()
+            Button("Open Channel") {
+                keys?.navigate?(.channel(streamId: streamId))
+            }
+        }
     }
 }
 

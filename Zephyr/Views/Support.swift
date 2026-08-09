@@ -295,6 +295,23 @@ extension ConversationKey {
         return "\(base)/#narrow/channel/\(streamId)-\(encodeHashComponent(name))"
     }
 
+    /// The web-app permalink to this conversation (topic or DM), without a
+    /// message anchor.
+    @MainActor
+    func link(in store: PerAccountStore) -> String {
+        switch self {
+        case .topic(let streamId, let topic):
+            return Self.channelLink(streamId: streamId, in: store)
+                + "/topic/\(Self.encodeHashComponent(topic))"
+        case .dm(let joined):
+            var base = store.connection.realmURL.absoluteString
+            while base.hasSuffix("/") { base.removeLast() }
+            // The self-DM key has no participants; link it as dm with self.
+            let ids = joined.isEmpty ? String(store.selfUserId) : joined
+            return "\(base)/#narrow/dm/\(ids)-dm"
+        }
+    }
+
     func displayTitle(in store: PerAccountStore) -> String {
         switch self {
         case .dm(let joined):
