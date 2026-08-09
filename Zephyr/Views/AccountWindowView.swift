@@ -40,7 +40,7 @@ struct AccountWindowView: View {
             } else {
                 ProgressView()
                     .controlSize(.large)
-                    .macWindowMinSize(width: 400, height: 300)
+                    .frame(minWidth: 400, minHeight: 300)
                     .task(id: accountId) {
                         guard let accountId else { return }
                         await model.ensureStore(accountId)

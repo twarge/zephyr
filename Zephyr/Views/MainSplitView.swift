@@ -92,10 +92,8 @@ struct MainSplitView: View {
                 .navigationSplitViewColumnWidth(min: 156, ideal: 156, max: 400)
                 #else
                 // The iPad's system sidebars (Mail, Notes) run ~320pt;
-                // the macOS-tuned 156 reads half-width there. The min stays
-                // low — column minimums feed the scene's minimum size, and
-                // iPadOS scales (squishes) windows resized below it.
-                .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 420)
+                // the macOS-tuned 156 reads half-width there.
+                .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
                 // A real sidebar navigation bar (title + compose): the
                 // iPadOS window controls dock into this row — without it
                 // they float over a bare strip.

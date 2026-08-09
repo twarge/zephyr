@@ -252,7 +252,7 @@ struct RootView: View {
             case .launching, .loading:
                 ProgressView()
                     .controlSize(.large)
-                    .macWindowMinSize(width: 400, height: 300)
+                    .frame(minWidth: 400, minHeight: 300)
             case .needsAccount:
                 LoginView()
             case .failed(let message):
@@ -282,7 +282,7 @@ struct RootView: View {
                     }
                 }
                 .padding(40)
-                .macWindowMinSize(width: 480, height: 340)
+                .frame(minWidth: 480, minHeight: 340)
             case .ready:
                 // Each window picks (and restores) its own server.
                 AccountWindowView()

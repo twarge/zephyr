@@ -501,6 +501,6 @@ struct ShortcutsHelpView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .macWindowMinSize(width: 420, height: 420)
+        .frame(minWidth: 420, minHeight: 420)
     }
 }
