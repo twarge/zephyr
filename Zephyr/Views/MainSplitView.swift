@@ -103,17 +103,17 @@ struct MainSplitView: View {
                 .toolbar(removing: .sidebarToggle)
                 .toolbar {
                     if columnVisibility != .detailOnly {
-                        if sidebarWidth >= 210 {
-                            ToolbarItem(placement: .automatic) {
-                                RealmLogoView(store: store)
-                            }
-                            .sharedBackgroundVisibility(.hidden)
-                        }
                         ToolbarItem(placement: .automatic) {
                             Button("Hide Sidebar", systemImage: "sidebar.leading") {
                                 withAnimation { columnVisibility = .detailOnly }
                             }
                             .help("Hide Sidebar")
+                        }
+                        if sidebarWidth >= 210 {
+                            ToolbarItem(placement: .automatic) {
+                                RealmLogoView(store: store)
+                            }
+                            .sharedBackgroundVisibility(.hidden)
                         }
                     }
                 }

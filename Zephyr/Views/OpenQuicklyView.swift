@@ -1,8 +1,9 @@
 import SwiftUI
 import ZulipModel
 
-/// ⌘⇧O "Open Quickly…": type a channel or view name, or pick from the
-/// special views and recently viewed/active channels. Return opens it.
+/// ⌘⇧O "Open Quickly…": type a channel, person, or view name, or pick
+/// from the special views, recent channels, and recent DMs. Return opens
+/// it. (Also the destination picker for sharing and Forward Message.)
 struct OpenQuicklyView: View {
     let store: PerAccountStore
     var open: (Destination) -> Void
@@ -40,6 +41,18 @@ struct OpenQuicklyView: View {
             unsubscribed: !subscribed)
     }
 
+    private func dmEntry(_ key: ConversationKey) -> Entry {
+        let participants: Int
+        if case .dm(let joined) = key {
+            participants = joined.split(separator: ",").count
+        } else {
+            participants = 1
+        }
+        return Entry(
+            destination: .conversation(key), name: key.displayTitle(in: store),
+            icon: participants > 1 ? "person.2" : "person")
+    }
+
     private var results: [Entry] {
         let subscribedIds = Set(store.subscriptions.keys)
         func name(_ id: Int) -> String? {
@@ -47,13 +60,20 @@ struct OpenQuicklyView: View {
         }
         let typed = query.trimmingCharacters(in: .whitespaces)
         if typed.isEmpty {
-            // The special views, then recently viewed channels, then
-            // channels by message activity.
+            // The special views, then recently viewed channels, recent
+            // DMs, then channels by message activity.
             var out = Self.specialViews
             var seen = Set<Int>()
             for id in AppStateStore.recentChannels(for: store.accountId) {
                 guard let name = name(id), seen.insert(id).inserted else { continue }
                 out.append(channelEntry(id, name, subscribed: subscribedIds.contains(id)))
+            }
+            var dms = 0
+            for conversation in store.conversations.conversations {
+                if case .dm = conversation.key, dms < 4 {
+                    out.append(dmEntry(conversation.key))
+                    dms += 1
+                }
             }
             for conversation in store.conversations.conversations {
                 guard case .topic(let id, _) = conversation.key,
@@ -69,6 +89,14 @@ struct OpenQuicklyView: View {
         }
         for (id, subscription) in store.subscriptions where seen.insert(id).inserted {
             candidates.append(channelEntry(id, subscription.name, subscribed: true))
+        }
+        for user in store.users.values where user.isActive != false {
+            candidates.append(
+                Entry(
+                    destination: .conversation(
+                        Unreads.dmKey(
+                            participantIds: [user.userId], selfUserId: store.selfUserId)),
+                    name: user.fullName, icon: user.isBot ? "cpu" : "person"))
         }
         let lowered = typed.lowercased()
         func rank(_ candidate: Entry) -> (Int, Int, String) {
@@ -88,7 +116,7 @@ struct OpenQuicklyView: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                TextField("Open channel or view…", text: $query)
+                TextField("Open channel, person, or view…", text: $query)
                     .textFieldStyle(.plain)
                     .font(.title3)
                     .focused($focused)
@@ -99,7 +127,7 @@ struct OpenQuicklyView: View {
             .padding(12)
             Divider()
             if results.isEmpty {
-                Text("No matching channels or views")
+                Text("No matching channels, people, or views")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 24)
