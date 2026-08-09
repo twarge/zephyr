@@ -27,6 +27,15 @@ extension ApiConnection {
         return result.streams
     }
 
+    /// PATCH /streams/{stream_id} — rename the channel (permissions are
+    /// server-enforced; plain-string params since feature level 64).
+    public func updateStream(streamId: Int, newName: String) async throws {
+        _ = try await send(
+            ApiRequest(
+                method: .patch, path: "/api/v1/streams/\(streamId)",
+                params: [Param("new_name", newName)]))
+    }
+
     /// POST /users/me/subscriptions.
     public func subscribe(toChannel name: String) async throws {
         _ = try await send(

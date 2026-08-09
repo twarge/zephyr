@@ -786,6 +786,23 @@ public final class PerAccountStore {
         }
     }
 
+    /// Renames a channel for everyone. Optimistic; the stream/update event
+    /// confirms (or, if the server refuses — permissions are server-side —
+    /// the next register snapshot restores the real name).
+    public func renameChannel(_ streamId: Int, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        channels[streamId]?.name = trimmed
+        if var subscription = subscriptions[streamId] {
+            subscription.name = trimmed
+            subscriptions[streamId] = subscription
+        }
+        let connection = connection
+        Task {
+            try? await connection.updateStream(streamId: streamId, newName: trimmed)
+        }
+    }
+
     public func editMessage(_ messageId: Int, content: String) {
         let connection = connection
         Task {
@@ -1006,6 +1023,26 @@ public final class PerAccountStore {
                 break
             }
             subscriptions[e.streamId] = subscription
+
+        case .streamUpdate(let e):
+            switch e.property {
+            case "name":
+                guard let name = e.stringValue else { break }
+                channels[e.streamId]?.name = name
+                if var subscription = subscriptions[e.streamId] {
+                    subscription.name = name
+                    subscriptions[e.streamId] = subscription
+                }
+            case "description":
+                guard let description = e.stringValue else { break }
+                channels[e.streamId]?.description = description
+                if var subscription = subscriptions[e.streamId] {
+                    subscription.description = description
+                    subscriptions[e.streamId] = subscription
+                }
+            default:
+                break
+            }
 
         case .streamCreate(let streams):
             for stream in streams {

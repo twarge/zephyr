@@ -28,6 +28,9 @@ struct SidebarView: View {
     @State private var expandedInactiveSections: Set<String> = []
     /// Channels whose topic list shows everything (past the inline cap).
     @State private var expandedAllTopics: Set<Int> = []
+    /// The channel being renamed via its context menu, if any.
+    @State private var renameChannelId: Int?
+    @State private var renameChannelText = ""
 
     init(
         store: PerAccountStore, search: SidebarSearchModel,
@@ -385,6 +388,22 @@ struct SidebarView: View {
         .onChange(of: search.filterText) {
             search.loadAllTopicsIfNeeded()
         }
+        .alert(
+            "Rename Channel",
+            isPresented: Binding(
+                get: { renameChannelId != nil },
+                set: { if !$0 { renameChannelId = nil } })
+        ) {
+            TextField("Channel name", text: $renameChannelText)
+            Button("Rename") {
+                if let streamId = renameChannelId {
+                    store.renameChannel(streamId, to: renameChannelText)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The channel is renamed for everyone.")
+        }
         .onChange(of: expandedChannels) {
             AppStateStore.setExpandedChannels(expandedChannels, for: store.accountId)
         }
@@ -417,6 +436,15 @@ struct SidebarView: View {
             search.tokens = []
         }
         selection = .search(query)
+    }
+
+    /// Refreshes a channel's cached topic list shortly after a topic
+    /// rename, once the server has applied the move.
+    private func refreshTopicsSoon(_ streamId: Int) {
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            search.refreshTopics(streamId)
+        }
     }
 
     /// A channel is "active" when pinned, carrying unreads, or present in
@@ -460,6 +488,10 @@ struct SidebarView: View {
                             Button(subscription.muted ? "Unmute Channel" : "Mute Channel") {
                                 store.setChannelMuted(streamId, muted: !subscription.muted)
                             }
+                            Button("Rename Channel…") {
+                                renameChannelText = subscription.name
+                                renameChannelId = streamId
+                            }
                             Button("Unsubscribe") {
                                 store.unsubscribe(fromChannel: subscription.name)
                             }
@@ -472,7 +504,8 @@ struct SidebarView: View {
                             SidebarTopicRow(
                                 store: store, streamId: streamId, topic: topic,
                                 rail: index < matches.count - 1 ? .through
-                                    : topicMatches.count > matches.count ? .dotted : .cap)
+                                    : topicMatches.count > matches.count ? .dotted : .cap,
+                                onRenamed: { refreshTopicsSoon(streamId) })
                                 .tag(Destination.conversation(
                                     .topic(streamId: streamId, topic: topic.name)))
                                 .simultaneousGesture(
@@ -514,7 +547,8 @@ struct SidebarView: View {
             ForEach(Array(shown.enumerated()), id: \.element.name) { index, topic in
                 SidebarTopicRow(
                     store: store, streamId: streamId, topic: topic,
-                    rail: index == shown.count - 1 && !hasMore ? .cap : .through)
+                    rail: index == shown.count - 1 && !hasMore ? .cap : .through,
+                    onRenamed: { refreshTopicsSoon(streamId) })
                     .tag(Destination.conversation(
                         .topic(streamId: streamId, topic: topic.name)))
                     .simultaneousGesture(
@@ -913,6 +947,12 @@ private struct SidebarTopicRow: View {
     let topic: ChannelTopic
     /// The thread-rail tick beside this row.
     var rail: TopicRailKind?
+    /// Called after a rename is submitted, so the sidebar can refresh its
+    /// topic cache once the server has applied the move.
+    var onRenamed: (() -> Void)?
+
+    @State private var showRename = false
+    @State private var renameText = ""
 
     private var channelColor: Color {
         store.subscriptions[streamId]?.color.flatMap(Color.init(zulipHex:))
@@ -991,7 +1031,29 @@ private struct SidebarTopicRow: View {
                     streamId: streamId, topic: topic.name,
                     policy: visibility == .followed ? .none : .followed)
             }
+            Button("Rename Topic…") {
+                renameText = TopicName.displayName(topic.name)
+                showRename = true
+            }
         }
+        .alert("Rename Topic", isPresented: $showRename) {
+            TextField("Topic", text: $renameText)
+            Button("Rename") { renameTopic() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every message in the topic moves to the new name.")
+        }
+    }
+
+    /// Rename = move the whole topic, anchored at its newest message. A
+    /// resolved topic stays resolved under its new name.
+    private func renameTopic() {
+        let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed != TopicName.displayName(topic.name) else { return }
+        let newName = TopicName.isResolved(topic.name)
+            ? TopicName.resolvedPrefix + trimmed : trimmed
+        store.moveMessage(topic.maxId, toTopic: newName, propagateMode: "change_all")
+        onRenamed?()
     }
 }
 

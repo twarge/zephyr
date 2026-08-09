@@ -56,6 +56,37 @@ struct StoreEventTests {
         #expect(store.unreads.totalCount == 0)
     }
 
+    @Test func streamRenameEventUpdatesChannelAndSubscription() throws {
+        let store = try makeStore()
+        try store.handleEvent(
+            decodeEvent(
+                #"{"id": 1, "type": "stream", "op": "update", "stream_id": 10, "property": "name", "value": "renamed"}"#))
+        #expect(store.channels[10]?.name == "renamed")
+        #expect(store.subscriptions[10]?.name == "renamed")
+    }
+
+    @Test func renameChannelPatchesStreamAndAppliesOptimistically() async throws {
+        let transport = FakeTransport(
+            defaultResponse: .json(#"{"result": "success", "msg": ""}"#))
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        store.renameChannel(10, to: "  engineering ")
+        #expect(store.subscriptions[10]?.name == "engineering")
+        #expect(store.channels[10]?.name == "engineering")
+        try await eventually("rename sent") { transport.requests.count == 1 }
+        let request = transport.requests[0]
+        #expect(request.method == "PATCH")
+        #expect(request.path.hasSuffix("/streams/10"))
+        #expect(request.formValue("new_name") == "engineering")
+    }
+
     @Test func readFlagClearsUnread() throws {
         let store = try makeStore()
         try store.handleEvent(

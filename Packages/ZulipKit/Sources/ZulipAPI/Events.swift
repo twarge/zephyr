@@ -23,6 +23,9 @@ public struct Event: Sendable {
         case subscriptionAdd([Subscription])
         case subscriptionRemove(streamIds: [Int])
         case subscriptionUpdate(SubscriptionUpdateEvent)
+        /// stream/update: realm-wide channel property changes (rename,
+        /// description); reuses SubscriptionUpdateEvent's wire shape.
+        case streamUpdate(SubscriptionUpdateEvent)
         case userTopic(UserTopicItem)
         case submessage(SubmessageEvent)
         case draftsAdd([ServerDraft])
@@ -201,6 +204,10 @@ extension Event: Decodable {
             kind = .subscriptionUpdate(try SubscriptionUpdateEvent(from: decoder))
         case ("stream", "create"):
             kind = .streamCreate(try StreamsEnvelope(from: decoder).streams)
+        case ("stream", "update"):
+            // Same wire shape as subscription/update: stream_id, property,
+            // value.
+            kind = .streamUpdate(try SubscriptionUpdateEvent(from: decoder))
         case ("stream", "delete"):
             kind = .streamDelete(streamIds: try DeletedStreamsEnvelope(from: decoder).allIds)
         case ("user_topic", _):
