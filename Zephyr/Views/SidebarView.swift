@@ -354,6 +354,7 @@ struct SidebarView: View {
         .overlayPreferenceValue(TopicRailKey.self) { rails in
             railOverlay(rails)
                 .allowsHitTesting(false)
+                .dimsWhenWindowInactive()
         }
         // One field, two roles: typing filters the sidebar live (suggestions
         // pop over beside the field); committed tokens search immediately;
@@ -804,6 +805,7 @@ private struct DirectMessageRow: View {
                     .foregroundStyle(.white)
                     .frame(width: 16, height: 16)
                     .background(.tint, in: .circle)
+                    .dimsWhenWindowInactive()
             } else if unreadCount > 0 {
                 CountBadge(count: unreadCount)
             }
@@ -964,12 +966,14 @@ private struct SidebarTopicRow: View {
                     .foregroundStyle(.tint)
                     .help("Followed topic — new messages notify you")
                     .popoverTip(TopicStateIconsTip())
+                    .dimsWhenWindowInactive()
             }
             if TopicName.isResolved(topic.name) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.caption2)
                     .foregroundStyle(.green)
                     .help("Resolved topic")
+                    .dimsWhenWindowInactive()
             }
             if hasMention {
                 Text("@")
@@ -977,6 +981,7 @@ private struct SidebarTopicRow: View {
                     .foregroundStyle(.white)
                     .frame(width: 14, height: 14)
                     .background(.tint, in: .circle)
+                    .dimsWhenWindowInactive()
             } else if unreadCount > 0 {
                 CountBadge(count: unreadCount)
             }
@@ -1000,6 +1005,31 @@ private struct SidebarTopicRow: View {
 }
 
 /// The web app's gray rounded count badge.
+/// Dims explicitly colored sidebar decorations when the window is
+/// inactive, matching the system's automatic Label-icon behavior (which
+/// covers only system-styled icons).
+struct DimsWhenWindowInactive: ViewModifier {
+    #if os(macOS)
+    @Environment(\.controlActiveState) private var controlActiveState
+    #endif
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+            .grayscale(controlActiveState == .inactive ? 1 : 0)
+            .opacity(controlActiveState == .inactive ? 0.55 : 1)
+        #else
+        content
+        #endif
+    }
+}
+
+extension View {
+    func dimsWhenWindowInactive() -> some View {
+        modifier(DimsWhenWindowInactive())
+    }
+}
+
 struct CountBadge: View {
     let count: Int
 
