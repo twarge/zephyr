@@ -828,6 +828,36 @@ struct MessageRow: View {
             // Top-aligned: the buttons' padding would otherwise center the
             // time a few points below its message's first line.
             HStack(alignment: .top, spacing: 2) {
+                if store.supportsReminders {
+                    // Hover control and pending-reminder indicator in one:
+                    // gray outline clock on hover, orange filled clock while
+                    // a reminder is set (the star's treatment).
+                    let reminder = store.reminderForMessage(message.id)
+                    Menu {
+                        reminderMenuItems()
+                    } label: {
+                        Image(systemName: reminder == nil ? "clock" : "clock.fill")
+                            .font(.callout)
+                            .foregroundStyle(
+                                reminder == nil
+                                    ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+                            .padding(5)
+                            .background(
+                                controlsActive
+                                    ? AnyShapeStyle(.quaternary.opacity(0.6))
+                                    : AnyShapeStyle(.clear),
+                                in: .circle)
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help(
+                        reminder.map { "Reminder: \(Self.reminderTimeText($0))" }
+                            ?? "Remind me about this")
+                    .opacity(controlsActive || reminder != nil ? 1 : 0)
+                    .allowsHitTesting(controlsActive || reminder != nil)
+                }
                 Button {
                     showReactionPicker = true
                 } label: {
@@ -848,13 +878,6 @@ struct MessageRow: View {
                 }
                 .opacity(controlsActive ? 1 : 0)
                 .allowsHitTesting(controlsActive)
-                if let reminder = store.reminderForMessage(message.id) {
-                    Image(systemName: "clock.fill")
-                        .font(.callout)
-                        .foregroundStyle(.orange)
-                        .padding(5)
-                        .help("Reminder: \(Self.reminderTimeText(reminder))")
-                }
                 Button {
                     store.setStarred(!isStarred, messageId: message.id)
                 } label: {
@@ -921,6 +944,25 @@ struct MessageRow: View {
             .formatted(date: .abbreviated, time: .shortened)
     }
 
+    /// The reminder actions, shared by the hover clock button and the
+    /// context menu: preset times (plus custom) — or just Cancel while a
+    /// reminder is already pending.
+    @ViewBuilder
+    private func reminderMenuItems() -> some View {
+        if let reminder = store.reminderForMessage(message.id) {
+            Button("Cancel Reminder", systemImage: "clock.badge.xmark") {
+                store.cancelReminder(reminder.reminderId)
+            }
+        } else {
+            Button("In 1 Hour") { remind(at: .now.addingTimeInterval(3600)) }
+            Button("In 3 Hours") { remind(at: .now.addingTimeInterval(3 * 3600)) }
+            Button("Tomorrow at 9 AM") { remind(at: nextMorning(daysAhead: 1)) }
+            Button("Next Week at 9 AM") { remind(at: nextMorning(daysAhead: 7)) }
+            Divider()
+            Button("At a Custom Time…") { showRemindPicker = true }
+        }
+    }
+
     /// The message context menu — one builder, attached both to the row
     /// and to the selectable text subtree (whose system menu would
     /// otherwise replace it).
@@ -960,18 +1002,11 @@ struct MessageRow: View {
                 showReadReceipts = true
             }
             if store.supportsReminders {
-                if let reminder = store.reminderForMessage(message.id) {
-                    Button("Cancel Reminder", systemImage: "clock.badge.xmark") {
-                        store.cancelReminder(reminder.reminderId)
-                    }
+                if store.reminderForMessage(message.id) != nil {
+                    reminderMenuItems()
                 } else {
                     Menu("Remind Me About This") {
-                        Button("In 1 Hour") { remind(at: .now.addingTimeInterval(3600)) }
-                        Button("In 3 Hours") { remind(at: .now.addingTimeInterval(3 * 3600)) }
-                        Button("Tomorrow at 9 AM") { remind(at: nextMorning(daysAhead: 1)) }
-                        Button("Next Week at 9 AM") { remind(at: nextMorning(daysAhead: 7)) }
-                        Divider()
-                        Button("At a Custom Time…") { showRemindPicker = true }
+                        reminderMenuItems()
                     }
                 }
             }
