@@ -36,6 +36,7 @@
 		664752B641AB478805A1EAE7 /* AccountWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28D32E783B00DD974C9E8971 /* AccountWindowView.swift */; };
 		67B681DC63058035652E4E1A /* EmojiPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */; };
 		685FD431FA29FEA255D3FBC1 /* MessageContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 067FC7012EB2D00C26EF2527 /* MessageContentView.swift */; };
+		6A36656FF860BB05387C1623 /* PerfLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E26CC20F2298B58C015538 /* PerfLog.swift */; };
 		6E8974C03AF4B08EAFEE51A6 /* ShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */; };
 		706E3B7C39B1F3C9F5DF0E1E /* Support.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD6E84868E4713FC5F20FD6B /* Support.swift */; };
 		70E8661B18208CE08B86BFFA /* AppStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232E47A83B732D68F7D53F8A /* AppStateStore.swift */; };
@@ -118,6 +119,7 @@
 		2AB37CBF3789C6E2854F3632 /* Tips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tips.swift; sourceTree = "<group>"; };
 		2D95D81BD326A92094707205 /* TranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptView.swift; sourceTree = "<group>"; };
 		2DD1BDF55A7E32CD00071C8B /* TVMonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVMonitorView.swift; sourceTree = "<group>"; };
+		37E26CC20F2298B58C015538 /* PerfLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerfLog.swift; sourceTree = "<group>"; };
 		3B2CA9D7CF1C06AA7B0A1D52 /* MainSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainSplitView.swift; sourceTree = "<group>"; };
 		3BD4EE59C8A33FC99AA510C3 /* MessageFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageFeed.swift; sourceTree = "<group>"; };
 		3D409AD6B2CC607462E58207 /* ZephyrWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZephyrWidgets.swift; sourceTree = "<group>"; };
@@ -280,6 +282,7 @@
 				3F4611B74F89FA03A6C524C9 /* DraftSync.swift */,
 				43C09E2CE84013DBCE92521D /* KeyboardRouter.swift */,
 				C391C25A76B13BD0D05B8706 /* NotificationManager.swift */,
+				37E26CC20F2298B58C015538 /* PerfLog.swift */,
 				4D9C40C777893FC7275F955B /* Platform.swift */,
 				2AB37CBF3789C6E2854F3632 /* Tips.swift */,
 				FC5410F479FB8AE6E80F4866 /* WebAuthSession.swift */,
@@ -516,6 +519,7 @@
 				90244AA61E53F58A6D9AA222 /* OpenQuicklyView.swift in Sources */,
 				24004A382336BF5AF3BA2749 /* OutboxView.swift in Sources */,
 				8D288550003242AB2596116F /* PDFAttachmentView.swift in Sources */,
+				6A36656FF860BB05387C1623 /* PerfLog.swift in Sources */,
 				3D07A493DA42E4D98B0DA530 /* Platform.swift in Sources */,
 				0B1CBDD1323F731109D06DEC /* RecentConversationsView.swift in Sources */,
 				5778BC649C0BB255015B12CC /* RemindersView.swift in Sources */,

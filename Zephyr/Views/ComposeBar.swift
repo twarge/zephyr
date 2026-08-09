@@ -230,6 +230,7 @@ struct ComposeBar: View {
     }
 
     var body: some View {
+        let _ = PerfLog.render("ComposeBar")
         VStack(alignment: .leading, spacing: 6) {
             if expanded {
                 dragHandle

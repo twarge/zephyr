@@ -82,6 +82,7 @@ struct MainSplitView: View {
     }
 
     var body: some View {
+        let _ = PerfLog.render("MainSplit")
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
                 store: store, search: search, selection: $selection,

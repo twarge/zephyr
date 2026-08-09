@@ -1069,6 +1069,50 @@ public final class PerAccountStore {
     }
 
     public func handleEvent(_ event: Event) {
+        guard Self.perfLogEnabled else {
+            apply(event)
+            return
+        }
+        let start = ContinuousClock.now
+        apply(event)
+        let ms = Double((ContinuousClock.now - start).components.attoseconds) / 1e15
+        let name = Mirror(reflecting: event.kind).children.first?.label
+            ?? String(describing: event.kind)
+        recordEventPerf(name, ms: ms)
+    }
+
+    // MARK: Event perf probes (defaults write com.twarge.zephyr perfLog -bool YES)
+
+    private static let perfLogEnabled = UserDefaults.standard.bool(forKey: "perfLog")
+    private var perfEventCounts: [String: Int] = [:]
+    private var perfEventMs: [String: Double] = [:]
+    private var perfFlushScheduled = false
+
+    private func recordEventPerf(_ name: String, ms: Double) {
+        perfEventCounts[name, default: 0] += 1
+        perfEventMs[name, default: 0] += ms
+        guard !perfFlushScheduled else { return }
+        perfFlushScheduled = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard let self else { return }
+            let summary = self.perfEventCounts
+                .sorted { $0.value > $1.value }
+                .map { name, count in
+                    String(
+                        format: "%@=%d (%.0fms)", name, count,
+                        self.perfEventMs[name] ?? 0)
+                }
+                .joined(separator: " ")
+            print(
+                "perf events/5s [\(self.connection.realmURL.host() ?? "?")]: \(summary)")
+            self.perfEventCounts = [:]
+            self.perfEventMs = [:]
+            self.perfFlushScheduled = false
+        }
+    }
+
+    private func apply(_ event: Event) {
         switch event.kind {
         case .heartbeat:
             break

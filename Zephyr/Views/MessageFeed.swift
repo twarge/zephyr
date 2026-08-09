@@ -193,6 +193,7 @@ struct MessageFeedList: View {
     }
 
     var body: some View {
+        let _ = PerfLog.render("FeedList")
         Group {
             if isEmptyFeed {
                 // Outside the bottom-anchored scroll view, so it centers in
@@ -762,6 +763,7 @@ struct MessageRow: View {
     }
 
     var body: some View {
+        let _ = PerfLog.render("MessageRow")
         HStack(alignment: .top, spacing: 10) {
             if showHeader {
                 AvatarView(store: store, userId: message.senderId, size: 32)

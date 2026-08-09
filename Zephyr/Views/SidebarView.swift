@@ -200,14 +200,16 @@ struct SidebarView: View {
     }
 
     private var sortedSubscriptions: [Subscription] {
-        store.subscriptions.values
-            .sorted { a, b in
-                let aPinned = a.pinToTop ?? false
-                let bPinned = b.pinToTop ?? false
-                if aPinned != bPinned { return aPinned }
-                if a.muted != b.muted { return b.muted }
-                return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
-            }
+        PerfLog.time("sortedSubscriptions", over: 4) {
+            store.subscriptions.values
+                .sorted { a, b in
+                    let aPinned = a.pinToTop ?? false
+                    let bPinned = b.pinToTop ?? false
+                    if aPinned != bPinned { return aPinned }
+                    if a.muted != b.muted { return b.muted }
+                    return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+                }
+        }
     }
 
     private func channels(inFolder folderId: Int?) -> [Subscription] {
@@ -232,6 +234,7 @@ struct SidebarView: View {
     @AppStorage("recentSearchLimit") private var recentSearchLimit = 5
 
     var body: some View {
+        let _ = PerfLog.render("Sidebar")
         List(selection: $selection) {
             if !isFiltering {
                 Section("Views", isExpanded: expansion("views")) {
