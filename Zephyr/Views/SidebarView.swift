@@ -223,7 +223,7 @@ struct SidebarView: View {
     var body: some View {
         List(selection: $selection) {
             if !isFiltering {
-                Section("Views", isExpanded: expansion("views")) {
+                Section(isExpanded: expansion("views")) {
                     viewRow(
                         "Recent", icon: "clock", tag: .recentConversations,
                         badge: 0)
@@ -242,10 +242,12 @@ struct SidebarView: View {
                     }
                     viewRow(
                         "All channels", icon: "rectangle.stack", tag: .allChannels, badge: 0)
+                } header: {
+                    sectionTitle("Views")
                 }
             }
             if !isFiltering, recentSearchLimit > 0, !search.recentSearches.isEmpty {
-                Section("Recent Searches", isExpanded: expansion("recents")) {
+                Section(isExpanded: expansion("recents")) {
                     ForEach(search.recentSearches.prefix(recentSearchLimit), id: \.self) { query in
                         RecentSearchRow(query: query) {
                             search.removeRecentSearch(query)
@@ -260,10 +262,12 @@ struct SidebarView: View {
                             }
                         }
                     }
+                } header: {
+                    sectionTitle("Recent Searches")
                 }
             }
             if !draftRows.isEmpty {
-                Section("Drafts", isExpanded: expansion("drafts")) {
+                Section(isExpanded: expansion("drafts")) {
                     ForEach(draftRows, id: \.destination) { row in
                         DraftRow(store: store, conversationKey: row.key, text: row.text)
                             .tag(Destination.conversation(row.key))
@@ -275,6 +279,8 @@ struct SidebarView: View {
                                 }
                             }
                     }
+                } header: {
+                    sectionTitle("Drafts")
                 }
             }
             Section(isExpanded: expansion("dms")) {
@@ -309,7 +315,7 @@ struct SidebarView: View {
                         title: "Direct messages", help: "New direct message",
                         action: startDirectMessage)
                 } else {
-                    Text("Direct messages")
+                    sectionTitle("Direct messages")
                 }
             }
             if store.channelFolders.isEmpty {
@@ -541,7 +547,7 @@ struct SidebarView: View {
                         title: title, help: "Browse and join channels",
                         action: { selection = .allChannels })
                 } else {
-                    Text(title)
+                    sectionTitle(title)
                 }
             }
         }
@@ -608,6 +614,13 @@ struct SidebarView: View {
     }
 }
 
+/// Sidebar section headers at the system body size (the default sidebar
+/// header style is a step smaller than everything else in the app).
+private func sectionTitle(_ title: String) -> some View {
+    Text(title)
+        .font(.body.weight(.semibold))
+}
+
 /// A section header whose + button stays invisible until the pointer
 /// approaches — matching the hover-revealed disclosure triangle beside it.
 /// (Touch platforms keep it visible; there's nothing to hover.)
@@ -620,7 +633,7 @@ private struct SectionHeaderWithAdd: View {
 
     var body: some View {
         HStack {
-            Text(title)
+            sectionTitle(title)
             Spacer()
             Button(action: action) {
                 // Filled variant: solid disc with a knocked-out plus.
