@@ -36,6 +36,31 @@ extension ApiConnection {
                 params: [Param("new_name", newName)]))
     }
 
+    /// POST /users/me/subscriptions with a new name — creates the channel
+    /// (permission-gated server-side) and subscribes to it. `announce`
+    /// posts the server's "new channel" notice.
+    public func createChannel(
+        name: String, description: String, inviteOnly: Bool, announce: Bool
+    ) async throws {
+        _ = try await send(
+            ApiRequest(
+                method: .post, path: "/api/v1/users/me/subscriptions",
+                params: [
+                    Param(
+                        "subscriptions",
+                        "[{\"name\": \(jsonString(name)), \"description\": \(jsonString(description))}]"),
+                    Param("invite_only", inviteOnly ? "true" : "false"),
+                    Param("announce", announce ? "true" : "false"),
+                ]))
+    }
+
+    /// DELETE /streams/{id} — archives the channel (Zulip never hard
+    /// deletes; history is preserved server-side).
+    public func archiveStream(streamId: Int) async throws {
+        _ = try await send(
+            ApiRequest(method: .delete, path: "/api/v1/streams/\(streamId)"))
+    }
+
     /// POST /users/me/subscriptions.
     public func subscribe(toChannel name: String) async throws {
         _ = try await send(

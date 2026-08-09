@@ -945,6 +945,26 @@ public final class PerAccountStore {
         }
     }
 
+    /// Creates a channel and subscribes to it. Throws so creation UI can
+    /// surface refusals (name taken, no permission); the subscription
+    /// event delivers the new channel to the sidebar.
+    public func createChannel(
+        name: String, description: String, inviteOnly: Bool, announce: Bool
+    ) async throws {
+        try await connection.createChannel(
+            name: name, description: description, inviteOnly: inviteOnly,
+            announce: announce)
+    }
+
+    /// Archives a channel for everyone (admin-gated server-side; history
+    /// is preserved). The stream delete/archived event removes it locally.
+    public func archiveChannel(_ streamId: Int) {
+        let connection = connection
+        Task {
+            try? await connection.archiveStream(streamId: streamId)
+        }
+    }
+
     /// Renames a channel for everyone. Optimistic; the stream/update event
     /// confirms (or, if the server refuses — permissions are server-side —
     /// the next register snapshot restores the real name).
@@ -1293,6 +1313,12 @@ public final class PerAccountStore {
                 if var subscription = subscriptions[e.streamId] {
                     subscription.description = description
                     subscriptions[e.streamId] = subscription
+                }
+            case "is_archived":
+                // Archived reads as gone, like a stream delete.
+                if e.boolValue == true {
+                    channels.removeValue(forKey: e.streamId)
+                    subscriptions.removeValue(forKey: e.streamId)
                 }
             default:
                 break

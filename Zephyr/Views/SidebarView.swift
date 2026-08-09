@@ -36,6 +36,8 @@ struct SidebarView: View {
     @State private var renameChannelText = ""
     /// The channel whose color picker is open, if any.
     @State private var colorChannelId: Int?
+    /// The channel pending archive confirmation, if any.
+    @State private var archiveChannelId: Int?
 
     init(
         store: PerAccountStore, search: SidebarSearchModel,
@@ -454,6 +456,25 @@ struct SidebarView: View {
                 ChannelColorSheet(store: store, streamId: streamId)
             }
         }
+        .alert(
+            "Archive Channel",
+            isPresented: Binding(
+                get: { archiveChannelId != nil },
+                set: { if !$0 { archiveChannelId = nil } })
+        ) {
+            Button("Archive", role: .destructive) {
+                if let streamId = archiveChannelId {
+                    store.archiveChannel(streamId)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            let name = archiveChannelId.flatMap { store.subscriptions[$0]?.name } ?? "this channel"
+            Text(
+                "#\(name) is archived for everyone: it stops accepting messages and "
+                    + "disappears from sidebars, but its history is preserved. "
+                    + "Requires administrator permission.")
+        }
         .onChange(of: expandedChannels) {
             AppStateStore.setExpandedChannels(expandedChannels, for: store.accountId)
         }
@@ -569,6 +590,10 @@ struct SidebarView: View {
                             }
                             Button("Unsubscribe") {
                                 store.unsubscribe(fromChannel: subscription.name)
+                            }
+                            Divider()
+                            Button("Archive Channel…", role: .destructive) {
+                                archiveChannelId = streamId
                             }
                         }
                     if isFiltering {

@@ -12,6 +12,7 @@ struct AllChannelsView: View {
 
     @State private var channels: [ZulipStream]?
     @State private var errorText: String?
+    @State private var showNewChannel = false
 
     private var filtered: [ZulipStream] {
         guard let channels else { return [] }
@@ -31,8 +32,21 @@ struct AllChannelsView: View {
                 // Filtered by the shared toolbar search field, NOT its own
                 // .searchable: a second toolbar search item crashes
                 // NSToolbar (duplicate com.apple.SwiftUI.search identifier).
-                List(filtered) { channel in
-                    ChannelBrowserRow(store: store, channel: channel, selection: $selection)
+                List {
+                    Button {
+                        showNewChannel = true
+                    } label: {
+                        Label("New Channel…", systemImage: "plus.circle")
+                            .font(.body.weight(.medium))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, 3)
+                    ForEach(filtered) { channel in
+                        ChannelBrowserRow(store: store, channel: channel, selection: $selection)
+                    }
+                }
+                .sheet(isPresented: $showNewChannel) {
+                    NewChannelSheet(store: store, selection: $selection)
                 }
             } else if let errorText {
                 ContentUnavailableView(
@@ -49,6 +63,80 @@ struct AllChannelsView: View {
                 channels = try await store.connection.getAllStreams()
             } catch {
                 errorText = error.localizedDescription
+            }
+        }
+    }
+}
+
+/// Creates a channel (server-side permission applies) and opens it.
+private struct NewChannelSheet: View {
+    let store: PerAccountStore
+    @Binding var selection: Destination?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var descriptionText = ""
+    @State private var isPrivate = false
+    @State private var announce = true
+    @State private var creating = false
+    @State private var errorText: String?
+
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespaces)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("New Channel")
+                .font(.headline)
+            TextField("Name", text: $name)
+                .textFieldStyle(.roundedBorder)
+            TextField("Description (optional)", text: $descriptionText)
+                .textFieldStyle(.roundedBorder)
+            Toggle("Private channel (invite only)", isOn: $isPrivate)
+            Toggle("Announce the new channel", isOn: $announce)
+            if let errorText {
+                Text(errorText)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Create") { create() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(trimmedName.isEmpty || creating)
+            }
+        }
+        .padding(16)
+        .frame(width: 340)
+    }
+
+    private func create() {
+        creating = true
+        errorText = nil
+        let channelName = trimmedName
+        Task {
+            do {
+                try await store.createChannel(
+                    name: channelName,
+                    description: descriptionText.trimmingCharacters(in: .whitespaces),
+                    inviteOnly: isPrivate, announce: announce)
+                // The subscription event delivers the new channel; open it
+                // once its id lands.
+                for _ in 0..<20 {
+                    if let created = store.subscriptions.values.first(
+                        where: { $0.name == channelName }) {
+                        selection = .channel(streamId: created.streamId)
+                        break
+                    }
+                    try? await Task.sleep(for: .milliseconds(150))
+                }
+                dismiss()
+            } catch {
+                errorText = (error as? ApiError)?.message ?? error.localizedDescription
+                creating = false
             }
         }
     }

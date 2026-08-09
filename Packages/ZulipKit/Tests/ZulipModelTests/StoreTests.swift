@@ -56,6 +56,44 @@ struct StoreEventTests {
         #expect(store.unreads.totalCount == 0)
     }
 
+    @Test func createChannelSendsSubscriptionWithFlags() async throws {
+        let transport = FakeTransport(
+            defaultResponse: .json(#"{"result": "success", "msg": ""}"#))
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        try await store.createChannel(
+            name: "ops", description: "Operations", inviteOnly: true, announce: false)
+        let request = try #require(transport.requests.first)
+        #expect(request.path.hasSuffix("/users/me/subscriptions"))
+        let subscriptions = try #require(request.formValue("subscriptions"))
+        #expect(subscriptions.contains(#""name": "ops""#))
+        #expect(subscriptions.contains(#""description": "Operations""#))
+        #expect(request.formValue("invite_only") == "true")
+        #expect(request.formValue("announce") == "false")
+
+        store.archiveChannel(10)
+        try await eventually("archive sent") { transport.requests.count == 2 }
+        #expect(transport.requests[1].method == "DELETE")
+        #expect(transport.requests[1].path.hasSuffix("/streams/10"))
+    }
+
+    @Test func archivedStreamEventRemovesChannelAndSubscription() throws {
+        let store = try makeStore()
+        #expect(store.subscriptions[10] != nil)
+        try store.handleEvent(
+            decodeEvent(
+                #"{"id": 1, "type": "stream", "op": "update", "stream_id": 10, "property": "is_archived", "value": true}"#))
+        #expect(store.channels[10] == nil)
+        #expect(store.subscriptions[10] == nil)
+    }
+
     @Test func streamRenameEventUpdatesChannelAndSubscription() throws {
         let store = try makeStore()
         try store.handleEvent(
