@@ -845,8 +845,10 @@ struct TopicRailView: View {
     let color: Color
     let kind: Kind
 
-    /// Centered under the channel row's disclosure chevron.
-    private static let railX: CGFloat = 8
+    /// Centered under the channel row's disclosure chevron. Negative:
+    /// sidebar Label icons render inside the list's leading inset zone,
+    /// left of where plain row content begins.
+    private static let railX: CGFloat = -4
 
     var body: some View {
         GeometryReader { proxy in
@@ -871,10 +873,11 @@ struct TopicRailView: View {
             }
         }
         .frame(width: 26)
-        // Bleed over the inter-row gaps so segments join into one line
-        // (the cap and dotted endings keep their bottom edge).
-        .padding(.top, -3)
-        .padding(.bottom, kind == .through ? -3 : 0)
+        // Bleed generously over the inter-row gaps so segments overlap
+        // into one continuous line (the cap and dotted endings keep their
+        // bottom edge).
+        .padding(.top, -6)
+        .padding(.bottom, kind == .through ? -6 : 0)
     }
 }
 
