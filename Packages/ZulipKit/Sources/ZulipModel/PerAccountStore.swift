@@ -226,7 +226,9 @@ public final class PerAccountStore {
             cachedMessageIds.insert(message.id)
         }
         conversations.seed(messages: cached, selfUserId: selfId)
-        logger.info("offline restore: \(cached.count) messages in \((clock.now - start).ms, privacy: .public) ms")
+        if Self.perfLogEnabled {
+            logger.info("offline restore: \(cached.count) messages in \((clock.now - start).ms, privacy: .public) ms")
+        }
     }
 
     // MARK: Message-list fan-out

@@ -53,6 +53,8 @@ public final class GlobalStore: UpdateMachineDelegate {
     private let transport: any ApiTransport
     private let sleep: UpdateMachine.SleepFunction
     private let logger = Logger(subsystem: "com.twarge.zephyr", category: "store")
+    /// Launch-timing chatter only under the perf probes (make perf).
+    private static let perfLogEnabled = UserDefaults.standard.bool(forKey: "perfLog")
 
     private let enablePresencePings: Bool
     /// False in tests: no snapshot cache and no offline stores touch the real
@@ -212,7 +214,9 @@ public final class GlobalStore: UpdateMachineDelegate {
         }.value
         // The live register may have finished while we decoded.
         guard let snapshot, stores[accountId] == nil else { return false }
-        logger.info("cached snapshot decoded in \((clock.now - start).ms, privacy: .public) ms")
+        if Self.perfLogEnabled {
+            logger.info("cached snapshot decoded in \((clock.now - start).ms, privacy: .public) ms")
+        }
         let connection = ApiConnection(
             realmURL: account.realmURL, email: account.email, apiKey: apiKey,
             transport: transport)
@@ -251,7 +255,9 @@ public final class GlobalStore: UpdateMachineDelegate {
         let clock = ContinuousClock()
         let registerStart = clock.now
         let result = try await connection.registerQueue(idleQueueTimeoutSeconds: 12 * 60 * 60)
-        logger.info("register round-trip: \((clock.now - registerStart).ms, privacy: .public) ms, payload \(result.rawData.count / 1024) KB")
+        if Self.perfLogEnabled {
+            logger.info("register round-trip: \((clock.now - registerStart).ms, privacy: .public) ms, payload \(result.rawData.count / 1024) KB")
+        }
         let snapshot = result.snapshot
         connection.featureLevel = snapshot.zulipFeatureLevel
         if let cacheURL = snapshotCacheURL(for: accountId) {
