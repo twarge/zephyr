@@ -14,8 +14,7 @@ struct AllChannelsView: View {
     @State private var errorText: String?
     @State private var showNewChannel = false
 
-    private var filtered: [ZulipStream] {
-        guard let channels else { return [] }
+    private func matching(_ channels: [ZulipStream]) -> [ZulipStream] {
         let trimmed = search.filterText.trimmingCharacters(in: .whitespaces)
         return channels
             .filter {
@@ -24,6 +23,24 @@ struct AllChannelsView: View {
                     || $0.description.localizedCaseInsensitiveContains(trimmed)
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private var filtered: [ZulipStream] {
+        matching((channels ?? []).filter { $0.isArchived != true })
+    }
+
+    private var archivedFiltered: [ZulipStream] {
+        matching((channels ?? []).filter { $0.isArchived == true })
+    }
+
+    private func refresh() async {
+        do {
+            channels = try await store.connection.getAllStreams(includeArchived: true)
+        } catch {
+            if channels == nil {
+                errorText = error.localizedDescription
+            }
+        }
     }
 
     var body: some View {
@@ -44,6 +61,15 @@ struct AllChannelsView: View {
                     ForEach(filtered) { channel in
                         ChannelBrowserRow(store: store, channel: channel, selection: $selection)
                     }
+                    if !archivedFiltered.isEmpty {
+                        Section("Archived") {
+                            ForEach(archivedFiltered) { channel in
+                                ArchivedChannelRow(store: store, channel: channel) {
+                                    Task { await refresh() }
+                                }
+                            }
+                        }
+                    }
                 }
                 .sheet(isPresented: $showNewChannel) {
                     NewChannelSheet(store: store, selection: $selection)
@@ -58,11 +84,62 @@ struct AllChannelsView: View {
             }
         }
         .navigationTitle("All Channels")
-        .task {
+        .task { await refresh() }
+    }
+}
+
+/// An archived channel: dimmed, with restore (admin-gated server-side;
+/// refusals show inline).
+private struct ArchivedChannelRow: View {
+    let store: PerAccountStore
+    let channel: ZulipStream
+    var onUnarchived: () -> Void
+
+    @State private var working = false
+    @State private var errorText: String?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "archivebox")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(channel.name)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.secondary)
+                if let errorText {
+                    Text(errorText)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                } else if !channel.description.isEmpty {
+                    Text(channel.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+            Button("Unarchive") {
+                unarchive()
+            }
+            .controlSize(.small)
+            .disabled(working)
+        }
+        .padding(.vertical, 3)
+    }
+
+    private func unarchive() {
+        working = true
+        errorText = nil
+        Task {
             do {
-                channels = try await store.connection.getAllStreams()
+                try await store.unarchiveChannel(channel.streamId)
+                onUnarchived()
             } catch {
-                errorText = error.localizedDescription
+                errorText = (error as? ApiError)?.message ?? error.localizedDescription
+                working = false
             }
         }
     }

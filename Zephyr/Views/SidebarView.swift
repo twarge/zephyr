@@ -38,6 +38,9 @@ struct SidebarView: View {
     @State private var colorChannelId: Int?
     /// The channel pending archive confirmation, if any.
     @State private var archiveChannelId: Int?
+    /// The channel whose description is being edited, if any.
+    @State private var descriptionChannelId: Int?
+    @State private var descriptionChannelText = ""
 
     init(
         store: PerAccountStore, search: SidebarSearchModel,
@@ -447,6 +450,25 @@ struct SidebarView: View {
         } message: {
             Text("The channel is renamed for everyone.")
         }
+        .alert(
+            "Edit Channel Description",
+            isPresented: Binding(
+                get: { descriptionChannelId != nil },
+                set: { if !$0 { descriptionChannelId = nil } })
+        ) {
+            TextField("Description", text: $descriptionChannelText)
+            Button("Save") {
+                if let streamId = descriptionChannelId {
+                    store.setChannelDescription(
+                        streamId,
+                        description: descriptionChannelText
+                            .trimmingCharacters(in: .whitespaces))
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The description changes for everyone.")
+        }
         .sheet(
             isPresented: Binding(
                 get: { colorChannelId != nil },
@@ -584,6 +606,11 @@ struct SidebarView: View {
                             Button("Rename Channel…") {
                                 renameChannelText = subscription.name
                                 renameChannelId = streamId
+                            }
+                            Button("Edit Description…") {
+                                descriptionChannelText = store.channels[streamId]?.description
+                                    ?? subscription.description ?? ""
+                                descriptionChannelId = streamId
                             }
                             Button("Change Color…") {
                                 colorChannelId = streamId

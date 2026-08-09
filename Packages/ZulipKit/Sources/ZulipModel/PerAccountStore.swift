@@ -965,6 +965,26 @@ public final class PerAccountStore {
         }
     }
 
+    /// Restores an archived channel (admin-gated; feature level 388).
+    /// Throws so the channel browser can surface refusals.
+    public func unarchiveChannel(_ streamId: Int) async throws {
+        try await connection.updateStream(streamId: streamId, isArchived: false)
+    }
+
+    /// Edits a channel's description for everyone. Optimistic; the
+    /// stream/update event confirms.
+    public func setChannelDescription(_ streamId: Int, description: String) {
+        channels[streamId]?.description = description
+        if var subscription = subscriptions[streamId] {
+            subscription.description = description
+            subscriptions[streamId] = subscription
+        }
+        let connection = connection
+        Task {
+            try? await connection.updateStream(streamId: streamId, description: description)
+        }
+    }
+
     /// Renames a channel for everyone. Optimistic; the stream/update event
     /// confirms (or, if the server refuses — permissions are server-side —
     /// the next register snapshot restores the real name).

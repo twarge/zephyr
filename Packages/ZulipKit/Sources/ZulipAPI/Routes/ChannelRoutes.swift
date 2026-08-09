@@ -18,22 +18,38 @@ extension ApiConnection {
     }
 
     /// GET /streams — every channel the user can see (for the browser).
-    public func getAllStreams() async throws -> [ZulipStream] {
+    /// `includeArchived` adds archived channels, flagged by `isArchived`
+    /// (older servers ignore the unknown parameter and return none).
+    public func getAllStreams(includeArchived: Bool = false) async throws -> [ZulipStream] {
         struct GetStreamsResult: Decodable {
             var streams: [ZulipStream]
         }
+        var params: [Param] = []
+        if includeArchived {
+            params.append(Param("exclude_archived", "false"))
+        }
         let result: GetStreamsResult = try await request(
-            ApiRequest(method: .get, path: "/api/v1/streams"))
+            ApiRequest(method: .get, path: "/api/v1/streams", params: params))
         return result.streams
     }
 
-    /// PATCH /streams/{stream_id} — rename the channel (permissions are
-    /// server-enforced; plain-string params since feature level 64).
-    public func updateStream(streamId: Int, newName: String) async throws {
+    /// PATCH /streams/{stream_id} — rename, description edit, and/or
+    /// unarchive (`isArchived: false`, the only direction the server
+    /// allows; feature level 388). Permissions are server-enforced;
+    /// plain-string params since feature level 64.
+    public func updateStream(
+        streamId: Int, newName: String? = nil, description: String? = nil,
+        isArchived: Bool? = nil
+    ) async throws {
+        var params: [Param] = []
+        if let newName { params.append(Param("new_name", newName)) }
+        if let description { params.append(Param("description", description)) }
+        if let isArchived {
+            params.append(Param("is_archived", isArchived ? "true" : "false"))
+        }
         _ = try await send(
             ApiRequest(
-                method: .patch, path: "/api/v1/streams/\(streamId)",
-                params: [Param("new_name", newName)]))
+                method: .patch, path: "/api/v1/streams/\(streamId)", params: params))
     }
 
     /// POST /users/me/subscriptions with a new name — creates the channel

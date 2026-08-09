@@ -84,6 +84,30 @@ struct StoreEventTests {
         #expect(transport.requests[1].path.hasSuffix("/streams/10"))
     }
 
+    @Test func descriptionEditAndUnarchivePatchStream() async throws {
+        let transport = FakeTransport(
+            defaultResponse: .json(#"{"result": "success", "msg": ""}"#))
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        store.setChannelDescription(10, description: "War room")
+        #expect(store.channels[10]?.description == "War room")
+        #expect(store.subscriptions[10]?.description == "War room")
+        try await eventually("description sent") { transport.requests.count == 1 }
+        #expect(transport.requests[0].method == "PATCH")
+        #expect(transport.requests[0].path.hasSuffix("/streams/10"))
+        #expect(transport.requests[0].formValue("description") == "War room")
+
+        try await store.unarchiveChannel(10)
+        #expect(transport.requests[1].formValue("is_archived") == "false")
+    }
+
     @Test func archivedStreamEventRemovesChannelAndSubscription() throws {
         let store = try makeStore()
         #expect(store.subscriptions[10] != nil)
