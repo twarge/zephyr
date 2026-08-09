@@ -37,6 +37,8 @@ struct MainSplitView: View {
     /// Live sidebar column width — gates the realm logo, which hides
     /// entirely when it wouldn't fit (never the overflow menu).
     @State private var sidebarWidth: CGFloat = 300
+    /// The iOS sidebar gear's Settings sheet.
+    @State private var showSettingsSheet = false
     /// True while the narrow-window watcher hid the sidebar (so growing
     /// the window restores it; a user's manual collapse is left alone).
     @State private var autoCollapsedSidebar = false
@@ -94,16 +96,29 @@ struct MainSplitView: View {
                 // The iPad's system sidebars (Mail, Notes) run ~320pt;
                 // the macOS-tuned 156 reads half-width there.
                 .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
-                // A real sidebar navigation bar (title + compose): the
-                // iPadOS window controls dock into this row — without it
-                // they float over a bare strip.
+                // A real sidebar navigation bar (title, logo, settings,
+                // compose): the iPadOS window controls dock into this row —
+                // without it they float over a bare strip.
                 .navigationTitle(store.realmName ?? "Zephyr")
                 .toolbar {
+                    // The realm's logo, like the macOS sidebar toolbar.
+                    ToolbarItem(placement: .topBarLeading) {
+                        RealmLogoView(store: store)
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Settings", systemImage: "gear") {
+                            showSettingsSheet = true
+                        }
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button("New Conversation", systemImage: "square.and.pencil") {
                             model.pendingNewConversation = true
                         }
                     }
+                }
+                .sheet(isPresented: $showSettingsSheet) {
+                    SettingsView()
+                        .environment(model)
                 }
                 #endif
                 #if os(macOS)
@@ -437,22 +452,14 @@ struct MainSplitView: View {
                     .help("Go to #\(channelName(streamId))")
                 }
             }
-            // The server menu lives in the main toolbar. macOS hides it
-            // with a single server (Settings lives in the app menu); iOS
-            // keeps it — it's the only road to Settings there.
-            #if os(macOS)
+            // The server menu shows only with multiple servers — Settings
+            // lives in the app menu on macOS and the sidebar gear on iOS.
             if model.global.enabledAccounts.count > 1 {
                 ToolbarItem(placement: .automatic) {
                     ServerMenu(store: store, selectedAccount: $selectedAccount)
                         .popoverTip(PerWindowServersTip())
                 }
             }
-            #else
-            ToolbarItem(placement: .automatic) {
-                ServerMenu(store: store, selectedAccount: $selectedAccount)
-                    .popoverTip(PerWindowServersTip())
-            }
-            #endif
             if store.isRecoveringEventStream {
                 ToolbarItem(placement: .automatic) {
                     // A broken chain link (SF Symbols has none): two
