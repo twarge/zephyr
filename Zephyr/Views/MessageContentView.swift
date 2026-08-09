@@ -1,3 +1,6 @@
+#if canImport(AppKit)
+import AppKit
+#endif
 import os
 import QuickLook
 import SwiftUI
@@ -107,6 +110,56 @@ struct BlockNodeView: View {
         InlineRenderer.text(inlines, connection: connection, colorScheme: colorScheme)
     }
 }
+
+#if os(macOS)
+/// Shows the given SwiftUI menu for right-clicks anywhere over the view it
+/// overlays. Selectable Text's AppKit backing consumes right-clicks and
+/// substitutes the system edit menu for any ancestor `.contextMenu`; this
+/// sits above it and claims only right-clicks (and control-clicks) — left
+/// clicks, selection drags, link clicks, and scrolling pass through.
+struct RightClickMenu<MenuItems: View>: NSViewRepresentable {
+    @ViewBuilder var items: () -> MenuItems
+
+    func makeNSView(context: Context) -> InterceptView {
+        InterceptView()
+    }
+
+    func updateNSView(_ view: InterceptView, context: Context) {
+        let items = items
+        view.menuProvider = { NSHostingMenu(rootView: Group(content: items)) }
+    }
+
+    final class InterceptView: NSView {
+        var menuProvider: (() -> NSMenu)?
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard super.hitTest(point) === self,
+                  let event = NSApp.currentEvent else { return nil }
+            switch event.type {
+            case .rightMouseDown, .rightMouseUp:
+                return self
+            case .leftMouseDown, .leftMouseUp:
+                return event.modifierFlags.contains(.control) ? self : nil
+            default:
+                return nil
+            }
+        }
+
+        override func menu(for event: NSEvent) -> NSMenu? {
+            menuProvider?()
+        }
+
+        // Control-click: AppKit's default mouseDown shows no menu.
+        override func mouseDown(with event: NSEvent) {
+            if event.modifierFlags.contains(.control), let menu = menuProvider?() {
+                NSMenu.popUpContextMenu(menu, with: event, for: self)
+            } else {
+                super.mouseDown(with: event)
+            }
+        }
+    }
+}
+#endif
 
 /// Display math, natively typeset from the TeX source; falls back to showing
 /// the source when SwiftMath can't parse the expression.

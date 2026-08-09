@@ -740,8 +740,14 @@ struct MessageRow: View {
                     MessageContentView(
                         content: content, connection: store.connection)
                         // Same menu over the text: selectable Text otherwise
-                        // substitutes the system edit menu on right-click.
+                        // substitutes the system edit menu on right-click,
+                        // which a SwiftUI .contextMenu can't override on
+                        // macOS — the AppKit overlay intercepts instead.
+                        #if os(macOS)
+                        .overlay { RightClickMenu { messageMenu() } }
+                        #else
                         .contextMenu { messageMenu() }
+                        #endif
                 }
                 if !message.reactions.isEmpty {
                     ReactionsRow(store: store, message: message)
