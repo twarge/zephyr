@@ -234,6 +234,21 @@ struct ComposeBar: View {
             && uploads.isEmpty
     }
 
+    // Touch-sized controls on iOS (44pt targets via touchTarget(); the
+    // send glyph fills the field's height); compact pointer targets on
+    // macOS.
+    #if os(macOS)
+    private static let chevronIconSize: CGFloat = 14
+    private static let attachIconSize: CGFloat = 16
+    private static let sendIconSize: CGFloat = 24
+    private static let columnSpacing: CGFloat = 10
+    #else
+    private static let chevronIconSize: CGFloat = 20
+    private static let attachIconSize: CGFloat = 22
+    private static let sendIconSize: CGFloat = 34
+    private static let columnSpacing: CGFloat = 0
+    #endif
+
     var body: some View {
         let _ = PerfLog.render("ComposeBar")
         VStack(alignment: .leading, spacing: 6) {
@@ -274,12 +289,15 @@ struct ComposeBar: View {
                     previewTask?.cancel()
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: Self.chevronIconSize, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(expanded ? -90 : 0))
+                        .touchTarget()
                 }
                 .buttonStyle(.plain)
+                #if os(macOS)
                 .padding(.bottom, 7)
+                #endif
                 .help(expanded ? "Compact message field" : "Long-form message field")
                 .popoverTip(LongFormComposeTip())
                 VStack(alignment: .leading, spacing: 6) {
@@ -321,14 +339,15 @@ struct ComposeBar: View {
                 // aligned with the bar: send keeps its exact spot whether
                 // the editor is compact or expanded — the other three only
                 // appear above it in long-form mode.
-                VStack(spacing: 10) {
+                VStack(spacing: Self.columnSpacing) {
                     if expanded {
                         Button {
                             showFileImporter = true
                         } label: {
                             Image(systemName: "paperclip")
-                                .font(.system(size: 16))
+                                .font(.system(size: Self.attachIconSize))
                                 .foregroundStyle(.secondary)
+                                .touchTarget()
                         }
                         .buttonStyle(.plain)
                         .help("Attach files")
@@ -348,8 +367,9 @@ struct ComposeBar: View {
                             matching: .any(of: [.images, .videos])
                         ) {
                             Image(systemName: "photo")
-                                .font(.system(size: 16))
+                                .font(.system(size: Self.attachIconSize))
                                 .foregroundStyle(.secondary)
+                                .touchTarget()
                         }
                         .buttonStyle(.plain)
                         .help("Attach photos or videos")
@@ -357,8 +377,9 @@ struct ComposeBar: View {
                             togglePreview()
                         } label: {
                             Image(systemName: showPreview ? "eye.slash" : "eye")
-                                .font(.system(size: 16))
+                                .font(.system(size: Self.attachIconSize))
                                 .foregroundStyle(.secondary)
+                                .touchTarget()
                         }
                         .buttonStyle(.plain)
                         .disabled(!showPreview
@@ -367,9 +388,10 @@ struct ComposeBar: View {
                     }
                     Button(action: send) {
                         Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 24))
+                            .font(.system(size: Self.sendIconSize))
                             .foregroundStyle(
                                 canSend ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                            .touchTarget()
                     }
                     .buttonStyle(.plain)
                     .disabled(!canSend)
@@ -930,6 +952,21 @@ struct ComposeBar: View {
         // Keep composing: submit otherwise resigns focus (dropping the
         // keyboard on iOS) after every message.
         messageFocused = true
+    }
+}
+
+private extension View {
+    /// The HIG's 44pt minimum tap target on iOS; unchanged under a
+    /// pointer on macOS. Nonisolated so nonisolated label builders
+    /// (PhotosPicker's) can call it.
+    @ViewBuilder
+    nonisolated func touchTarget() -> some View {
+        #if os(macOS)
+        self
+        #else
+        frame(minWidth: 44, minHeight: 44)
+            .contentShape(.rect)
+        #endif
     }
 }
 
