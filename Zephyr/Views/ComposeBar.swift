@@ -250,6 +250,17 @@ struct ComposeBar: View {
     private nonisolated static let columnSpacing: CGFloat = 0
     #endif
 
+    /// iOS compact: chevron, field, and send share one midline (the
+    /// chevron points at the field's middle). Expanded — and all of
+    /// macOS — bottom-aligns so send stays pinned while the editor grows.
+    private var rowAlignment: VerticalAlignment {
+        #if os(macOS)
+        .bottom
+        #else
+        expanded ? .bottom : .center
+        #endif
+    }
+
     var body: some View {
         let _ = PerfLog.render("ComposeBar")
         VStack(alignment: .leading, spacing: 6) {
@@ -280,7 +291,7 @@ struct ComposeBar: View {
                     Spacer(minLength: 0)
                 }
             }
-            HStack(alignment: .bottom, spacing: 8) {
+            HStack(alignment: rowAlignment, spacing: 8) {
                 Button {
                     LongFormComposeTip().invalidate(reason: .actionPerformed)
                     withAnimation(.snappy) {
@@ -417,8 +428,21 @@ struct ComposeBar: View {
             }
         }
         .padding(.horizontal, 12)
+        #if os(macOS)
         .padding(.vertical, 8)
+        #else
+        // Send symmetric to the window corner: its glyph sits 5pt inside
+        // the 44pt tap box, and 12pt side padding puts it 17pt from the
+        // right edge — 12pt bottom padding matches that below, with the
+        // bar running through the container's bottom inset (the keyboard
+        // inset still applies).
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+        #endif
         .background(.bar)
+        #if !os(macOS)
+        .ignoresSafeArea(.container, edges: .bottom)
+        #endif
         .dropDestination(for: URL.self) { urls, _ in
             let fileURLs = urls.filter(\.isFileURL)
             guard !fileURLs.isEmpty else { return false }
