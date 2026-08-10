@@ -189,11 +189,16 @@ extension ZephyrApp {
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
         }
-        // Edit → Find focuses the search field, like the / key.
+        // Edit → Find focuses the search field, like the / key. macOS
+        // only: iPadOS's system menu already owns ⌘F, and duplicate
+        // UIKeyCommands are undefined behavior (the / key and toolbar
+        // search cover iPad).
+        #if os(macOS)
         CommandGroup(after: .textEditing) {
             Button("Find") { model.pendingCommand = .find }
                 .keyboardShortcut("f", modifiers: .command)
         }
+        #endif
         // View additions: reload. (Text size follows the system's Dynamic
         // Type setting — no in-app override.)
         CommandGroup(before: .toolbar) {
@@ -206,7 +211,12 @@ extension ZephyrApp {
                 .keyboardShortcut("r", modifiers: .command)
             Button("Reply Quoting Message") { model.pendingCommand = .replyQuoting }
             Button("Edit Message") { model.pendingCommand = .editMessage }
+                // ⌘E is the system's Use Selection for Find on iPadOS.
+                #if os(macOS)
                 .keyboardShortcut("e", modifiers: .command)
+                #else
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                #endif
             Button("Star / Unstar") { model.pendingCommand = .toggleStar }
             Divider()
             Button("Copy Message Reference") { model.pendingCommand = .copyReference }
