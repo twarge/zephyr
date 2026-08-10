@@ -282,38 +282,6 @@ struct ComposeBar: View {
                 .padding(.bottom, 7)
                 .help(expanded ? "Compact message field" : "Long-form message field")
                 .popoverTip(LongFormComposeTip())
-                PhotosPicker(
-                    selection: $photoPickerItems,
-                    maxSelectionCount: 10,
-                    matching: .any(of: [.images, .videos])
-                ) {
-                    Image(systemName: "photo")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .padding(.bottom, 6)
-                .help("Attach photos or videos")
-                Button {
-                    showFileImporter = true
-                } label: {
-                    Image(systemName: "paperclip")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .padding(.bottom, 6)
-                .help("Attach files")
-                .fileImporter(
-                    isPresented: $showFileImporter,
-                    allowedContentTypes: [.item],
-                    allowsMultipleSelection: true
-                ) { result in
-                    guard case .success(let urls) = result else { return }
-                    for url in urls {
-                        upload(fileURL: url, securityScoped: true)
-                    }
-                }
                 VStack(alignment: .leading, spacing: 6) {
                 if case .channel(let streamId) = mode {
                     TopicAutocompleteField(
@@ -349,8 +317,45 @@ struct ComposeBar: View {
                         }
                 }
                 }
-                if expanded {
+                // Fixed trailing column (file, photo, preview, send),
+                // bottom-aligned with the bar: send keeps its exact spot
+                // whether the editor is compact or expanded.
+                VStack(spacing: 10) {
                     Button {
+                        showFileImporter = true
+                    } label: {
+                        Image(systemName: "paperclip")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Attach files")
+                    .fileImporter(
+                        isPresented: $showFileImporter,
+                        allowedContentTypes: [.item],
+                        allowsMultipleSelection: true
+                    ) { result in
+                        guard case .success(let urls) = result else { return }
+                        for url in urls {
+                            upload(fileURL: url, securityScoped: true)
+                        }
+                    }
+                    PhotosPicker(
+                        selection: $photoPickerItems,
+                        maxSelectionCount: 10,
+                        matching: .any(of: [.images, .videos])
+                    ) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Attach photos or videos")
+                    Button {
+                        // Previewing from the compact field expands first.
+                        if !expanded {
+                            withAnimation(.snappy) { expanded = true }
+                        }
                         togglePreview()
                     } label: {
                         Image(systemName: showPreview ? "eye.slash" : "eye")
@@ -358,22 +363,22 @@ struct ComposeBar: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .padding(.bottom, 6)
                     .disabled(!showPreview
                         && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .help(showPreview ? "Back to editing" : "Preview as it will send")
+                    Button(action: send) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundStyle(
+                                canSend ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canSend)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .help(expanded
+                        ? "Send (⇧Return; Return for a new line)"
+                        : "Send (Return; ⌥Return for a new line)")
                 }
-                Button(action: send) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundStyle(canSend ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
-                }
-                .buttonStyle(.plain)
-                .disabled(!canSend)
-                .keyboardShortcut(.return, modifiers: .command)
-                .help(expanded
-                    ? "Send (⇧Return; Return for a new line)"
-                    : "Send (Return; ⌥Return for a new line)")
             }
         }
         .padding(.horizontal, 12)
