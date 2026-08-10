@@ -520,12 +520,29 @@ struct MessageFeedList: View {
     /// not the overlay sentinels — bottom-anchored, so the row lands
     /// fully visible and realized; the poll then verifies or refines.
     private func assertReveal(_ id: Int, movingUp: Bool, proxy: ScrollViewProxy) {
-        if rowFrames.frames[id] == nil {
+        guard rowFrames.frames[id] == nil else {
+            performReveal(id, movingUp: movingUp, proxy: proxy)
+            return
+        }
+        if anchorId != "msg-\(id)" {
             withAnimation(.easeInOut(duration: 0.2)) {
                 anchorId = "msg-\(id)"
             }
-        } else {
-            performReveal(id, movingUp: movingUp, proxy: proxy)
+            return
+        }
+        // The binding already holds the target — an identical write
+        // coalesces to nothing (the estimate-based jump missed and won't
+        // re-fire). Page toward the target via its nearest REALIZED
+        // neighbor, which proxy.scrollTo can always reach; each pass
+        // realizes more rows until the target itself appears.
+        let neighbor = movingUp
+            ? rowFrames.frames.keys.filter { $0 > id }.min()
+            : rowFrames.frames.keys.filter { $0 < id }.max()
+        guard let neighbor else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            proxy.scrollTo(
+                "msg-\(neighbor)",
+                anchor: movingUp ? .bottom : .top)
         }
     }
 
