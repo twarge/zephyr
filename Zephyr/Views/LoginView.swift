@@ -193,7 +193,26 @@ struct LoginView: View {
             return
         }
         run {
-            let settings = try await ApiConnection.getServerSettings(realm: realm)
+            let settings: ServerSettings
+            do {
+                settings = try await ApiConnection.getServerSettings(realm: realm)
+            } catch let error as ApiError
+                where error.message.localizedCaseInsensitiveContains("subdomain") {
+                // Zulip Cloud's root domain answers "Subdomain required"
+                // when the address is missing its organization part —
+                // say what to do instead of echoing server jargon.
+                throw ApiError(
+                    httpStatus: error.httpStatus, code: error.code,
+                    message: "No organization found at \(realm.host() ?? "that address") — "
+                        + "enter your organization's full address, "
+                        + "like myorg.zulipchat.com.")
+            } catch is DecodingError {
+                // Reachable, but not a Zulip server (HTML or some other
+                // non-server_settings answer).
+                throw ApiError(
+                    httpStatus: 0, code: "NOT_A_ZULIP_SERVER",
+                    message: "No Zulip server found at \(realm.host() ?? "that address").")
+            }
             let canonicalRealm = settings.realmURL ?? realm
             method = (settings.emailAuthEnabled ?? false) ? .password : .apiKey
             step = .credentials(settings, realm: canonicalRealm)
