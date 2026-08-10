@@ -263,6 +263,8 @@ struct SidebarView: View {
 
     @AppStorage("recentSearchLimit") private var recentSearchLimit = 5
 
+    @FocusState private var listFocused: Bool
+
     var body: some View {
         let _ = PerfLog.render("Sidebar")
         List(selection: $selection) {
@@ -421,12 +423,28 @@ struct SidebarView: View {
         .onSubmit(of: .search) {
             runSearch(recordInRecents: true)
         }
+        .focused($listFocused)
+        // → hands focus back to the messages pane (macOS routes this via
+        // the key monitor; this covers the iPad hardware keyboard).
+        .onKeyPress(.rightArrow) {
+            keys.focusMessages?()
+            return .handled
+        }
         .onAppear {
             // The keyboard router's / shortcut focuses the search field;
             // media selection blurs it so Space can Quick Look.
             let focus = $searchFocused
             keys.focusSearch = { focus.wrappedValue = true }
             keys.blurSearch = { focus.wrappedValue = false }
+            // ← from messages lands here; native list navigation takes
+            // over while focused.
+            let list = $listFocused
+            keys.focusSidebar = { list.wrappedValue = true }
+            #if os(macOS)
+            // Dropping list focus returns arrows to the message pane (the
+            // monitor's default). iOS registers its own in MainSplitView.
+            keys.focusMessages = { list.wrappedValue = false }
+            #endif
         }
         .onChange(of: search.tokens) {
             if !search.tokens.isEmpty {

@@ -48,6 +48,12 @@ final class KeyboardRouter {
     var composeInputFocused = false
     var editingMessage = false
     var textInputActive: Bool { composeInputFocused || editingMessage }
+
+    /// Pane handoff: ← from the messages pane focuses the sidebar list
+    /// (native arrow navigation takes over); → returns to messages.
+    /// Registered per platform (SidebarView / MainSplitView).
+    var focusSidebar: (() -> Void)?
+    var focusMessages: (() -> Void)?
     /// Set by "Mark as Unread from Here": suppresses visibility-based read
     /// marking so the freshly unread messages don't immediately re-mark;
     /// cleared when a feed (re)appears.
@@ -383,11 +389,26 @@ final class KeyboardRouter {
         if let responder = keyWindow.firstResponder {
             // Never steal keys from text editing.
             if responder is NSTextView || responder is NSTextField { return false }
-            // (Arrows used to yield to a focused sidebar table, which made
-            // message navigation depend on where focus last was — arrows
-            // now always walk messages, like the web app.)
+            if responder is NSTableView || responder is NSOutlineView {
+                // The focused sidebar list owns ↑↓←/Return (native
+                // navigation, live selection); → hands focus back to the
+                // messages pane. Letters still reach the shortcuts.
+                switch keyCode {
+                case 124:
+                    focusMessages?()
+                    return true
+                case 125, 126, 123, 36, 76, 49:
+                    return false
+                default:
+                    break
+                }
+            }
         }
         switch keyCode {
+        case 123:
+            // ← from messages hands focus to the sidebar.
+            focusSidebar?()
+            return true
         case 126: return handleUpArrow()
         case 125: return handleDownArrow()
         case 36, 76: return handleReturn()

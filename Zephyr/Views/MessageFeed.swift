@@ -991,6 +991,8 @@ struct MessageRow: View {
         // buttons inside the row keep working.
         .simultaneousGesture(TapGesture().onEnded {
             keys.selectedMessageId = message.id
+            // Clicking a message reclaims arrow keys from the sidebar.
+            keys.focusMessages?()
         })
         .onChange(of: editing) {
             // The inline editor's TextField must also silence single-key

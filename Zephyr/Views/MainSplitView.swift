@@ -205,7 +205,12 @@ struct MainSplitView: View {
                 .onKeyPress(phases: .down) { press in
                     handleKeyPress(press) ? .handled : .ignored
                 }
-                .onAppear { detailFocused = true }
+                .onAppear {
+                    detailFocused = true
+                    // → in the sidebar returns here (macOS registers its
+                    // own in SidebarView).
+                    keys.focusMessages = { detailFocused = true }
+                }
                 #endif
         }
         #if os(macOS)
@@ -761,6 +766,11 @@ struct MainSplitView: View {
         case .downArrow: return keys.handleDownArrow()
         case .return: return keys.handleReturn()
         case .escape: return keys.handleEscape()
+        case .leftArrow:
+            // ← hands focus to the sidebar; its native navigation takes
+            // over until → (or a message tap) returns.
+            keys.focusSidebar?()
+            return true
         default:
             guard let character = press.characters.first else { return false }
             return keys.handleCharacter(character)
