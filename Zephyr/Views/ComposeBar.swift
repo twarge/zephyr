@@ -451,32 +451,46 @@ struct ComposeBar: View {
         .popoverTip(LongFormComposeTip())
     }
 
-    /// The input pill: field with the send arrow inside its trailing
-    /// edge (bottom-anchored so multi-line growth keeps it in place).
+    /// The input pill. macOS keeps the send arrow inside the trailing
+    /// edge; on iOS the keyboard's Return key IS Send, so the field
+    /// stays clean.
     private var compactField: some View {
         TextField(placeholder, text: $text, axis: .vertical)
             .textFieldStyle(.plain)
             .autocorrectionDisabled(false)
             .lineLimit(1...10)
             .padding(.leading, 12)
+            #if os(macOS)
             .padding(.trailing, Self.sendIconSize + 10)
+            #else
+            .padding(.trailing, 12)
+            #endif
             .padding(.vertical, 7)
             .composeGlass(in: RoundedRectangle(cornerRadius: 17))
+            #if os(macOS)
             .overlay(alignment: .bottomTrailing) {
                 sendButton
                     .padding(3)
             }
+            #else
+            .submitLabel(.send)
+            #endif
             .focused($messageFocused)
             .onSubmit { send() }
             .onKeyPress(.upArrow) { moveSelection(-1) }
             .onKeyPress(.downArrow) { moveSelection(1) }
             .onKeyPress(.tab) { acceptSelection() }
             .onKeyPress(.return, phases: .down) { press in
-                // iOS hardware keyboards: ⇧Return breaks a line in the
-                // compact field (Return sends) — the expanded editor
-                // reverses the roles. macOS handles modifier-returns
-                // natively at the insertion point.
+                // iOS hardware keyboards: ⌘Return sends (the shortcut
+                // rode the removed arrow), ⇧Return breaks a line
+                // (Return sends) — the expanded editor reverses the
+                // roles. macOS handles modifier-returns natively at the
+                // insertion point.
                 #if !os(macOS)
+                if press.modifiers.contains(.command) {
+                    send()
+                    return .handled
+                }
                 if press.modifiers.contains(.shift) {
                     text += "\n"
                     return .handled
