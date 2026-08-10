@@ -481,15 +481,18 @@ struct MainSplitView: View {
                 }
             }
             #endif
-            // "Up" from a topic view to its channel: the channel's own
-            // glyph in its color.
+            // "Up" from a topic view to its channel. macOS paints the
+            // glyph in the channel's color; iOS keeps the standard
+            // monochrome toolbar glyph.
             if case .conversation(.topic(let streamId, _)) = selection {
                 ToolbarItem(placement: .navigation) {
                     Button {
                         selection = .channel(streamId: streamId)
                     } label: {
                         Image(systemName: channelGlyph(streamId))
+                            #if os(macOS)
                             .foregroundStyle(channelColor(streamId))
+                            #endif
                     }
                     .help("Go to #\(channelName(streamId))")
                 }
