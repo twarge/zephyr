@@ -514,25 +514,15 @@ struct MainSplitView: View {
             }
             #endif
             if store.isRecoveringEventStream {
-                ToolbarItem(placement: .automatic) {
-                    // A broken chain link (SF Symbols has none): two
-                    // separated link halves on the diagonal, in a standard
-                    // round filled badge like the other circular controls.
-                    ZStack {
-                        Circle()
-                            .fill(.yellow)
-                        VStack(spacing: 2) {
-                            Capsule()
-                                .strokeBorder(.black.opacity(0.55), lineWidth: 1.6)
-                                .frame(width: 7, height: 9)
-                            Capsule()
-                                .strokeBorder(.black.opacity(0.55), lineWidth: 1.6)
-                                .frame(width: 7, height: 9)
-                        }
-                        .rotationEffect(.degrees(-45))
+                if #available(iOS 26.0, *) {
+                    ToolbarItem(placement: .automatic) {
+                        connectionLostBadge
                     }
-                    .frame(width: 21, height: 21)
-                    .help("Connection lost — reconnecting…")
+                    .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .automatic) {
+                        connectionLostBadge
+                    }
                 }
             }
     }
@@ -681,6 +671,16 @@ struct MainSplitView: View {
     private func requestMessageAction(_ action: MessageActionRequest.Action) {
         guard let id = keys.selectedMessageId else { return }
         keys.messageActionRequest = MessageActionRequest(messageId: id, action: action)
+    }
+
+    /// Connection-lost indicator: the system warning triangle, sitting
+    /// directly on the toolbar (no glass lozenge — it's a status light,
+    /// not a button).
+    private var connectionLostBadge: some View {
+        Image(systemName: "exclamationmark.triangle.fill")
+            .symbolRenderingMode(.multicolor)
+            .foregroundStyle(.yellow)
+            .help("Connection lost — reconnecting…")
     }
 
     /// A plain function, not an inline switch expression: the latter blew
