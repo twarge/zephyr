@@ -59,6 +59,9 @@ struct MainSplitView: View {
         var destination: Destination
     }
     @Environment(\.scenePhase) private var scenePhase
+    #if !os(macOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     @State private var pendingShareItems: [ShareInbox.PendingItem] = []
     @State private var showSharePicker = false
     /// Per-window navigation history for ⌘[ / ⌘].
@@ -473,8 +476,14 @@ struct MainSplitView: View {
         #if os(macOS)
         detailLeadingToolbar
         #else
+        // iPad: upper-left of the main bar. iPhone (compact): the leading
+        // slot is the back button, so an unplaceable pin falls to the
+        // system's bottom-center — pin trailing instead.
         if #available(iOS 26.0, *) {
-            DefaultToolbarItem(kind: .search, placement: .topBarLeading)
+            DefaultToolbarItem(
+                kind: .search,
+                placement: horizontalSizeClass == .compact
+                    ? .topBarTrailing : .topBarLeading)
         }
         #endif
         detailTrailingToolbar
