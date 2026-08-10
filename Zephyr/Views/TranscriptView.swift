@@ -2,6 +2,38 @@ import SwiftUI
 import ZulipAPI
 import ZulipModel
 
+/// macOS-only channel navigation in the window-title menu, attached
+/// only for topic conversations — an empty toolbarTitleMenu still
+/// renders its disclosure chevron, dead.
+private struct ChannelTitleMenu: ViewModifier {
+    let store: PerAccountStore
+    let conversation: ConversationKey
+    @Binding var selection: Destination?
+
+    private func channelName(_ streamId: Int) -> String {
+        store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel"
+    }
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        if case .topic(let streamId, _) = conversation {
+            content.toolbarTitleMenu {
+                Button("All Messages in #\(channelName(streamId))", systemImage: "number") {
+                    selection = .channel(streamId: streamId)
+                }
+                Button("Topics in #\(channelName(streamId))", systemImage: "list.bullet") {
+                    selection = .channelTopics(streamId: streamId)
+                }
+            }
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}
+
 /// A focused transcript for one topic or DM thread. Opens anchored at the
 /// newest messages; scrolling up pages in history.
 struct TranscriptView: View {
@@ -42,17 +74,12 @@ struct TranscriptView: View {
         }
         .navigationTitle(windowTitle)
         // The title is a real window title (system-truncated, never
-        // dropped); channel navigation lives in its title menu.
-        .toolbarTitleMenu {
-            if case .topic(let streamId, _) = conversation {
-                Button("All Messages in #\(channelName(streamId))", systemImage: "number") {
-                    selection = .channel(streamId: streamId)
-                }
-                Button("Topics in #\(channelName(streamId))", systemImage: "list.bullet") {
-                    selection = .channelTopics(streamId: streamId)
-                }
-            }
-        }
+        // dropped); on macOS, channel navigation lives in its title menu —
+        // attached only when it has content, or the bare chevron draws
+        // anyway. iOS skips the menu entirely: its chevron would duplicate
+        // the toolbar's # up-button (and sat dead on DMs).
+        .modifier(ChannelTitleMenu(
+            store: store, conversation: conversation, selection: $selection))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ComposeBar(
                 store: store,
