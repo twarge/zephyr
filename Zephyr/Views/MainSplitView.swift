@@ -115,12 +115,16 @@ struct MainSplitView: View {
                 .toolbar {
                     if #available(iOS 26.0, *) {
                         ToolbarItem(placement: .topBarLeading) {
-                            RealmLogoView(store: store, height: 38)
+                            RealmLogoView(store: store, height: 30)
                         }
                         .sharedBackgroundVisibility(.hidden)
+                        // Pin the minimized search control into the
+                        // sidebar's own bar (the standard spot) instead
+                        // of wherever the system hoists it.
+                        DefaultToolbarItem(kind: .search, placement: .topBarTrailing)
                     } else {
                         ToolbarItem(placement: .topBarLeading) {
-                            RealmLogoView(store: store, height: 38)
+                            RealmLogoView(store: store, height: 30)
                         }
                     }
                 }
