@@ -178,6 +178,7 @@ struct ComposeBar: View {
     @State private var topicFieldFocused = false
     @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var showFileImporter = false
+    @State private var showPhotosPicker = false
     @State private var topicText = ""
     @State private var topicPrefill = ""
     @State private var suggestions: [ComposeSuggestion] = []
@@ -234,31 +235,22 @@ struct ComposeBar: View {
             && uploads.isEmpty
     }
 
-    // Touch-sized controls on iOS (44pt targets via touchTarget(); the
-    // send glyph fills the field's height); compact pointer targets on
-    // macOS. Nonisolated so nonisolated label builders (PhotosPicker's)
-    // can read them.
+    // Messages-style bar metrics: the + button matches the field height;
+    // the send arrow rides inside the field's trailing edge.
     #if os(macOS)
-    private nonisolated static let chevronIconSize: CGFloat = 14
-    private nonisolated static let attachIconSize: CGFloat = 16
-    private nonisolated static let sendIconSize: CGFloat = 24
-    private nonisolated static let columnSpacing: CGFloat = 10
+    private nonisolated static let plusButtonSize: CGFloat = 30
+    private nonisolated static let plusIconSize: CGFloat = 13
+    private nonisolated static let sendIconSize: CGFloat = 26
     #else
-    private nonisolated static let chevronIconSize: CGFloat = 20
-    private nonisolated static let attachIconSize: CGFloat = 22
-    private nonisolated static let sendIconSize: CGFloat = 34
-    private nonisolated static let columnSpacing: CGFloat = 0
+    private nonisolated static let plusButtonSize: CGFloat = 36
+    private nonisolated static let plusIconSize: CGFloat = 16
+    private nonisolated static let sendIconSize: CGFloat = 30
     #endif
 
-    /// iOS compact: chevron, field, and send share one midline (the
-    /// chevron points at the field's middle). Expanded — and all of
-    /// macOS — bottom-aligns so send stays pinned while the editor grows.
+    /// Compact rows center the + on the field's midline; the expanded
+    /// editor bottom-aligns so the + stays at the bar's foot.
     private var rowAlignment: VerticalAlignment {
-        #if os(macOS)
-        .bottom
-        #else
         expanded ? .bottom : .center
-        #endif
     }
 
     var body: some View {
@@ -286,163 +278,60 @@ struct ComposeBar: View {
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(.quaternary.opacity(0.4), in: .capsule)
+                        .background(.regularMaterial, in: .capsule)
                     }
                     Spacer(minLength: 0)
                 }
             }
             HStack(alignment: rowAlignment, spacing: 8) {
-                Button {
-                    LongFormComposeTip().invalidate(reason: .actionPerformed)
-                    withAnimation(.snappy) {
-                        expanded.toggle()
-                    }
-                    showPreview = false
-                    previewTask?.cancel()
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: Self.chevronIconSize, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(expanded ? -90 : 0))
-                        .touchTarget()
-                }
-                .buttonStyle(.plain)
-                #if os(macOS)
-                .padding(.bottom, 7)
-                #endif
-                .help(expanded ? "Compact message field" : "Long-form message field")
-                .popoverTip(LongFormComposeTip())
+                plusMenu
                 VStack(alignment: .leading, spacing: 6) {
-                if case .channel(let streamId) = mode {
-                    TopicAutocompleteField(
-                        store: store, streamId: streamId, topic: $topicText,
-                        plainStyle: true, dropUp: true,
-                        onCommit: { messageFocused = true },
-                        onFocusChange: { focused in
-                            topicFieldFocused = focused
-                            updateComposeInputFocus()
-                        })
-                        .frame(maxWidth: 260)
-                }
-                if expanded {
-                    expandedEditor
-                } else {
-                    TextField(placeholder, text: $text, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .autocorrectionDisabled(false)
-                        .lineLimit(1...10)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 17))
-                        .focused($messageFocused)
-                        .onSubmit { send() }
-                        .onKeyPress(.upArrow) { moveSelection(-1) }
-                        .onKeyPress(.downArrow) { moveSelection(1) }
-                        .onKeyPress(.tab) { acceptSelection() }
-                        .onKeyPress(.return, phases: .down) { press in
-                            // iOS hardware keyboards: ⇧Return breaks a line
-                            // in the compact field (Return sends) — the
-                            // expanded editor reverses the roles. macOS
-                            // handles modifier-returns natively at the
-                            // insertion point.
-                            #if !os(macOS)
-                            if press.modifiers.contains(.shift) {
-                                text += "\n"
-                                return .handled
-                            }
-                            #endif
-                            return acceptSelection()
-                        }
-                        .onKeyPress(.escape) {
-                            guard !suggestions.isEmpty else { return .ignored }
-                            suggestions = []
-                            return .handled
-                        }
-                }
-                }
-                // Trailing column (file, photo, preview, send), bottom-
-                // aligned with the bar: send keeps its exact spot whether
-                // the editor is compact or expanded — the other three only
-                // appear above it in long-form mode.
-                VStack(spacing: Self.columnSpacing) {
+                    if case .channel(let streamId) = mode {
+                        TopicAutocompleteField(
+                            store: store, streamId: streamId, topic: $topicText,
+                            plainStyle: true, dropUp: true,
+                            onCommit: { messageFocused = true },
+                            onFocusChange: { focused in
+                                topicFieldFocused = focused
+                                updateComposeInputFocus()
+                            })
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .composeGlass(in: Capsule())
+                            .frame(maxWidth: 260)
+                    }
                     if expanded {
-                        Button {
-                            showFileImporter = true
-                        } label: {
-                            Image(systemName: "paperclip")
-                                .font(.system(size: Self.attachIconSize))
-                                .foregroundStyle(.secondary)
-                                .touchTarget()
-                        }
-                        .buttonStyle(.plain)
-                        .help("Attach files")
-                        .fileImporter(
-                            isPresented: $showFileImporter,
-                            allowedContentTypes: [.item],
-                            allowsMultipleSelection: true
-                        ) { result in
-                            guard case .success(let urls) = result else { return }
-                            for url in urls {
-                                upload(fileURL: url, securityScoped: true)
-                            }
-                        }
-                        PhotosPicker(
-                            selection: $photoPickerItems,
-                            maxSelectionCount: 10,
-                            matching: .any(of: [.images, .videos])
-                        ) {
-                            Image(systemName: "photo")
-                                .font(.system(size: Self.attachIconSize))
-                                .foregroundStyle(.secondary)
-                                .touchTarget()
-                        }
-                        .buttonStyle(.plain)
-                        .help("Attach photos or videos")
-                        Button {
-                            togglePreview()
-                        } label: {
-                            Image(systemName: showPreview ? "eye.slash" : "eye")
-                                .font(.system(size: Self.attachIconSize))
-                                .foregroundStyle(.secondary)
-                                .touchTarget()
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!showPreview
-                            && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .help(showPreview ? "Back to editing" : "Preview as it will send")
+                        expandedEditor
+                    } else {
+                        compactField
                     }
-                    Button(action: send) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: Self.sendIconSize))
-                            .foregroundStyle(
-                                canSend ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
-                            .touchTarget()
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!canSend)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .help(expanded
-                        ? "Send (⇧Return; Return for a new line)"
-                        : "Send (Return; ⌥Return for a new line)")
                 }
             }
         }
         .padding(.horizontal, 12)
-        #if os(macOS)
-        .padding(.vertical, 8)
-        #else
-        // Send symmetric to the window corner: its glyph sits 5pt inside
-        // the 44pt tap box, and 12pt side padding puts it 17pt from the
-        // right edge — 12pt bottom padding matches that below, with the
-        // bar running through the container's bottom inset (the keyboard
-        // inset still applies).
         .padding(.top, 8)
-        .padding(.bottom, 12)
+        #if os(macOS)
+        .padding(.bottom, 8)
+        #else
+        .padding(.bottom, 4)
         #endif
-        .background(.bar)
-        #if !os(macOS)
-        .ignoresSafeArea(.container, edges: .bottom)
-        #endif
+        // No bar slab: the transcript flows beneath the floating pill
+        // through the safe-area region, toolbar-style.
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            guard case .success(let urls) = result else { return }
+            for url in urls {
+                upload(fileURL: url, securityScoped: true)
+            }
+        }
+        .photosPicker(
+            isPresented: $showPhotosPicker,
+            selection: $photoPickerItems,
+            maxSelectionCount: 10,
+            matching: .any(of: [.images, .videos]))
         .dropDestination(for: URL.self) { urls, _ in
             let fileURLs = urls.filter(\.isFileURL)
             guard !fileURLs.isEmpty else { return false }
@@ -511,6 +400,111 @@ struct ComposeBar: View {
             }
             updateSuggestions()
         }
+    }
+
+    // MARK: Messages-style bar pieces
+
+    /// Messages' + button: attachments, preview, and the long-form
+    /// editor toggle in one menu.
+    private var plusMenu: some View {
+        Menu {
+            Button("Attach File…", systemImage: "paperclip") {
+                showFileImporter = true
+            }
+            Button("Photo Library…", systemImage: "photo") {
+                showPhotosPicker = true
+            }
+            Divider()
+            Button(
+                expanded ? "Compact Editor" : "Long-Form Editor",
+                systemImage: expanded
+                    ? "rectangle.compress.vertical" : "rectangle.expand.vertical"
+            ) {
+                LongFormComposeTip().invalidate(reason: .actionPerformed)
+                withAnimation(.snappy) { expanded.toggle() }
+                showPreview = false
+                previewTask?.cancel()
+            }
+            if expanded {
+                Button(
+                    showPreview ? "Back to Editing" : "Preview",
+                    systemImage: showPreview ? "eye.slash" : "eye"
+                ) {
+                    togglePreview()
+                }
+                .disabled(!showPreview
+                    && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: Self.plusIconSize, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: Self.plusButtonSize, height: Self.plusButtonSize)
+                .composeGlass(in: Circle())
+                .contentShape(.circle)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Attachments and compose options")
+        .popoverTip(LongFormComposeTip())
+    }
+
+    /// The input pill: field with the send arrow inside its trailing
+    /// edge (bottom-anchored so multi-line growth keeps it in place).
+    private var compactField: some View {
+        TextField(placeholder, text: $text, axis: .vertical)
+            .textFieldStyle(.plain)
+            .autocorrectionDisabled(false)
+            .lineLimit(1...10)
+            .padding(.leading, 12)
+            .padding(.trailing, Self.sendIconSize + 10)
+            .padding(.vertical, 7)
+            .composeGlass(in: RoundedRectangle(cornerRadius: 17))
+            .overlay(alignment: .bottomTrailing) {
+                sendButton
+                    .padding(3)
+            }
+            .focused($messageFocused)
+            .onSubmit { send() }
+            .onKeyPress(.upArrow) { moveSelection(-1) }
+            .onKeyPress(.downArrow) { moveSelection(1) }
+            .onKeyPress(.tab) { acceptSelection() }
+            .onKeyPress(.return, phases: .down) { press in
+                // iOS hardware keyboards: ⇧Return breaks a line in the
+                // compact field (Return sends) — the expanded editor
+                // reverses the roles. macOS handles modifier-returns
+                // natively at the insertion point.
+                #if !os(macOS)
+                if press.modifiers.contains(.shift) {
+                    text += "\n"
+                    return .handled
+                }
+                #endif
+                return acceptSelection()
+            }
+            .onKeyPress(.escape) {
+                guard !suggestions.isEmpty else { return .ignored }
+                suggestions = []
+                return .handled
+            }
+    }
+
+    private var sendButton: some View {
+        Button(action: send) {
+            Image(systemName: "arrow.up.circle.fill")
+                .font(.system(size: Self.sendIconSize))
+                .foregroundStyle(
+                    canSend ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canSend)
+        .keyboardShortcut(.return, modifiers: .command)
+        .help(expanded
+            ? "Send (⇧Return; Return for a new line)"
+            : "Send (Return; ⌥Return for a new line)")
     }
 
     // MARK: Long-form mode
@@ -600,7 +594,11 @@ struct ComposeBar: View {
             }
         }
         .frame(height: editorHeight)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+        .composeGlass(in: RoundedRectangle(cornerRadius: 17))
+        .overlay(alignment: .bottomTrailing) {
+            sendButton
+                .padding(6)
+        }
     }
 
     /// Server-rendered preview (POST /messages/render): exactly what will
@@ -669,7 +667,8 @@ struct ComposeBar: View {
         }
         .padding(4)
         .frame(maxWidth: 360)
-        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        // Material, not tint: the card floats over scrolling content now.
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 
     @ViewBuilder
@@ -994,6 +993,17 @@ struct ComposeBar: View {
 }
 
 extension View {
+    /// The floating-bar glass treatment for compose chrome; material
+    /// fallback pre-26.
+    @ViewBuilder
+    func composeGlass(in shape: some Shape) -> some View {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            glassEffect(.regular, in: shape)
+        } else {
+            background(.regularMaterial, in: shape)
+        }
+    }
+
     /// The HIG's 44pt minimum tap target on iOS; unchanged under a
     /// pointer on macOS. Nonisolated so nonisolated label builders
     /// (PhotosPicker's) can call it.
