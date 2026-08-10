@@ -118,10 +118,6 @@ struct MainSplitView: View {
                             RealmLogoView(store: store, height: 30)
                         }
                         .sharedBackgroundVisibility(.hidden)
-                        // Pin the minimized search control into the
-                        // sidebar's own bar (the standard spot) instead
-                        // of wherever the system hoists it.
-                        DefaultToolbarItem(kind: .search, placement: .topBarTrailing)
                     } else {
                         ToolbarItem(placement: .topBarLeading) {
                             RealmLogoView(store: store, height: 30)
@@ -170,6 +166,10 @@ struct MainSplitView: View {
                 .toolbar { detailToolbar }
                 #if !os(macOS)
                 .toolbarTitleDisplayMode(.inline)
+                // The sidebar-filtering search field renders here — the
+                // main view's toolbar, not the sidebar's — minimized to
+                // the standard magnifier (see detailToolbar's pin).
+                .modifier(DetailSearchField(search: search, selection: $selection))
                 #endif
                 .popoverTip(QuickLookNavigationTip())
                 // Files dropped anywhere in the conversation area upload via
@@ -467,9 +467,14 @@ struct MainSplitView: View {
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
         // iOS has no leading items — the channel up-button rides the
-        // trailing group there.
+        // trailing group there, and the leading slot holds the
+        // minimized search control (standard upper-left placement).
         #if os(macOS)
         detailLeadingToolbar
+        #else
+        if #available(iOS 26.0, *) {
+            DefaultToolbarItem(kind: .search, placement: .topBarLeading)
+        }
         #endif
         detailTrailingToolbar
     }
@@ -872,6 +877,62 @@ struct MainSplitView: View {
 
 /// The window's server menu: switching (⌘1–⌘9), account management, sign
 /// out. One per window — it changes only this window's server.
+#if !os(macOS)
+/// iOS: the sidebar-filtering search field, attached to the DETAIL
+/// column so its minimized magnifier renders in the main view's toolbar
+/// (macOS keeps the field on the sidebar list → window toolbar). The
+/// field drives the same shared search model either way.
+private struct DetailSearchField: ViewModifier {
+    @Bindable var search: SidebarSearchModel
+    @Binding var selection: Destination?
+    @Environment(KeyboardRouter.self) private var keys
+    @FocusState private var searchFocused: Bool
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            searchable(content)
+                .searchToolbarBehavior(.minimize)
+        } else {
+            searchable(content)
+        }
+    }
+
+    private func searchable(_ content: Content) -> some View {
+        content
+            .searchable(
+                text: $search.filterText, tokens: $search.tokens,
+                prompt: "Filter or search"
+            ) { token in
+                Text(token.bubbleText)
+            }
+            .searchSuggestions {
+                ForEach(search.suggestions) { token in
+                    Label(token.suggestionTitle, systemImage: token.suggestionIcon)
+                        .searchCompletion(token)
+                }
+            }
+            .searchFocused($searchFocused)
+            .onSubmit(of: .search) { runSearch() }
+            .onAppear {
+                // The keyboard router's / shortcut focuses this field;
+                // media selection blurs it so Space can Quick Look.
+                let focus = $searchFocused
+                keys.focusSearch = { focus.wrappedValue = true }
+                keys.blurSearch = { focus.wrappedValue = false }
+            }
+    }
+
+    private func runSearch() {
+        let query = SearchQuery(tokens: search.tokens, text: search.filterText)
+        guard !query.isEmpty else { return }
+        search.recordSearch(query)
+        search.filterText = ""
+        search.tokens = []
+        selection = .search(query)
+    }
+}
+#endif
+
 struct ServerMenu: View {
     let store: PerAccountStore
     @Binding var selectedAccount: Account.ID?

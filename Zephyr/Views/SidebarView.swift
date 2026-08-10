@@ -425,6 +425,10 @@ struct SidebarView: View {
         // One field, two roles: typing filters the sidebar live (suggestions
         // pop over beside the field); committed tokens search immediately;
         // Return searches the free text and records it in Recent Searches.
+        // macOS only — iOS attaches the same field to the detail column
+        // (MainSplitView's DetailSearchField), so the minimized magnifier
+        // renders in the main view's toolbar.
+        #if os(macOS)
         .searchable(
             text: $search.filterText, tokens: $search.tokens,
             placement: Self.searchPlacement, prompt: "Filter or search"
@@ -441,11 +445,11 @@ struct SidebarView: View {
                     .searchCompletion(token)
             }
         }
-        .modifier(MinimizedSidebarSearch())
         .searchFocused($searchFocused)
         .onSubmit(of: .search) {
             runSearch(recordInRecents: true)
         }
+        #endif
         .focused($listFocused)
         // → hands focus back to the messages pane (macOS routes this via
         // the key monitor; this covers the iPad hardware keyboard).
@@ -454,11 +458,14 @@ struct SidebarView: View {
             return .handled
         }
         .onAppear {
+            #if os(macOS)
             // The keyboard router's / shortcut focuses the search field;
-            // media selection blurs it so Space can Quick Look.
+            // media selection blurs it so Space can Quick Look. (iOS
+            // registers these from DetailSearchField instead.)
             let focus = $searchFocused
             keys.focusSearch = { focus.wrappedValue = true }
             keys.blurSearch = { focus.wrappedValue = false }
+            #endif
             // ← from messages lands here; native list navigation takes
             // over while focused.
             let list = $listFocused
@@ -1262,23 +1269,6 @@ private struct SidebarTopicRow: View {
             ? TopicName.resolvedPrefix + trimmed : trimmed
         store.moveMessage(topic.maxId, toTopic: newName, propagateMode: "change_all")
         onRenamed?()
-    }
-}
-
-/// iPadOS 26's standard toolbar search: the field minimizes into the
-/// navigation bar's magnifier button. Pre-26 (and macOS) keep their
-/// native presentation.
-private struct MinimizedSidebarSearch: ViewModifier {
-    func body(content: Content) -> some View {
-        #if os(macOS)
-        content
-        #else
-        if #available(iOS 26.0, *) {
-            content.searchToolbarBehavior(.minimize)
-        } else {
-            content
-        }
-        #endif
     }
 }
 

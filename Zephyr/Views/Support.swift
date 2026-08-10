@@ -104,6 +104,10 @@ struct RealmLogoView: View {
                     .scaledToFit()
                     .frame(height: height)
                     .frame(maxWidth: height * 7.5, alignment: .leading)
+                    // Ideal size always: a crowded toolbar otherwise
+                    // squeezes the width, and scaledToFit shrinks the
+                    // whole mark with it.
+                    .fixedSize()
             } else if let icon {
                 Image(platform: icon)
                     .resizable()
