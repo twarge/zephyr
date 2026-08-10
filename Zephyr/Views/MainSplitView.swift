@@ -462,7 +462,11 @@ struct MainSplitView: View {
     // exceeded the type checker's budget.
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
+        // iOS has no leading items — the channel up-button rides the
+        // trailing group there.
+        #if os(macOS)
         detailLeadingToolbar
+        #endif
         detailTrailingToolbar
     }
 
@@ -510,10 +514,29 @@ struct MainSplitView: View {
                 }
             }
             #if !os(macOS)
+            // Fixed spacers split the trailing group's shared glass
+            // capsule so each button gets its own standard circular
+            // container — the left-side buttons' (and Mail's) size.
+            if case .conversation(.topic(let streamId, _)) = selection {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        selection = .channel(streamId: streamId)
+                    } label: {
+                        Image(systemName: channelGlyph(streamId))
+                    }
+                    .help("Go to #\(channelName(streamId))")
+                }
+                if #available(iOS 26.0, *) {
+                    ToolbarSpacer(.fixed, placement: .primaryAction)
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button("Settings", systemImage: "gear") {
                     showSettingsSheet = true
                 }
+            }
+            if #available(iOS 26.0, *) {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
             }
             ToolbarItem(placement: .primaryAction) {
                 Button("New Conversation", systemImage: "square.and.pencil") {
