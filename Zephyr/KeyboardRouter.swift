@@ -92,6 +92,9 @@ final class KeyboardRouter {
     @ObservationIgnored var currentDestination: Destination?
     @ObservationIgnored var navigate: ((Destination) -> Void)?
     @ObservationIgnored var focusCompose: (() -> Void)?
+    /// Channel-mode compose only: replying to a message steers the topic
+    /// field to that message's topic.
+    @ObservationIgnored var setComposeTopic: ((String) -> Void)?
     @ObservationIgnored var focusSearch: (() -> Void)?
     @ObservationIgnored var newConversation: (() -> Void)?
     @ObservationIgnored private var monitor: Any?
@@ -230,6 +233,15 @@ final class KeyboardRouter {
         switch feed.narrow {
         case .topic, .dm:
             guard let focusCompose else { return false }
+            focusCompose()
+            return true
+        case .channel:
+            // Channel feed: compose right here — the topic field follows
+            // the replied-to message.
+            guard let focusCompose else { return false }
+            if let subject = selectedMessage?.subject {
+                setComposeTopic?(subject)
+            }
             focusCompose()
             return true
         default:

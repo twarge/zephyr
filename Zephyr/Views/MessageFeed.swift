@@ -1564,6 +1564,9 @@ struct MessageRow: View {
                 keys.navigate?(.conversation(key))
                 try? await Task.sleep(for: .milliseconds(300))
             }
+            // Channel feed: the topic field follows the quoted message
+            // (no-op elsewhere — only channel-mode compose registers).
+            keys.setComposeTopic?(message.subject)
             keys.insertIntoCompose?(quote)
             keys.focusCompose?()
         }

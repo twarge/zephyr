@@ -381,6 +381,15 @@ struct ComposeBar: View {
                     text += (text.hasSuffix("\n") ? "" : "\n") + snippet
                 }
             }
+            // Replying to a message in the channel feed steers the topic
+            // field to that message's topic (set as prefill, so the
+            // bottom-of-feed follow behavior resumes afterward).
+            if case .channel = mode {
+                keys.setComposeTopic = { topic in
+                    topicText = topic
+                    topicPrefill = topic
+                }
+            }
             consumeShareSeed()
             syncTopicPrefill()
         }
@@ -392,6 +401,9 @@ struct ComposeBar: View {
             keys.composeInputFocused = false
             keys.unregisterUpload(owner: uploadOwnerId)
             keys.unregisterComposeInsertion(owner: uploadOwnerId)
+            if case .channel = mode {
+                keys.setComposeTopic = nil
+            }
         }
         .onChange(of: messageFocused) { _, focused in
             if !focused {
