@@ -100,6 +100,7 @@ struct MessageFeedList: View {
     private struct FeedGeometry: Equatable {
         var nearBottom: Bool
         var lost: Bool
+        var containerHeight: CGFloat = 0
     }
 
     private enum Item: Identifiable {
@@ -194,6 +195,10 @@ struct MessageFeedList: View {
 
     /// Message rows currently ≥95% visible (selection-reveal decisions).
     @State private var fullyVisibleMessageIds: Set<Int> = []
+    /// Realized row heights and the viewport height, for choosing whether
+    /// a reveal shows a message's top (taller than the view) or bottom.
+    @State private var rowHeights: [Int: CGFloat] = [:]
+    @State private var viewportHeight: CGFloat = 0
 
     var body: some View {
         let _ = PerfLog.render("FeedList")
@@ -279,11 +284,23 @@ struct MessageFeedList: View {
                                   !fullyVisibleMessageIds.contains(newId)
                             else { return }
                             let movingUp = old.map { newId < $0 } ?? false
-                            let anchor = movingUp
-                                ? UnitPoint(x: 0.5, y: 0.1)
-                                : UnitPoint(x: 0.5, y: 0.9)
+                            // Messages taller than the viewport reveal from
+                            // the TOP regardless of direction.
+                            let tall = viewportHeight > 0
+                                && (rowHeights[newId] ?? 0) > viewportHeight * 0.8
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                proxy.scrollTo("msg-\(newId)", anchor: anchor)
+                                if movingUp || tall {
+                                    // Top sentinel at 8% of the viewport:
+                                    // the row's top lands below the pinned
+                                    // section header.
+                                    proxy.scrollTo(
+                                        "msgtop-\(newId)",
+                                        anchor: UnitPoint(x: 0.5, y: 0.08))
+                                } else {
+                                    proxy.scrollTo(
+                                        "msg-\(newId)",
+                                        anchor: UnitPoint(x: 0.5, y: 0.9))
+                                }
                             }
                         }
                         .overlay(alignment: .bottomTrailing) {
@@ -331,6 +348,12 @@ struct MessageFeedList: View {
         .onAppear {
             keys.activeFeed = model
             keys.readMarkingPaused = false
+            // A selection carried over from another conversation would make
+            // the first arrow press jump to the newest message.
+            if let selected = keys.selectedMessageId,
+               !model.messages.contains(where: { $0.id == selected }) {
+                keys.selectedMessageId = nil
+            }
             quickLook.orderedNodes = { orderedImageNodes() }
         }
         .onDisappear {
@@ -395,6 +418,19 @@ struct MessageFeedList: View {
                     } else {
                         fullyVisibleMessageIds.remove(message.id)
                     }
+                }
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    rowHeights[message.id] = height
+                }
+                // A zero-height top-edge sentinel: anchoring IT at a small
+                // viewport fraction places the row's TOP at a fixed offset
+                // (below the pinned header) — row-anchor math can't.
+                .overlay(alignment: .top) {
+                    Color.clear
+                        .frame(height: 1)
+                        .id("msgtop-\(message.id)")
                 }
         }
     }
@@ -552,9 +588,11 @@ struct MessageFeedList: View {
             #endif
             return FeedGeometry(
                 nearBottom: geometry.contentSize.height - geometry.visibleRect.maxY < 60,
-                lost: lost)
+                lost: lost,
+                containerHeight: geometry.containerSize.height)
         } action: { old, new in
             nearBottom = new.nearBottom
+            viewportHeight = new.containerHeight
             if new.lost, !old.lost {
                 recoverNonce &+= 1
             }
@@ -892,10 +930,15 @@ struct MessageRow: View {
         .padding(.vertical, 1)
         .padding(.horizontal, 4)
         .background(
-            isLinkTarget
-                ? Color.yellow.opacity(0.22)
-                : isKeySelected ? Self.selectionColor.opacity(0.14) : .clear,
+            isLinkTarget ? Color.yellow.opacity(0.22) : .clear,
             in: RoundedRectangle(cornerRadius: 6))
+        // Selection reads as a system-highlight outline, not a fill.
+        .overlay {
+            if isKeySelected {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(Self.selectionColor, lineWidth: 2)
+            }
+        }
         // The whole row rect is clickable/right-clickable even where it's
         // transparent — without this, only the drawn text (or a selected
         // row's highlight fill) hit-tests, so clicks in the empty trailing

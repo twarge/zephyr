@@ -383,11 +383,9 @@ final class KeyboardRouter {
         if let responder = keyWindow.firstResponder {
             // Never steal keys from text editing.
             if responder is NSTextView || responder is NSTextField { return false }
-            // Let arrows drive a focused sidebar list; letters still work.
-            if responder is NSTableView || responder is NSOutlineView,
-               keyCode == 125 || keyCode == 126 {
-                return false
-            }
+            // (Arrows used to yield to a focused sidebar table, which made
+            // message navigation depend on where focus last was — arrows
+            // now always walk messages, like the web app.)
         }
         switch keyCode {
         case 126: return handleUpArrow()
