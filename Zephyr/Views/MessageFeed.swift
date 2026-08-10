@@ -193,11 +193,16 @@ struct MessageFeedList: View {
             && (typistNames?.isEmpty ?? true)
     }
 
-    /// Message rows currently ≥95% visible (selection-reveal decisions).
-    @State private var fullyVisibleMessageIds: Set<Int> = []
-    /// Realized row heights and the viewport height, for choosing whether
-    /// a reveal shows a message's top (taller than the view) or bottom.
-    @State private var rowHeights: [Int: CGFloat] = [:]
+    /// Live row frames in scroll-viewport coordinates, for reveal
+    /// decisions. A reference box, not observed state: frames change on
+    /// every scroll tick and must not re-render the feed. (A previous
+    /// visibility-set approach went stale — LazyVStack recycles rows
+    /// without a final not-visible callback, so off-screen selections
+    /// counted as visible and never scrolled.)
+    private final class RowFrames {
+        var frames: [Int: CGRect] = [:]
+    }
+    @State private var rowFrames = RowFrames()
     @State private var viewportHeight: CGFloat = 0
 
     var body: some View {
@@ -280,29 +285,9 @@ struct MessageFeedList: View {
                         // nor fired reliably in this lazy stack.)
                         .onChange(of: keys.selectedMessageId) { old, newId in
                             guard let newId,
-                                  model.messages.contains(where: { $0.id == newId }),
-                                  !fullyVisibleMessageIds.contains(newId)
+                                  model.messages.contains(where: { $0.id == newId })
                             else { return }
-                            let movingUp = old.map { newId < $0 } ?? false
-                            // Messages taller than the viewport reveal from
-                            // the TOP regardless of direction.
-                            let tall = viewportHeight > 0
-                                && (rowHeights[newId] ?? 0) > viewportHeight * 0.8
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                if movingUp || tall {
-                                    // Top edge lands at 8% of the viewport
-                                    // — below the pinned section header.
-                                    proxy.scrollTo(
-                                        "msgtop-\(newId)",
-                                        anchor: UnitPoint(x: 0.5, y: 0.08))
-                                } else {
-                                    // Bottom edge lands at 92% — clear of
-                                    // the bottom edge for any row height.
-                                    proxy.scrollTo(
-                                        "msgbot-\(newId)",
-                                        anchor: UnitPoint(x: 0.5, y: 0.92))
-                                }
-                            }
+                            revealSelection(newId, previous: old, proxy: proxy)
                         }
                         .overlay(alignment: .bottomTrailing) {
                             if !nearBottom || !model.haveNewest {
@@ -411,19 +396,13 @@ struct MessageFeedList: View {
                 .onScrollVisibilityChange(threshold: 0.2) { visible in
                     if visible { noteSeen(message) }
                 }
-                // Near-total visibility, tracked for keyboard-selection
-                // reveals: only rows outside this set get scrolled to.
-                .onScrollVisibilityChange(threshold: 0.95) { visible in
-                    if visible {
-                        fullyVisibleMessageIds.insert(message.id)
-                    } else {
-                        fullyVisibleMessageIds.remove(message.id)
-                    }
+                .onGeometryChange(for: CGRect.self) { proxy in
+                    proxy.frame(in: .scrollView)
+                } action: { frame in
+                    rowFrames.frames[message.id] = frame
                 }
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.size.height
-                } action: { height in
-                    rowHeights[message.id] = height
+                .onDisappear {
+                    rowFrames.frames.removeValue(forKey: message.id)
                 }
                 // Zero-height edge sentinels: anchoring THEM at a viewport
                 // fraction places the row's top/bottom at an exact offset
@@ -454,6 +433,44 @@ struct MessageFeedList: View {
                 try? await Task.sleep(for: .milliseconds(delay))
                 guard anchorId == Self.bottomAnchorId else { return }
                 proxy.scrollTo(Self.bottomAnchorId, anchor: .bottom)
+            }
+        }
+    }
+
+    /// Scrolls the newly selected message into view when its live frame
+    /// says it isn't fully visible (unrealized rows have no frame and
+    /// always scroll). Edge sentinels land at fixed viewport fractions so
+    /// placement is exact for any message height.
+    private func revealSelection(_ id: Int, previous: Int?, proxy: ScrollViewProxy) {
+        let frame = rowFrames.frames[id]
+        let fullyVisible = frame.map {
+            $0.minY >= 0 && $0.maxY <= viewportHeight
+        } ?? false
+        if PerfLog.enabled {
+            let frameText = frame.map { String(describing: $0) } ?? "nil (unrealized)"
+            print(
+                "perf reveal: id=\(id) frame=\(frameText) "
+                    + "viewport=\(viewportHeight) fullyVisible=\(fullyVisible)")
+        }
+        guard !fullyVisible else { return }
+        let movingUp = previous.map { id < $0 } ?? false
+        // Messages taller than the viewport reveal from the TOP.
+        let tall = viewportHeight > 0 && (frame?.height ?? 0) > viewportHeight * 0.8
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if movingUp || tall {
+                // Top edge at 8% of the viewport — below the pinned header.
+                proxy.scrollTo("msgtop-\(id)", anchor: UnitPoint(x: 0.5, y: 0.08))
+            } else {
+                // Bottom edge at 92% — clear of the viewport bottom.
+                proxy.scrollTo("msgbot-\(id)", anchor: UnitPoint(x: 0.5, y: 0.92))
+            }
+        }
+        if PerfLog.enabled {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                let after = rowFrames.frames[id].map { String(describing: $0) }
+                    ?? "nil (unrealized)"
+                print("perf reveal landed: id=\(id) frame=\(after)")
             }
         }
     }
