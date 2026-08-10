@@ -45,6 +45,15 @@ struct MainSplitView: View {
     private var hasRealmImage: Bool {
         store.realmLogoPath(dark: false) != nil || store.realmIconUrl != nil
     }
+
+    /// Destinations whose view carries the message composer (compact
+    /// width hides search on those — the compose field owns the bottom).
+    private var selectionHasComposer: Bool {
+        switch selection {
+        case .conversation, .channel: true
+        default: false
+        }
+    }
     /// True while the narrow-window watcher hid the sidebar (so growing
     /// the window restores it; a user's manual collapse is left alone).
     @State private var autoCollapsedSidebar = false
@@ -132,17 +141,20 @@ struct MainSplitView: View {
                         }
                     }
                     if horizontalSizeClass == .compact {
-                        if #available(iOS 26.0, *) {
-                            DefaultToolbarItem(kind: .search, placement: .topBarTrailing)
-                        }
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("Settings", systemImage: "gear") {
                                 showSettingsSheet = true
                             }
                         }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("New Conversation", systemImage: "square.and.pencil") {
-                                model.pendingNewConversation = true
+                        // Messages-style bottom bar: the expanded search
+                        // field with the write button beside it.
+                        if #available(iOS 26.0, *) {
+                            DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                            ToolbarSpacer(.flexible, placement: .bottomBar)
+                            ToolbarItem(placement: .bottomBar) {
+                                Button("New Conversation", systemImage: "square.and.pencil") {
+                                    model.pendingNewConversation = true
+                                }
                             }
                         }
                     }
@@ -191,9 +203,11 @@ struct MainSplitView: View {
                 #if !os(macOS)
                 .toolbarTitleDisplayMode(.inline)
                 // The sidebar-filtering search field renders here — the
-                // main view's toolbar, not the sidebar's — minimized to
-                // the standard magnifier (see detailToolbar's pin).
-                .modifier(DetailSearchField(search: search, selection: $selection))
+                // main view's toolbar, not the sidebar's (see
+                // detailToolbar's placement per size class).
+                .modifier(DetailSearchField(
+                    search: search, selection: $selection,
+                    suppressWhenCompactComposer: selectionHasComposer))
                 #endif
                 .popoverTip(QuickLookNavigationTip())
                 // Files dropped anywhere in the conversation area upload via
@@ -500,14 +514,25 @@ struct MainSplitView: View {
         #if os(macOS)
         detailLeadingToolbar
         #else
-        // iPad: upper-left of the main bar. iPhone (compact): the leading
-        // slot is the back button, so an unplaceable pin falls to the
-        // system's bottom-center — pin trailing instead.
         if #available(iOS 26.0, *) {
-            DefaultToolbarItem(
-                kind: .search,
-                placement: horizontalSizeClass == .compact
-                    ? .topBarTrailing : .topBarLeading)
+            if horizontalSizeClass == .compact {
+                // Messages-style bottom bar on views without a composer:
+                // expanded search field + write button. Composer views
+                // (transcript, channel) drop search entirely — the
+                // message field owns the bottom edge.
+                if !selectionHasComposer {
+                    DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                    ToolbarSpacer(.flexible, placement: .bottomBar)
+                    ToolbarItem(placement: .bottomBar) {
+                        Button("New Conversation", systemImage: "square.and.pencil") {
+                            model.pendingNewConversation = true
+                        }
+                    }
+                }
+            } else {
+                // iPad: the minimized magnifier, upper-left of the main bar.
+                DefaultToolbarItem(kind: .search, placement: .topBarLeading)
+            }
         }
         #endif
         detailTrailingToolbar
@@ -573,8 +598,8 @@ struct MainSplitView: View {
                     ToolbarSpacer(.fixed, placement: .primaryAction)
                 }
             }
-            // Compact width moves the gear to the root list's bar; the
-            // compose button shows on both.
+            // Compact width keeps the detail's top bar minimal: the gear
+            // lives on the root list, and compose rides the bottom bar.
             if horizontalSizeClass != .compact {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Settings", systemImage: "gear") {
@@ -584,10 +609,10 @@ struct MainSplitView: View {
                 if #available(iOS 26.0, *) {
                     ToolbarSpacer(.fixed, placement: .primaryAction)
                 }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button("New Conversation", systemImage: "square.and.pencil") {
-                    model.pendingNewConversation = true
+                ToolbarItem(placement: .primaryAction) {
+                    Button("New Conversation", systemImage: "square.and.pencil") {
+                        model.pendingNewConversation = true
+                    }
                 }
             }
             #endif
@@ -941,11 +966,23 @@ private struct CompactSidebarSearch: ViewModifier {
 private struct DetailSearchField: ViewModifier {
     @Bindable var search: SidebarSearchModel
     @Binding var selection: Destination?
+    /// Compact composer views (transcript, channel) drop search
+    /// entirely — the message field owns the bottom edge.
+    var suppressWhenCompactComposer = false
     @Environment(KeyboardRouter.self) private var keys
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @FocusState private var searchFocused: Bool
 
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
+        if sizeClass == .compact {
+            if suppressWhenCompactComposer {
+                content
+            } else {
+                // Bottom-bar field, expanded (Messages-style) — no
+                // minimize.
+                searchable(content)
+            }
+        } else if #available(iOS 26.0, *) {
             searchable(content)
                 .searchToolbarBehavior(.minimize)
         } else {
