@@ -515,12 +515,15 @@ struct MessageFeedList: View {
     /// One reveal assertion. A realized row gets the exact sentinel
     /// placement; an unrealized one is unreachable by proxy.scrollTo (its
     /// id isn't registered — the no-op could never realize it), so the
-    /// scroll-position BINDING coarse-jumps there instead: it resolves ids
-    /// through the scroll-target layout, which knows estimated positions
-    /// for unrealized children. The next poll lands the exact placement.
+    /// scroll-position BINDING coarse-jumps there instead. The binding
+    /// resolves the layout's DIRECT child identities — the row item ids,
+    /// not the overlay sentinels — bottom-anchored, so the row lands
+    /// fully visible and realized; the poll then verifies or refines.
     private func assertReveal(_ id: Int, movingUp: Bool, proxy: ScrollViewProxy) {
         if rowFrames.frames[id] == nil {
-            anchorId = "msgtop-\(id)"
+            withAnimation(.easeInOut(duration: 0.2)) {
+                anchorId = "msg-\(id)"
+            }
         } else {
             performReveal(id, movingUp: movingUp, proxy: proxy)
         }
