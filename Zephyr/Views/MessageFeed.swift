@@ -454,7 +454,8 @@ struct MessageFeedList: View {
     private static let headerClearance: CGFloat = 28
 
     /// Whether the row sits acceptably in the viewport (top clear of the
-    /// pinned header; tall rows only need their top placed).
+    /// pinned header; tall rows only need their top placed). The lenient
+    /// gate: an already-visible row is never scrolled.
     private func revealPlaced(_ id: Int) -> Bool {
         guard viewportHeight > 0, let frame = rowFrames.frames[id] else { return false }
         if frame.height > viewportHeight * 0.8 {
@@ -462,6 +463,23 @@ struct MessageFeedList: View {
                 && frame.minY <= viewportHeight * 0.25
         }
         return frame.minY >= Self.headerClearance && frame.maxY <= viewportHeight
+    }
+
+    /// Settle-phase success: fully visible AND at the direction-appropriate
+    /// end. A coarse recovery can land the row at the wrong extreme
+    /// (bottom of the screen while keying up); this keeps the settle loop
+    /// running until the exact directional pass has placed it.
+    private func revealSettled(_ id: Int, movingUp: Bool) -> Bool {
+        guard viewportHeight > 0, let frame = rowFrames.frames[id] else { return false }
+        if frame.height > viewportHeight * 0.8 {
+            return frame.minY >= Self.headerClearance
+                && frame.minY <= viewportHeight * 0.25
+        }
+        guard frame.minY >= Self.headerClearance, frame.maxY <= viewportHeight
+        else { return false }
+        return movingUp
+            ? frame.minY <= viewportHeight * 0.55
+            : frame.maxY >= viewportHeight * 0.45
     }
 
     /// Scrolls the newly selected message into place. Unrealized targets
@@ -492,7 +510,7 @@ struct MessageFeedList: View {
             while clock.now < deadline {
                 try? await Task.sleep(for: .milliseconds(10))
                 guard keys.selectedMessageId == id else { return }
-                if revealPlaced(id) {
+                if revealSettled(id, movingUp: movingUp) {
                     if PerfLog.enabled {
                         let frameText = rowFrames.frames[id]
                             .map { String(describing: $0) } ?? "nil"
