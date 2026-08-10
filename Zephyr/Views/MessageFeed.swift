@@ -192,6 +192,9 @@ struct MessageFeedList: View {
             && (typistNames?.isEmpty ?? true)
     }
 
+    /// Message rows currently ≥95% visible (selection-reveal decisions).
+    @State private var fullyVisibleMessageIds: Set<Int> = []
+
     var body: some View {
         let _ = PerfLog.render("FeedList")
         Group {
@@ -262,17 +265,25 @@ struct MessageFeedList: View {
                             proxy.scrollTo("msg-\(newId)", anchor: .center)
                             scheduleHighlightClear()
                         }
-                        // Selection follows into view: anchor nil scrolls
-                        // the minimum to make the row wholly visible and
-                        // no-ops when it already is — keyboard moves to
-                        // off-screen messages scroll smoothly, clicks and
-                        // on-screen moves don't jolt.
-                        .onChange(of: keys.selectedMessageId) { _, newId in
+                        // Selection follows into view — but only when the
+                        // row isn't already (near-)fully visible, so clicks
+                        // and on-screen moves don't jolt. Direction-aware
+                        // anchors leave clearance: upward reveals land
+                        // below the pinned section header, downward ones
+                        // keep a bottom margin. (anchor: nil's documented
+                        // minimal reveal neither cleared the pinned header
+                        // nor fired reliably in this lazy stack.)
+                        .onChange(of: keys.selectedMessageId) { old, newId in
                             guard let newId,
-                                  model.messages.contains(where: { $0.id == newId })
+                                  model.messages.contains(where: { $0.id == newId }),
+                                  !fullyVisibleMessageIds.contains(newId)
                             else { return }
+                            let movingUp = old.map { newId < $0 } ?? false
+                            let anchor = movingUp
+                                ? UnitPoint(x: 0.5, y: 0.1)
+                                : UnitPoint(x: 0.5, y: 0.9)
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                proxy.scrollTo("msg-\(newId)", anchor: nil)
+                                proxy.scrollTo("msg-\(newId)", anchor: anchor)
                             }
                         }
                         .overlay(alignment: .bottomTrailing) {
@@ -375,6 +386,15 @@ struct MessageFeedList: View {
                 // shown.
                 .onScrollVisibilityChange(threshold: 0.2) { visible in
                     if visible { noteSeen(message) }
+                }
+                // Near-total visibility, tracked for keyboard-selection
+                // reveals: only rows outside this set get scrolled to.
+                .onScrollVisibilityChange(threshold: 0.95) { visible in
+                    if visible {
+                        fullyVisibleMessageIds.insert(message.id)
+                    } else {
+                        fullyVisibleMessageIds.remove(message.id)
+                    }
                 }
         }
     }
