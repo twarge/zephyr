@@ -1294,21 +1294,11 @@ struct CountBadge: View {
     let count: Int
 
     var body: some View {
-        #if os(macOS)
-        Text("\(count)")
-            .font(.caption2.weight(.medium))
-            .monospacedDigit()
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(.quaternary.opacity(0.7), in: RoundedRectangle(cornerRadius: 4))
-        #else
-        // Native sidebar counts (Mail's): plain secondary numbers, no
-        // capsule.
+        // Native sidebar counts (Mail's on both platforms): plain
+        // secondary numbers, no capsule.
         Text("\(count)")
             .monospacedDigit()
             .foregroundStyle(.secondary)
-        #endif
     }
 }
 
