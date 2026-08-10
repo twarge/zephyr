@@ -44,15 +44,21 @@ struct NewConversationSheet: View {
     @State private var previewContent: MessageContent?
     @State private var previewTask: Task<Void, Never>?
 
-    // The compose bar's control metrics (touch-sized on iOS).
+    // The compose bar's control metrics (touch-sized on iOS); the
+    // suggestion list and editor cap/shrink so everything fits a medium
+    // iPhone sheet.
     #if os(macOS)
     private nonisolated static let attachIconSize: CGFloat = 16
     private nonisolated static let sendIconSize: CGFloat = 24
     private nonisolated static let columnSpacing: CGFloat = 10
+    private nonisolated static let suggestionsMaxHeight: CGFloat = 240
+    private nonisolated static let editorMinHeight: CGFloat = 120
     #else
     private nonisolated static let attachIconSize: CGFloat = 22
     private nonisolated static let sendIconSize: CGFloat = 34
     private nonisolated static let columnSpacing: CGFloat = 0
+    private nonisolated static let suggestionsMaxHeight: CGFloat = 180
+    private nonisolated static let editorMinHeight: CGFloat = 80
     #endif
 
     init(
@@ -142,29 +148,35 @@ struct NewConversationSheet: View {
             .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
 
             if !userSuggestions.isEmpty || !channelSuggestions.isEmpty {
-                VStack(alignment: .leading, spacing: 1) {
-                    ForEach(channelSuggestions) { channel in
-                        suggestionButton(
-                            label: "#\(channel.name)", icon: "number"
-                        ) {
-                            selectedChannel = channel
-                            selectedUsers = []
-                            query = ""
+                // Scrollable, height-capped: ten rows of matches would
+                // otherwise crowd the editor off an iPhone sheet.
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(channelSuggestions) { channel in
+                            suggestionButton(
+                                label: "#\(channel.name)", icon: "number"
+                            ) {
+                                selectedChannel = channel
+                                selectedUsers = []
+                                query = ""
+                            }
+                        }
+                        ForEach(userSuggestions, id: \.userId) { user in
+                            suggestionButton(
+                                label: user.userId == store.selfUserId
+                                    ? "\(user.fullName) (you)" : user.fullName,
+                                icon: "person"
+                            ) {
+                                selectedUsers.append(user)
+                                selectedChannel = nil
+                                query = ""
+                            }
                         }
                     }
-                    ForEach(userSuggestions, id: \.userId) { user in
-                        suggestionButton(
-                            label: user.userId == store.selfUserId
-                                ? "\(user.fullName) (you)" : user.fullName,
-                            icon: "person"
-                        ) {
-                            selectedUsers.append(user)
-                            selectedChannel = nil
-                            query = ""
-                        }
-                    }
+                    .padding(4)
                 }
-                .padding(4)
+                .frame(maxHeight: Self.suggestionsMaxHeight)
+                .scrollBounceBehavior(.basedOnSize)
                 .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
             }
 
@@ -305,7 +317,7 @@ struct NewConversationSheet: View {
                     #endif
             }
         }
-        .frame(minHeight: 120, maxHeight: .infinity)
+        .frame(minHeight: Self.editorMinHeight, maxHeight: .infinity)
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
     }
 
