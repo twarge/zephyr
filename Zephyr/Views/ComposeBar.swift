@@ -179,9 +179,10 @@ struct ComposeBar: View {
     @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var showFileImporter = false
     @State private var showPhotosPicker = false
-    /// Set around our own ⇧Return newline so the Send-key detector
-    /// below doesn't mistake it for the keyboard's Send.
-    @State private var pendingHardwareNewline = false
+    /// When a modified return (⇧/⌃) last arrived: the field inserts
+    /// that newline natively, and the Send-key detector leaves any
+    /// newline appended within this moment alone.
+    @State private var hardwareNewlineAt = Date.distantPast
     /// When the field last lost focus — opening the + menu blurs it, so
     /// "was focused" for the editor-mode toggle means focused now OR
     /// blurred moments ago.
@@ -500,21 +501,23 @@ struct ComposeBar: View {
             .onKeyPress(.upArrow) { moveSelection(-1) }
             .onKeyPress(.downArrow) { moveSelection(1) }
             .onKeyPress(.tab) { acceptSelection() }
-            .onKeyPress(.return, phases: .down) { press in
-                // iOS hardware keyboards: ⌘Return sends (the shortcut
-                // rode the removed arrow), ⇧Return breaks a line
-                // (Return sends) — the expanded editor reverses the
-                // roles. macOS handles modifier-returns natively at the
-                // insertion point.
+            // The general form, not onKeyPress(.return, …): the keyed
+            // form only fires for UNMODIFIED Return, so ⇧/⌃Return never
+            // reached the newline branch and fell through to the
+            // Send-detector as a send.
+            .onKeyPress(phases: .down) { press in
+                guard press.key == .return else { return .ignored }
                 #if !os(macOS)
                 if press.modifiers.contains(.command) {
                     send()
                     return .handled
                 }
-                if press.modifiers.contains(.shift) {
-                    pendingHardwareNewline = true
-                    text += "\n"
-                    return .handled
+                if press.modifiers.contains(.shift)
+                    || press.modifiers.contains(.control) {
+                    // Mark it and let the field insert the newline
+                    // natively; the detector below skips it.
+                    hardwareNewlineAt = .now
+                    return .ignored
                 }
                 #endif
                 return acceptSelection()
@@ -530,11 +533,11 @@ struct ComposeBar: View {
             // one newline appended at the end IS the Send press — strip
             // it and send. Our own ⇧Return newline is flagged around.
             .onChange(of: text) { oldValue, newValue in
-                if pendingHardwareNewline {
-                    pendingHardwareNewline = false
-                    return
-                }
                 if newValue.hasSuffix("\n"), newValue.dropLast() == oldValue {
+                    // A modified return moments ago = intentional newline.
+                    if Date.now.timeIntervalSince(hardwareNewlineAt) < 0.3 {
+                        return
+                    }
                     text = String(newValue.dropLast())
                     send()
                 }
