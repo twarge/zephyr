@@ -910,17 +910,17 @@ struct MainSplitView: View {
             case .combinedFeed:
                 NarrowFeedView(
                     store: store, title: "Combined feed", narrow: .combinedFeed,
-                    tapOpensConversation: true, selection: $selection)
+                    showsConversationJump: true, selection: $selection)
                     .id(Destination.combinedFeed)
             case .mentions:
                 NarrowFeedView(
                     store: store, title: "Mentions", narrow: .mentions,
-                    tapOpensConversation: true, selection: $selection)
+                    showsConversationJump: true, selection: $selection)
                     .id(Destination.mentions)
             case .starred:
                 NarrowFeedView(
                     store: store, title: "Starred messages", narrow: .starred,
-                    tapOpensConversation: true, selection: $selection)
+                    showsConversationJump: true, selection: $selection)
                     .id(Destination.starred)
             case .search(let query):
                 NarrowFeedView(

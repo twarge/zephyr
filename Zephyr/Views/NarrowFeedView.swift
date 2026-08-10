@@ -9,9 +9,9 @@ struct NarrowFeedView: View {
     let title: String
     let narrow: Narrow
     var useMatchHighlights = false
-    /// Tapping a message opens its own conversation, anchored there
+    /// The control row swaps quoted reply for a go-to-conversation jump
     /// (Combined, Mentions, Starred).
-    var tapOpensConversation = false
+    var showsConversationJump = false
     @Binding var selection: Destination?
 
     @State private var model: MessageListModel?
@@ -33,7 +33,7 @@ struct NarrowFeedView: View {
                         onHeaderTap: { key in
                             selection = .conversation(key)
                         },
-                        tapOpensConversation: tapOpensConversation,
+                        showsConversationJump: showsConversationJump,
                         marksReadOnView: narrow == .combinedFeed)
                 }
             } else {

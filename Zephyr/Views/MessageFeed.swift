@@ -32,9 +32,10 @@ struct MessageFeedList: View {
     /// instead of the plain content.
     var useMatchHighlights = false
     var onHeaderTap: ((ConversationKey) -> Void)?
-    /// Cross-conversation feeds (Combined, Mentions, Starred): tapping a
-    /// message opens its own conversation, anchored at the message.
-    var tapOpensConversation = false
+    /// Cross-conversation feeds (Combined, Mentions, Starred): the hover/
+    /// tap controls show a go-to-conversation jump in place of quoted
+    /// reply (which belongs to in-conversation views).
+    var showsConversationJump = false
     var onNewMessages: (() -> Void)?
     /// Cross-conversation feeds: a message scrolled into view is marked
     /// read (batched).
@@ -54,7 +55,7 @@ struct MessageFeedList: View {
         store: PerAccountStore, model: MessageListModel, cache: MessageContentCache,
         headerMode: HeaderMode = .hidden, useMatchHighlights: Bool = false,
         onHeaderTap: ((ConversationKey) -> Void)? = nil,
-        tapOpensConversation: Bool = false,
+        showsConversationJump: Bool = false,
         onNewMessages: (() -> Void)? = nil,
         marksReadOnView: Bool = false
     ) {
@@ -64,7 +65,7 @@ struct MessageFeedList: View {
         self.headerMode = headerMode
         self.useMatchHighlights = useMatchHighlights
         self.onHeaderTap = onHeaderTap
-        self.tapOpensConversation = tapOpensConversation
+        self.showsConversationJump = showsConversationJump
         self.onNewMessages = onNewMessages
         self.marksReadOnView = marksReadOnView
         // The scroll target must be known BEFORE the first layout pass:
@@ -394,7 +395,7 @@ struct MessageFeedList: View {
                 useMatchHighlights: useMatchHighlights,
                 isKeySelected: keys.selectedMessageId == message.id,
                 isLinkTarget: keys.highlightMessageId == message.id,
-                opensConversationOnTap: tapOpensConversation)
+                showsConversationJump: showsConversationJump)
                 // Actual viewport visibility, not lazy-stack realization
                 // (which includes off-screen rows). The low threshold lets
                 // rows taller than the window still count once a fifth is
@@ -949,9 +950,9 @@ struct MessageRow: View {
     var isKeySelected = false
     /// A followed message link flashes its target.
     var isLinkTarget = false
-    /// Set in cross-conversation feeds: a tap navigates to the message's
-    /// own conversation (anchored there) instead of just selecting.
-    var opensConversationOnTap = false
+    /// Set in cross-conversation feeds: the control row swaps quoted
+    /// reply for a jump to the message's own conversation.
+    var showsConversationJump = false
 
     @Environment(KeyboardRouter.self) private var keys
     @State private var hovering = false
@@ -1134,16 +1135,6 @@ struct MessageRow: View {
             keys.selectedMessageId = message.id
             // Clicking a message reclaims arrow keys from the sidebar.
             keys.focusMessages?()
-            // Cross-conversation feeds: the tap also opens the message's
-            // conversation, anchored at (and flashing) this message —
-            // the near-link navigation pattern.
-            if opensConversationOnTap,
-               let key = Unreads.conversationKey(
-                   for: message, selfUserId: store.selfUserId) {
-                keys.highlightMessageId = message.id
-                keys.pendingNear = (key, message.id)
-                keys.navigate?(.conversation(key))
-            }
         })
         .onChange(of: editing) {
             // The inline editor's TextField must also silence single-key
@@ -1198,19 +1189,37 @@ struct MessageRow: View {
             // Top-aligned: the buttons' padding would otherwise center the
             // time a few points below its message's first line.
             HStack(alignment: .top, spacing: 2) {
-                Button {
-                    quoteAndReply()
-                } label: {
-                    Image(systemName: "text.quote")
-                        .font(controlFont)
-                        .foregroundStyle(.secondary)
-                        .padding(controlPadding)
-                        .background(.quaternary.opacity(0.6), in: .circle)
+                if showsConversationJump {
+                    // Cross-conversation feeds swap quoted reply for a
+                    // jump to the message's own conversation.
+                    Button {
+                        goToConversation()
+                    } label: {
+                        Image(systemName: "arrow.turn.down.right")
+                            .font(controlFont)
+                            .foregroundStyle(.secondary)
+                            .padding(controlPadding)
+                            .background(.quaternary.opacity(0.6), in: .circle)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Go to conversation")
+                    .opacity(controlsActive ? 1 : 0)
+                    .allowsHitTesting(controlsActive)
+                } else {
+                    Button {
+                        quoteAndReply()
+                    } label: {
+                        Image(systemName: "text.quote")
+                            .font(controlFont)
+                            .foregroundStyle(.secondary)
+                            .padding(controlPadding)
+                            .background(.quaternary.opacity(0.6), in: .circle)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Reply quoting this message")
+                    .opacity(controlsActive ? 1 : 0)
+                    .allowsHitTesting(controlsActive)
                 }
-                .buttonStyle(.plain)
-                .help("Reply quoting this message")
-                .opacity(controlsActive ? 1 : 0)
-                .allowsHitTesting(controlsActive)
                 Button {
                     showReactionPicker = true
                 } label: {
@@ -1525,6 +1534,16 @@ struct MessageRow: View {
             keys.insertIntoCompose?(quote)
             keys.focusCompose?()
         }
+    }
+
+    /// Jumps to the message's own conversation, anchored at (and
+    /// flashing) the message — the near-link navigation pattern.
+    private func goToConversation() {
+        guard let key = Unreads.conversationKey(
+            for: message, selfUserId: store.selfUserId) else { return }
+        keys.highlightMessageId = message.id
+        keys.pendingNear = (key, message.id)
+        keys.navigate?(.conversation(key))
     }
 
     private func quoteAndReply(selectionOnly: Bool = false) {
