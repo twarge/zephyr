@@ -1165,6 +1165,19 @@ struct MessageRow: View {
             // time a few points below its message's first line.
             HStack(alignment: .top, spacing: 2) {
                 Button {
+                    quoteAndReply()
+                } label: {
+                    Image(systemName: "text.quote")
+                        .font(controlFont)
+                        .foregroundStyle(.secondary)
+                        .padding(controlPadding)
+                        .background(.quaternary.opacity(0.6), in: .circle)
+                }
+                .buttonStyle(.plain)
+                .help("Reply quoting this message")
+                .opacity(controlsActive ? 1 : 0)
+                .allowsHitTesting(controlsActive)
+                Button {
                     showReactionPicker = true
                 } label: {
                     Image(systemName: "face.smiling")
