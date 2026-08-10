@@ -1243,6 +1243,16 @@ struct MessageRow: View {
             Button("Forward Message…", systemImage: "arrowshape.turn.up.right") {
                 showForward = true
             }
+            if message.senderId != store.selfUserId {
+                Button(
+                    "Direct Message \(message.senderFullName)",
+                    systemImage: "envelope"
+                ) {
+                    keys.navigate?(.conversation(Unreads.dmKey(
+                        participantIds: [message.senderId],
+                        selfUserId: store.selfUserId)))
+                }
+            }
             Button(isStarred ? "Unstar" : "Star", systemImage: "star") {
                 store.setStarred(!isStarred, messageId: message.id)
             }
