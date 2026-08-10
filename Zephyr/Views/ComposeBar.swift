@@ -179,6 +179,9 @@ struct ComposeBar: View {
     @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var showFileImporter = false
     @State private var showPhotosPicker = false
+    /// Set around our own ⇧Return newline so the Send-key detector
+    /// below doesn't mistake it for the keyboard's Send.
+    @State private var pendingHardwareNewline = false
     @State private var topicText = ""
     @State private var topicPrefill = ""
     @State private var suggestions: [ComposeSuggestion] = []
@@ -492,6 +495,7 @@ struct ComposeBar: View {
                     return .handled
                 }
                 if press.modifiers.contains(.shift) {
+                    pendingHardwareNewline = true
                     text += "\n"
                     return .handled
                 }
@@ -503,6 +507,22 @@ struct ComposeBar: View {
                 suggestions = []
                 return .handled
             }
+            #if !os(macOS)
+            // The software keyboard's Send key inserts a newline in
+            // vertical-axis fields instead of firing onSubmit (SwiftUI):
+            // one newline appended at the end IS the Send press — strip
+            // it and send. Our own ⇧Return newline is flagged around.
+            .onChange(of: text) { oldValue, newValue in
+                if pendingHardwareNewline {
+                    pendingHardwareNewline = false
+                    return
+                }
+                if newValue.hasSuffix("\n"), newValue.dropLast() == oldValue {
+                    text = String(newValue.dropLast())
+                    send()
+                }
+            }
+            #endif
     }
 
     private var sendButton: some View {
