@@ -308,6 +308,23 @@ public final class PerAccountStore {
         performOrQueue(.updateFlags(messageIds: ids, add: true, flag: "read"))
     }
 
+    /// Marks a single message unread (the swipe gesture). Optimistic flag
+    /// flip plus local unread refile; syncs like any flag change.
+    public func markMessageUnread(_ messageId: Int) {
+        if var message = messages[messageId] {
+            var flags = Set(message.flags ?? [])
+            flags.remove("read")
+            message.flags = Array(flags)
+            messages[messageId] = message
+            forEachMessageList { $0.handleChangedMessages(ids: [messageId]) }
+            scheduleMessageCacheSave([messageId])
+        }
+        unreads.handleFlagsEvent(
+            op: .remove, flag: "read", ids: [messageId], all: false,
+            locate: { self.messages[$0] })
+        performOrQueue(.updateFlags(messageIds: [messageId], add: false, flag: "read"))
+    }
+
     /// The web app's "Mark as unread from here": clears the read flag on
     /// this message and everything after it in its conversation, across the
     /// full server-side history. Local unreads refile when the resulting

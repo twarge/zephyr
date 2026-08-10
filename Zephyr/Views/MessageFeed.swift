@@ -744,6 +744,12 @@ struct MessageRow: View {
     @State private var showReadReceipts = false
     @State private var showForward = false
     @State private var showRemindPicker = false
+    #if os(iOS)
+    /// Live horizontal swipe translation (right = mark unread, left =
+    /// toggle star); springs back after release.
+    @State private var swipeOffset: CGFloat = 0
+    @State private var swipeTriggerCount = 0
+    #endif
     @State private var showEditHistory = false
 
     private var content: MessageContent {
@@ -862,6 +868,31 @@ struct MessageRow: View {
         // row's highlight fill) hit-tests, so clicks in the empty trailing
         // space fall through.
         .contentShape(.rect)
+        #if os(iOS)
+        // Swipe: right marks unread, left toggles star. The hint icons sit
+        // behind the row and fade in as the swipe approaches its trigger.
+        .offset(x: swipeOffset)
+        .background(alignment: .leading) {
+            if swipeOffset > 8 {
+                Image(systemName: "message.badge.filled.fill")
+                    .font(.title3)
+                    .foregroundStyle(.tint)
+                    .opacity(min(swipeOffset / Self.swipeTrigger, 1))
+                    .padding(.leading, 10)
+            }
+        }
+        .background(alignment: .trailing) {
+            if swipeOffset < -8 {
+                Image(systemName: isStarred ? "star.slash.fill" : "star.fill")
+                    .font(.title3)
+                    .foregroundStyle(.yellow)
+                    .opacity(min(-swipeOffset / Self.swipeTrigger, 1))
+                    .padding(.trailing, 10)
+            }
+        }
+        .gesture(messageSwipe)
+        .sensoryFeedback(.impact(weight: .medium), trigger: swipeTriggerCount)
+        #endif
         // Web-style unread marker: an accent line on the left that melts
         // away when the message is marked read. Always present (at zero
         // opacity once read) so the disappearance animates.
@@ -1046,6 +1077,42 @@ struct MessageRow: View {
         Date(timeIntervalSince1970: TimeInterval(reminder.scheduledDeliveryTimestamp))
             .formatted(date: .abbreviated, time: .shortened)
     }
+
+    #if os(iOS)
+    private static let swipeTrigger: CGFloat = 60
+
+    private var messageSwipe: some Gesture {
+        DragGesture(minimumDistance: 25)
+            .onChanged { value in
+                // Horizontal intent only — vertical belongs to the scroll.
+                guard abs(value.translation.width)
+                    > abs(value.translation.height) * 1.5 else { return }
+                let translation = value.translation.width
+                let magnitude = abs(translation)
+                // Rubber-band past the trigger distance.
+                let banded = min(magnitude, Self.swipeTrigger)
+                    + max(magnitude - Self.swipeTrigger, 0) * 0.2
+                swipeOffset = translation < 0 ? -banded : banded
+            }
+            .onEnded { value in
+                defer {
+                    withAnimation(.snappy) { swipeOffset = 0 }
+                }
+                guard abs(value.translation.width)
+                    > abs(value.translation.height) * 1.5 else { return }
+                if value.translation.width > Self.swipeTrigger {
+                    swipeTriggerCount += 1
+                    // Same pause as Mark as Unread from Here: the on-screen
+                    // row must not immediately re-mark itself read.
+                    keys.readMarkingPaused = true
+                    store.markMessageUnread(message.id)
+                } else if value.translation.width < -Self.swipeTrigger {
+                    swipeTriggerCount += 1
+                    store.setStarred(!isStarred, messageId: message.id)
+                }
+            }
+    }
+    #endif
 
     /// Hover-control metrics: pointer-sized on macOS, tap-sized on touch.
     private var controlFont: Font {

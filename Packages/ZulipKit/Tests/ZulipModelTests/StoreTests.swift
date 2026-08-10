@@ -352,6 +352,20 @@ struct StoreEventTests {
         #expect(transport.requests.count == 1)
     }
 
+    @Test func markMessageUnreadFlipsFlagAndRefiles() throws {
+        let store = try makeStore()
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 100),
+                    flags: ["read"])))
+        #expect(store.unreads.totalCount == 0)
+
+        store.markMessageUnread(100)
+        #expect(store.messages[100]?.flags?.contains("read") == false)
+        #expect(store.unreads.totalCount == 1)
+    }
+
     @Test func starFlagsMaintainStarredCount() throws {
         let store = try makeStore()
         #expect(store.starredMessageIds.isEmpty)
