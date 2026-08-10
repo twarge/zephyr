@@ -1090,7 +1090,7 @@ struct MessageRow: View {
                     .padding(.trailing, 10)
             }
         }
-        .gesture(messageSwipe)
+        .gesture(messageSwipe, isEnabled: Self.swipeEnabled)
         .sensoryFeedback(.impact(weight: .medium), trigger: swipeTriggerCount)
         #endif
         // Web-style unread marker: an accent line on the left that melts
@@ -1281,6 +1281,9 @@ struct MessageRow: View {
     }
 
     #if os(iOS)
+    /// Swipe actions (right = mark unread, left = star) are parked for
+    /// now; flip to re-enable.
+    private static let swipeEnabled = false
     private static let swipeTrigger: CGFloat = 60
 
     private var messageSwipe: some Gesture {
