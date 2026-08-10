@@ -105,6 +105,17 @@ public final class MessageListModel: Identifiable {
         } else {
             anchor = .firstUnread
         }
+        // A known-dead connection (the event stream is already recovering)
+        // renders the cached transcript immediately instead of holding a
+        // spinner for the fetch's full timeout. The fetch below still
+        // runs: success replaces the preview and clears the fallback flag;
+        // failure leaves it showing, and reconnect refetches.
+        if store.isRecoveringEventStream {
+            populateOfflineFallback()
+            if !messages.isEmpty {
+                didInitialFetch = true
+            }
+        }
         do {
             var result = try await store.connection.getMessages(
                 anchor: anchor, numBefore: count,
