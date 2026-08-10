@@ -1,6 +1,6 @@
 name: App Store
 
-# Archives and uploads Zephyr to App Store Connect (TestFlight / review).
+# Archives and uploads both apps to App Store Connect (TestFlight / review).
 # Run it manually from the Actions tab, or push a version tag like v1.2.
 #
 # Required repository secrets (Settings → Secrets and variables → Actions):

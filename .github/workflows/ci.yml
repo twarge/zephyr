@@ -14,8 +14,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ZulipKit is pure SwiftPM, but SwiftMath needs CoreGraphics/CoreText,
-  # so the tests run on a Mac rather than Linux.
   test:
     name: ZulipKit tests
     runs-on: macos-26
