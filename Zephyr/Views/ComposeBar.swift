@@ -292,7 +292,15 @@ struct ComposeBar: View {
                 }
             }
             HStack(alignment: rowAlignment, spacing: 8) {
+                #if os(macOS)
+                if expanded {
+                    macExpandedColumn
+                } else {
+                    plusMenu
+                }
+                #else
                 plusMenu
+                #endif
                 VStack(alignment: .leading, spacing: 6) {
                     if case .channel(let streamId) = mode {
                         TopicAutocompleteField(
@@ -428,23 +436,7 @@ struct ComposeBar: View {
                 systemImage: expanded
                     ? "rectangle.compress.vertical" : "rectangle.expand.vertical"
             ) {
-                LongFormComposeTip().invalidate(reason: .actionPerformed)
-                let restoreFocus = messageFocused
-                    || Date.now.timeIntervalSince(composeBlurredAt) < 3
-                withAnimation(.snappy) { expanded.toggle() }
-                showPreview = false
-                previewTask?.cancel()
-                // A focused field stays focused across the swap; the
-                // compact field exposes no cursor position, so entering
-                // the editor lands the insertion point at the end.
-                guard restoreFocus else { return }
-                let entering = expanded
-                Task { @MainActor in
-                    if entering {
-                        editorSelection = TextSelection(insertionPoint: text.endIndex)
-                    }
-                    messageFocused = true
-                }
+                toggleEditorMode()
             }
             if expanded {
                 Button(
@@ -472,28 +464,18 @@ struct ComposeBar: View {
         .popoverTip(LongFormComposeTip())
     }
 
-    /// The input pill. macOS keeps the send arrow inside the trailing
-    /// edge; on iOS the keyboard's Return key IS Send, so the field
-    /// stays clean.
+    /// The input pill: no send arrow anywhere — Return IS Send (the
+    /// iOS keyboard labels it so), and the expanded editor keeps its
+    /// arrow where Return means newline.
     private var compactField: some View {
         TextField(placeholder, text: $text, axis: .vertical)
             .textFieldStyle(.plain)
             .autocorrectionDisabled(false)
             .lineLimit(1...10)
-            .padding(.leading, 12)
-            #if os(macOS)
-            .padding(.trailing, Self.sendIconSize + 10)
-            #else
-            .padding(.trailing, 12)
-            #endif
+            .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .composeGlass(in: RoundedRectangle(cornerRadius: 17))
-            #if os(macOS)
-            .overlay(alignment: .bottomTrailing) {
-                sendButton
-                    .padding(3)
-            }
-            #else
+            #if !os(macOS)
             .submitLabel(.send)
             #endif
             .focused($messageFocused)
@@ -507,11 +489,13 @@ struct ComposeBar: View {
             // Send-detector as a send.
             .onKeyPress(phases: .down) { press in
                 guard press.key == .return else { return .ignored }
-                #if !os(macOS)
+                // ⌘Return sends on both platforms (the compact field
+                // has no send button to carry the shortcut).
                 if press.modifiers.contains(.command) {
                     send()
                     return .handled
                 }
+                #if !os(macOS)
                 if press.modifiers.contains(.shift)
                     || press.modifiers.contains(.control) {
                     // Mark it and let the field insert the newline
@@ -544,6 +528,75 @@ struct ComposeBar: View {
             }
             #endif
     }
+
+    /// A focused field stays focused across the compact/long-form swap;
+    /// the compact field exposes no cursor position, so entering the
+    /// editor lands the insertion point at the end.
+    private func toggleEditorMode() {
+        LongFormComposeTip().invalidate(reason: .actionPerformed)
+        let restoreFocus = messageFocused
+            || Date.now.timeIntervalSince(composeBlurredAt) < 3
+        withAnimation(.snappy) { expanded.toggle() }
+        showPreview = false
+        previewTask?.cancel()
+        guard restoreFocus else { return }
+        let entering = expanded
+        Task { @MainActor in
+            if entering {
+                editorSelection = TextSelection(insertionPoint: text.endIndex)
+            }
+            messageFocused = true
+        }
+    }
+
+    #if os(macOS)
+    /// Long-form macOS: the + gives way to a visible icon column —
+    /// compact-editor toggle, preview, attach file, attach photo, send.
+    private var macExpandedColumn: some View {
+        VStack(spacing: 10) {
+            Button {
+                toggleEditorMode()
+            } label: {
+                Image(systemName: "rectangle.compress.vertical")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Compact message field")
+            Button {
+                togglePreview()
+            } label: {
+                Image(systemName: showPreview ? "eye.slash" : "eye")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(!showPreview
+                && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .help(showPreview ? "Back to editing" : "Preview as it will send")
+            Button {
+                showFileImporter = true
+            } label: {
+                Image(systemName: "paperclip")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Attach files")
+            Button {
+                showPhotosPicker = true
+            } label: {
+                Image(systemName: "photo")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Attach photos or videos")
+            sendButton
+        }
+        .padding(.bottom, 4)
+    }
+    #endif
 
     private var sendButton: some View {
         Button(action: send) {
@@ -657,10 +710,13 @@ struct ComposeBar: View {
         }
         .frame(height: editorHeight)
         .composeGlass(in: RoundedRectangle(cornerRadius: 17))
+        // macOS's send lives in the expanded icon column instead.
+        #if !os(macOS)
         .overlay(alignment: .bottomTrailing) {
             sendButton
                 .padding(6)
         }
+        #endif
     }
 
     /// Server-rendered preview (POST /messages/render): exactly what will

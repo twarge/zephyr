@@ -691,6 +691,13 @@ struct MessageFeedList: View {
             .scrollTargetLayout()
             .padding(.horizontal, 16)
         }
+        // Clicking or tapping empty feed space (not on a message) drops
+        // the selection, like Escape — rows and interactive content
+        // consume their own taps first, so only misses land here.
+        .onTapGesture {
+            guard keys.selectedMessageId != nil else { return }
+            keys.selectedMessageId = nil
+        }
         .defaultScrollAnchor(.bottom)
         .scrollPosition(id: $anchorId, anchor: .bottom)
         // One geometry observer for both signals (two separate ones

@@ -128,7 +128,9 @@ struct MainSplitView: View {
                 // so search, Settings, and compose ride its bar; regular
                 // width leaves them to the detail bar (Settings only
                 // there loses its home — the gear lives here on compact).
-                .modifier(CompactSidebarSearch(search: search, selection: $selection))
+                .modifier(CompactSidebarSearch(
+                    search: search, selection: $selection,
+                    isCompact: horizontalSizeClass == .compact))
                 .toolbar {
                     if #available(iOS 26.0, *) {
                         ToolbarItem(placement: .topBarLeading) {
@@ -947,10 +949,14 @@ struct MainSplitView: View {
 private struct CompactSidebarSearch: ViewModifier {
     let search: SidebarSearchModel
     @Binding var selection: Destination?
-    @Environment(\.horizontalSizeClass) private var sizeClass
+    /// The WINDOW's compactness, passed in from the split view — the
+    /// sidebar column's own environment reads compact even in a full
+    /// iPad window (columns are narrow), which wrongly attached the
+    /// search field to the iPad sidebar.
+    let isCompact: Bool
 
     func body(content: Content) -> some View {
-        if sizeClass == .compact {
+        if isCompact {
             content.modifier(
                 DetailSearchField(search: search, selection: $selection))
         } else {
