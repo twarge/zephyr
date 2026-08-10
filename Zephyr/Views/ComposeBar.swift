@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import TipKit
 import UniformTypeIdentifiers
@@ -175,6 +176,8 @@ struct ComposeBar: View {
     @State private var text = ""
     @State private var draftSaveTask: Task<Void, Never>?
     @State private var topicFieldFocused = false
+    @State private var photoPickerItems: [PhotosPickerItem] = []
+    @State private var showFileImporter = false
     @State private var topicText = ""
     @State private var topicPrefill = ""
     @State private var suggestions: [ComposeSuggestion] = []
@@ -279,6 +282,38 @@ struct ComposeBar: View {
                 .padding(.bottom, 7)
                 .help(expanded ? "Compact message field" : "Long-form message field")
                 .popoverTip(LongFormComposeTip())
+                PhotosPicker(
+                    selection: $photoPickerItems,
+                    maxSelectionCount: 10,
+                    matching: .any(of: [.images, .videos])
+                ) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 6)
+                .help("Attach photos or videos")
+                Button {
+                    showFileImporter = true
+                } label: {
+                    Image(systemName: "paperclip")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 6)
+                .help("Attach files")
+                .fileImporter(
+                    isPresented: $showFileImporter,
+                    allowedContentTypes: [.item],
+                    allowsMultipleSelection: true
+                ) { result in
+                    guard case .success(let urls) = result else { return }
+                    for url in urls {
+                        upload(fileURL: url, securityScoped: true)
+                    }
+                }
                 VStack(alignment: .leading, spacing: 6) {
                 if case .channel(let streamId) = mode {
                     TopicAutocompleteField(
@@ -394,6 +429,10 @@ struct ComposeBar: View {
         }
         .onChange(of: messageFocused) {
             updateComposeInputFocus()
+        }
+        .onChange(of: photoPickerItems) {
+            guard !photoPickerItems.isEmpty else { return }
+            uploadPickedPhotos()
         }
         .onChange(of: text) {
             if case .fixed(let destination, _) = mode {
@@ -732,7 +771,27 @@ struct ComposeBar: View {
             return
         }
         if scoped { fileURL.stopAccessingSecurityScopedResource() }
+        upload(data: data, filename: filename)
+    }
 
+    /// Library picks arrive as data (no file URL, no original name); each
+    /// gets a stamped name with the type's extension.
+    private func uploadPickedPhotos() {
+        let items = photoPickerItems
+        photoPickerItems = []
+        for pick in items {
+            Task {
+                guard let data = try? await pick.loadTransferable(type: Data.self)
+                else { return }
+                let ext = pick.supportedContentTypes.first?
+                    .preferredFilenameExtension ?? "jpeg"
+                let stamp = UUID().uuidString.prefix(8)
+                upload(data: data, filename: "photo-\(stamp).\(ext)")
+            }
+        }
+    }
+
+    private func upload(data: Data, filename: String) {
         let item = UploadItem(filename: filename)
         uploads.append(item)
         let itemId = item.id
