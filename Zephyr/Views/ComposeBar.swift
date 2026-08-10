@@ -561,6 +561,14 @@ struct ComposeBar: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
                 }
+                // Tapping the preview returns to editing (links inside
+                // still win their own taps).
+                .contentShape(.rect)
+                .onTapGesture {
+                    togglePreview()
+                    messageFocused = true
+                }
+                .help("Tap to edit")
             } else {
                 ZStack(alignment: .topLeading) {
                     if text.isEmpty {

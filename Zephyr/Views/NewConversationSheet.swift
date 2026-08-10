@@ -281,6 +281,10 @@ struct NewConversationSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
                 }
+                // Tapping the preview returns to editing.
+                .contentShape(.rect)
+                .onTapGesture { togglePreview() }
+                .help("Tap to edit")
             } else {
                 if messageText.isEmpty {
                     Text("Message")
