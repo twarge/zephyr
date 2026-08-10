@@ -916,7 +916,7 @@ private struct DraftRow: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 1)
+        .sidebarRowPadding()
     }
 }
 
@@ -935,7 +935,7 @@ private struct SidebarExpanderRow: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .padding(.vertical, 1)
+        .sidebarRowPadding()
     }
 }
 
@@ -960,7 +960,7 @@ private struct UserDirectMessageRow: View {
             }
             Spacer(minLength: 4)
         }
-        .padding(.vertical, 1)
+        .sidebarRowPadding()
     }
 }
 
@@ -1013,7 +1013,7 @@ private struct DirectMessageRow: View {
                 CountBadge(count: unreadCount)
             }
         }
-        .padding(.vertical, 1)
+        .sidebarRowPadding()
     }
 }
 
@@ -1067,18 +1067,21 @@ private struct ChannelRow: View {
             if let onToggle {
                 Button(action: onToggle) {
                     Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        // macOS: compact, nudged in from the overlay
+                        // scroller (which wins clicks while visible).
+                        // iOS: the system sidebar chevron's size and shade,
+                        // in a wide tap target kept row-height-neutral —
+                        // a 44pt-tall frame inflated every channel row.
+                        #if os(macOS)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        // Same glyph, comfortable hit area — on macOS nudged
-                        // in from the edge so the overlay scroller (which
-                        // wins clicks while visible) doesn't cover the
-                        // target; on iOS a full 44pt touch target.
-                        #if os(macOS)
                         .frame(width: 26, height: 26)
                         .padding(.trailing, 8)
                         #else
-                        .frame(width: 44, height: 44)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 28)
                         #endif
                         .contentShape(.rect)
                 }
@@ -1087,7 +1090,7 @@ private struct ChannelRow: View {
             }
         }
         .opacity(subscription.muted ? 0.6 : 1)
-        .padding(.vertical, 1)
+        .sidebarRowPadding()
     }
 }
 
@@ -1225,7 +1228,7 @@ private struct SidebarTopicRow: View {
                 CountBadge(count: unreadCount)
             }
         }
-        .padding(.vertical, 1)
+        .sidebarRowPadding()
         .opacity(visibility == .muted ? 0.5 : 1)
         .contextMenu {
             Button(visibility == .muted ? "Unmute Topic" : "Mute Topic") {
@@ -1264,23 +1267,29 @@ private struct SidebarTopicRow: View {
     }
 }
 
-/// The web app's gray rounded count badge.
+private extension View {
+    /// A hair of macOS row breathing room; iOS keeps the system's
+    /// native row metrics untouched.
+    @ViewBuilder
+    func sidebarRowPadding() -> some View {
+        #if os(macOS)
+        padding(.vertical, 1)
+        #else
+        self
+        #endif
+    }
+}
+
 /// Dims explicitly colored sidebar decorations when the window is
 /// inactive, matching the system's automatic Label-icon behavior (which
 /// covers only system-styled icons).
 struct DimsWhenWindowInactive: ViewModifier {
-    #if os(macOS)
-    @Environment(\.controlActiveState) private var controlActiveState
-    #endif
+    @Environment(\.appearsActive) private var appearsActive
 
     func body(content: Content) -> some View {
-        #if os(macOS)
         content
-            .grayscale(controlActiveState == .inactive ? 1 : 0)
-            .opacity(controlActiveState == .inactive ? 0.55 : 1)
-        #else
-        content
-        #endif
+            .grayscale(appearsActive ? 0 : 1)
+            .opacity(appearsActive ? 1 : 0.55)
     }
 }
 
