@@ -317,55 +317,54 @@ struct ComposeBar: View {
                         }
                 }
                 }
-                // Fixed trailing column (file, photo, preview, send),
-                // bottom-aligned with the bar: send keeps its exact spot
-                // whether the editor is compact or expanded.
+                // Trailing column (file, photo, preview, send), bottom-
+                // aligned with the bar: send keeps its exact spot whether
+                // the editor is compact or expanded — the other three only
+                // appear above it in long-form mode.
                 VStack(spacing: 10) {
-                    Button {
-                        showFileImporter = true
-                    } label: {
-                        Image(systemName: "paperclip")
-                            .font(.system(size: 16))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Attach files")
-                    .fileImporter(
-                        isPresented: $showFileImporter,
-                        allowedContentTypes: [.item],
-                        allowsMultipleSelection: true
-                    ) { result in
-                        guard case .success(let urls) = result else { return }
-                        for url in urls {
-                            upload(fileURL: url, securityScoped: true)
+                    if expanded {
+                        Button {
+                            showFileImporter = true
+                        } label: {
+                            Image(systemName: "paperclip")
+                                .font(.system(size: 16))
+                                .foregroundStyle(.secondary)
                         }
-                    }
-                    PhotosPicker(
-                        selection: $photoPickerItems,
-                        maxSelectionCount: 10,
-                        matching: .any(of: [.images, .videos])
-                    ) {
-                        Image(systemName: "photo")
-                            .font(.system(size: 16))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Attach photos or videos")
-                    Button {
-                        // Previewing from the compact field expands first.
-                        if !expanded {
-                            withAnimation(.snappy) { expanded = true }
+                        .buttonStyle(.plain)
+                        .help("Attach files")
+                        .fileImporter(
+                            isPresented: $showFileImporter,
+                            allowedContentTypes: [.item],
+                            allowsMultipleSelection: true
+                        ) { result in
+                            guard case .success(let urls) = result else { return }
+                            for url in urls {
+                                upload(fileURL: url, securityScoped: true)
+                            }
                         }
-                        togglePreview()
-                    } label: {
-                        Image(systemName: showPreview ? "eye.slash" : "eye")
-                            .font(.system(size: 16))
-                            .foregroundStyle(.secondary)
+                        PhotosPicker(
+                            selection: $photoPickerItems,
+                            maxSelectionCount: 10,
+                            matching: .any(of: [.images, .videos])
+                        ) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 16))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Attach photos or videos")
+                        Button {
+                            togglePreview()
+                        } label: {
+                            Image(systemName: showPreview ? "eye.slash" : "eye")
+                                .font(.system(size: 16))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!showPreview
+                            && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .help(showPreview ? "Back to editing" : "Preview as it will send")
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!showPreview
-                        && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .help(showPreview ? "Back to editing" : "Preview as it will send")
                     Button(action: send) {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 24))
