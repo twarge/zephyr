@@ -33,19 +33,40 @@ enum DmSortOrder: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     var body: some View {
+        #if os(macOS)
         TabView {
             GeneralSettings()
                 .tabItem { Label("General", systemImage: "gearshape") }
             AccountsSettings()
                 .tabItem { Label("Accounts", systemImage: "person.crop.circle") }
-            #if os(iOS)
-            // iOS has no Help menu; Settings is the conventional home.
-            HelpView()
-                .tabItem { Label("Help", systemImage: "questionmark.circle") }
-            #endif
         }
         .frame(width: 460)
         .padding(.bottom, 8)
+        #else
+        // A plain dismissable sheet — no fixed frame (that broke the
+        // sheet geometry); each tab gets its own navigation stack and a
+        // native grouped form. Help lives here (iOS has no Help menu).
+        TabView {
+            NavigationStack {
+                GeneralSettings()
+                    .navigationTitle("General")
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+            .tabItem { Label("General", systemImage: "gearshape") }
+            NavigationStack {
+                AccountsSettings()
+                    .navigationTitle("Accounts")
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+            .tabItem { Label("Accounts", systemImage: "person.crop.circle") }
+            NavigationStack {
+                HelpView()
+                    .navigationTitle("Help")
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+            .tabItem { Label("Help", systemImage: "questionmark.circle") }
+        }
+        #endif
     }
 }
 
@@ -61,6 +82,29 @@ private struct GeneralSettings: View {
     @AppStorage("serverNameInTitles") private var serverNameInTitles = true
 
     var body: some View {
+        #if os(macOS)
+        macForm
+        #else
+        iosForm
+        #endif
+    }
+
+    private func applyRetention() {
+        model.global.messageRetentionDays =
+            AppModel.retentionDays(forYears: messageRetentionYears)
+    }
+
+    @ViewBuilder
+    private var retentionOptions: some View {
+        Text("1 year").tag(1)
+        Text("2 years").tag(2)
+        Text("5 years").tag(5)
+        Text("10 years").tag(10)
+        Text("Forever").tag(0)
+    }
+
+    #if os(macOS)
+    private var macForm: some View {
         Form {
             Picker("App icon badge counts:", selection: $badgePolicy) {
                 ForEach(BadgePolicy.allCases) { policy in
@@ -69,9 +113,7 @@ private struct GeneralSettings: View {
             }
             .pickerStyle(.inline)
             Toggle("Show notifications for messages", isOn: $notificationsEnabled)
-            #if os(macOS)
             Toggle("Show in menu bar", isOn: $showMenuBarExtra)
-            #endif
             Text("Direct messages and mentions notify while Zephyr is running. (Zulip has no push service for desktop clients.)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -96,22 +138,56 @@ private struct GeneralSettings: View {
             Divider()
                 .padding(.vertical, 4)
             Picker("Keep message history for:", selection: $messageRetentionYears) {
-                Text("1 year").tag(1)
-                Text("2 years").tag(2)
-                Text("5 years").tag(5)
-                Text("10 years").tag(10)
-                Text("Forever").tag(0)
+                retentionOptions
             }
             Text("Older messages are pruned from the offline archive on this device; starred messages are always kept. History on the server is unaffected.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(20)
-        .onChange(of: messageRetentionYears) {
-            model.global.messageRetentionDays =
-                AppModel.retentionDays(forYears: messageRetentionYears)
-        }
+        .onChange(of: messageRetentionYears) { applyRetention() }
     }
+    #else
+    // Native grouped form: captions are section footers (the loose
+    // caption/divider rows each drew their own separators).
+    private var iosForm: some View {
+        Form {
+            Section {
+                Picker("App icon badge counts", selection: $badgePolicy) {
+                    ForEach(BadgePolicy.allCases) { policy in
+                        Text(policy.label).tag(policy.rawValue)
+                    }
+                }
+                Toggle("Show notifications for messages", isOn: $notificationsEnabled)
+            } footer: {
+                Text("Direct messages and mentions notify while Zephyr is running. (Zulip has no push service for desktop clients.)")
+            }
+            Section {
+                Toggle("Channels above direct messages", isOn: $channelsAboveDMs)
+                Toggle("Server name in window titles", isOn: $serverNameInTitles)
+                Picker("Sort direct messages by", selection: $dmSortOrder) {
+                    ForEach(DmSortOrder.allCases) { order in
+                        Text(order.label).tag(order.rawValue)
+                    }
+                }
+                Stepper(
+                    "Recent searches kept: \(recentSearchLimit)",
+                    value: $recentSearchLimit, in: 0...20)
+                    .monospacedDigit()
+            } footer: {
+                Text("0 hides the Recent Searches section.")
+            }
+            Section {
+                Picker("Keep message history for", selection: $messageRetentionYears) {
+                    retentionOptions
+                }
+            } footer: {
+                Text("Older messages are pruned from the offline archive on this device; starred messages are always kept. History on the server is unaffected.")
+            }
+        }
+        .onChange(of: messageRetentionYears) { applyRetention() }
+    }
+    #endif
 }
 
 private struct AccountsSettings: View {

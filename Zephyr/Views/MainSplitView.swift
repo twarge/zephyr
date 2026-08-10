@@ -127,6 +127,7 @@ struct MainSplitView: View {
                 .sheet(isPresented: $showSettingsSheet) {
                     SettingsView()
                         .environment(model)
+                        .presentationDragIndicator(.visible)
                 }
                 #endif
                 #if os(macOS)
