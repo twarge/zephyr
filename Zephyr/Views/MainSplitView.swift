@@ -115,6 +115,11 @@ struct MainSplitView: View {
                 // no redundant name when an image will render).
                 .navigationTitle(
                     hasRealmImage ? "" : (store.realmName ?? "Zephyr"))
+                // Compact (iPhone / narrow iPad): the root list IS the app,
+                // so search, Settings, and compose ride its bar; regular
+                // width leaves them to the detail bar (Settings only
+                // there loses its home — the gear lives here on compact).
+                .modifier(CompactSidebarSearch(search: search, selection: $selection))
                 .toolbar {
                     if #available(iOS 26.0, *) {
                         ToolbarItem(placement: .topBarLeading) {
@@ -124,6 +129,21 @@ struct MainSplitView: View {
                     } else {
                         ToolbarItem(placement: .topBarLeading) {
                             RealmLogoView(store: store, height: 30)
+                        }
+                    }
+                    if horizontalSizeClass == .compact {
+                        if #available(iOS 26.0, *) {
+                            DefaultToolbarItem(kind: .search, placement: .topBarTrailing)
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Settings", systemImage: "gear") {
+                                showSettingsSheet = true
+                            }
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("New Conversation", systemImage: "square.and.pencil") {
+                                model.pendingNewConversation = true
+                            }
                         }
                     }
                 }
@@ -553,13 +573,17 @@ struct MainSplitView: View {
                     ToolbarSpacer(.fixed, placement: .primaryAction)
                 }
             }
-            ToolbarItem(placement: .primaryAction) {
-                Button("Settings", systemImage: "gear") {
-                    showSettingsSheet = true
+            // Compact width moves the gear to the root list's bar; the
+            // compose button shows on both.
+            if horizontalSizeClass != .compact {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Settings", systemImage: "gear") {
+                        showSettingsSheet = true
+                    }
                 }
-            }
-            if #available(iOS 26.0, *) {
-                ToolbarSpacer(.fixed, placement: .primaryAction)
+                if #available(iOS 26.0, *) {
+                    ToolbarSpacer(.fixed, placement: .primaryAction)
+                }
             }
             ToolbarItem(placement: .primaryAction) {
                 Button("New Conversation", systemImage: "square.and.pencil") {
@@ -892,6 +916,24 @@ struct MainSplitView: View {
 /// The window's server menu: switching (⌘1–⌘9), account management, sign
 /// out. One per window — it changes only this window's server.
 #if !os(macOS)
+/// Compact width only: the root list is the whole UI there, so it gets
+/// its own searchable (same shared model) for the bar's search pin.
+/// Regular width leaves search solely to the detail column.
+private struct CompactSidebarSearch: ViewModifier {
+    let search: SidebarSearchModel
+    @Binding var selection: Destination?
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    func body(content: Content) -> some View {
+        if sizeClass == .compact {
+            content.modifier(
+                DetailSearchField(search: search, selection: $selection))
+        } else {
+            content
+        }
+    }
+}
+
 /// iOS: the sidebar-filtering search field, attached to the DETAIL
 /// column so its minimized magnifier renders in the main view's toolbar
 /// (macOS keeps the field on the sidebar list → window toolbar). The
