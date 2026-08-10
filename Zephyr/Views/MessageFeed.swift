@@ -437,25 +437,56 @@ struct MessageFeedList: View {
         }
     }
 
-    /// Scrolls the newly selected message into view when its live frame
-    /// says it isn't fully visible (unrealized rows have no frame and
-    /// always scroll). Edge sentinels land at fixed viewport fractions so
-    /// placement is exact for any message height.
+    /// Clearance under the pinned section header: a row whose top is
+    /// inside it counts as covered, not visible.
+    private static let headerClearance: CGFloat = 28
+
+    /// Whether the row sits acceptably in the viewport (top clear of the
+    /// pinned header; tall rows only need their top placed).
+    private func revealPlaced(_ id: Int) -> Bool {
+        guard viewportHeight > 0, let frame = rowFrames.frames[id] else { return false }
+        if frame.height > viewportHeight * 0.8 {
+            return frame.minY >= Self.headerClearance
+                && frame.minY <= viewportHeight * 0.25
+        }
+        return frame.minY >= Self.headerClearance && frame.maxY <= viewportHeight
+    }
+
+    /// Scrolls the newly selected message into place. Unrealized targets
+    /// scroll by the lazy stack's height estimates (or not at all when the
+    /// id isn't registered yet), so settle passes re-check the actual
+    /// frame and re-assert until placement verifies — the first attempt's
+    /// churn realizes the row, the retry lands it exactly.
     private func revealSelection(_ id: Int, previous: Int?, proxy: ScrollViewProxy) {
-        let frame = rowFrames.frames[id]
-        let fullyVisible = frame.map {
-            $0.minY >= 0 && $0.maxY <= viewportHeight
-        } ?? false
+        let placed = revealPlaced(id)
         if PerfLog.enabled {
-            let frameText = frame.map { String(describing: $0) } ?? "nil (unrealized)"
+            let frameText = rowFrames.frames[id].map { String(describing: $0) }
+                ?? "nil (unrealized)"
             print(
                 "perf reveal: id=\(id) frame=\(frameText) "
-                    + "viewport=\(viewportHeight) fullyVisible=\(fullyVisible)")
+                    + "viewport=\(viewportHeight) placed=\(placed)")
         }
-        guard !fullyVisible else { return }
+        guard !placed else { return }
         let movingUp = previous.map { id < $0 } ?? false
-        // Messages taller than the viewport reveal from the TOP.
-        let tall = viewportHeight > 0 && (frame?.height ?? 0) > viewportHeight * 0.8
+        performReveal(id, movingUp: movingUp, proxy: proxy)
+        Task { @MainActor in
+            for delay in [120, 350] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                // The user moved on, or the scroll landed: stop.
+                guard keys.selectedMessageId == id, !revealPlaced(id) else { return }
+                if PerfLog.enabled {
+                    let frameText = rowFrames.frames[id].map { String(describing: $0) }
+                        ?? "nil (unrealized)"
+                    print("perf reveal settle: id=\(id) frame=\(frameText)")
+                }
+                performReveal(id, movingUp: movingUp, proxy: proxy)
+            }
+        }
+    }
+
+    private func performReveal(_ id: Int, movingUp: Bool, proxy: ScrollViewProxy) {
+        let tall = viewportHeight > 0
+            && (rowFrames.frames[id]?.height ?? 0) > viewportHeight * 0.8
         withAnimation(.easeInOut(duration: 0.2)) {
             if movingUp || tall {
                 // Top edge at 8% of the viewport — below the pinned header.
@@ -463,14 +494,6 @@ struct MessageFeedList: View {
             } else {
                 // Bottom edge at 92% — clear of the viewport bottom.
                 proxy.scrollTo("msgbot-\(id)", anchor: UnitPoint(x: 0.5, y: 0.92))
-            }
-        }
-        if PerfLog.enabled {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(400))
-                let after = rowFrames.frames[id].map { String(describing: $0) }
-                    ?? "nil (unrealized)"
-                print("perf reveal landed: id=\(id) frame=\(after)")
             }
         }
     }
