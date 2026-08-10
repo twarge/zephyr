@@ -508,7 +508,15 @@ struct ComposeBar: View {
                         .autocorrectionDisabled(false)
                         .font(.body)
                         .padding(.horizontal, 5)
+                        // AppKit's text view has no built-in top inset
+                        // (UIKit's has 8), so without this the caret floats
+                        // above the placeholder's 8pt baseline.
+                        #if os(macOS)
+                        .padding(.top, 8)
+                        .padding(.bottom, 1)
+                        #else
                         .padding(.vertical, 1)
+                        #endif
                         .focused($messageFocused)
                         .onKeyPress(.return, phases: .down) { press in
                             // Long-form: Return newlines, ⇧Return sends.

@@ -482,21 +482,26 @@ struct MessageFeedList: View {
             : frame.maxY >= viewportHeight * 0.45
     }
 
+    /// Reveal diagnostics, silent unless launched with `-perfLog YES`
+    /// (`make perf`) — kept for future scroll-placement debugging.
+    private func revealLog(_ stage: String, id: Int) {
+        guard PerfLog.enabled else { return }
+        let frameText = rowFrames.frames[id].map { String(describing: $0) }
+            ?? "nil (unrealized)"
+        print("perf reveal \(stage): id=\(id) frame=\(frameText) viewport=\(viewportHeight)")
+    }
+
     /// Scrolls the newly selected message into place. Unrealized targets
     /// scroll by the lazy stack's height estimates (or not at all when the
     /// id isn't registered yet), so settle passes re-check the actual
     /// frame and re-assert until placement verifies — the first attempt's
     /// churn realizes the row, the retry lands it exactly.
     private func revealSelection(_ id: Int, previous: Int?, proxy: ScrollViewProxy) {
-        let placed = revealPlaced(id)
-        if PerfLog.enabled {
-            let frameText = rowFrames.frames[id].map { String(describing: $0) }
-                ?? "nil (unrealized)"
-            print(
-                "perf reveal: id=\(id) frame=\(frameText) "
-                    + "viewport=\(viewportHeight) placed=\(placed)")
+        guard !revealPlaced(id) else {
+            revealLog("already placed", id: id)
+            return
         }
-        guard !placed else { return }
+        revealLog("begin", id: id)
         let movingUp = previous.map { id < $0 } ?? false
         assertReveal(id, movingUp: movingUp, proxy: proxy)
         Task { @MainActor in
@@ -511,19 +516,11 @@ struct MessageFeedList: View {
                 try? await Task.sleep(for: .milliseconds(10))
                 guard keys.selectedMessageId == id else { return }
                 if revealSettled(id, movingUp: movingUp) {
-                    if PerfLog.enabled {
-                        let frameText = rowFrames.frames[id]
-                            .map { String(describing: $0) } ?? "nil"
-                        print("perf reveal settled: id=\(id) frame=\(frameText)")
-                    }
+                    revealLog("settled", id: id)
                     return
                 }
                 guard clock.now - lastAssert >= .milliseconds(150) else { continue }
-                if PerfLog.enabled {
-                    let frameText = rowFrames.frames[id].map { String(describing: $0) }
-                        ?? "nil (unrealized)"
-                    print("perf reveal settle: id=\(id) frame=\(frameText)")
-                }
+                revealLog("re-assert", id: id)
                 assertReveal(id, movingUp: movingUp, proxy: proxy)
                 lastAssert = clock.now
             }
