@@ -441,6 +441,7 @@ struct SidebarView: View {
                     .searchCompletion(token)
             }
         }
+        .modifier(MinimizedSidebarSearch())
         .searchFocused($searchFocused)
         .onSubmit(of: .search) {
             runSearch(recordInRecents: true)
@@ -561,14 +562,11 @@ struct SidebarView: View {
 
 
     private static var searchPlacement: SearchFieldPlacement {
-        // macOS: the window toolbar (Mail-style). iOS: the standard
-        // toolbar search control — .automatic pinned a nonstandard
-        // field above the list instead.
-        #if os(macOS)
+        // .automatic: the window toolbar on macOS (Mail-style); the
+        // sidebar's bar on iPad, where MinimizedSidebarSearch collapses
+        // it into the standard toolbar magnifier. (An explicit .toolbar
+        // placement is ignored for split-view sidebars on iPadOS.)
         .automatic
-        #else
-        .toolbar
-        #endif
     }
 
     /// Runs the current query. Return finalizes it: the query is recorded in
@@ -1264,6 +1262,23 @@ private struct SidebarTopicRow: View {
             ? TopicName.resolvedPrefix + trimmed : trimmed
         store.moveMessage(topic.maxId, toTopic: newName, propagateMode: "change_all")
         onRenamed?()
+    }
+}
+
+/// iPadOS 26's standard toolbar search: the field minimizes into the
+/// navigation bar's magnifier button. Pre-26 (and macOS) keep their
+/// native presentation.
+private struct MinimizedSidebarSearch: ViewModifier {
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+        #else
+        if #available(iOS 26.0, *) {
+            content.searchToolbarBehavior(.minimize)
+        } else {
+            content
+        }
+        #endif
     }
 }
 
