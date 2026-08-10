@@ -1022,6 +1022,16 @@ private struct DirectMessageRow: View {
     }
 }
 
+/// Sidebar state icons (muted bell, lock, followed, resolved): ~50%
+/// larger than the caption2 they debuted at.
+private var stateIconFont: Font {
+    #if os(macOS)
+    .system(size: 15)
+    #else
+    .callout
+    #endif
+}
+
 /// Web-style channel row: disclosure triangle for inline topics, colored
 /// type glyph (globe/lock/#), name, badge.
 private struct ChannelRow: View {
@@ -1056,13 +1066,13 @@ private struct ChannelRow: View {
             // the far right.
             if subscription.muted {
                 Image(systemName: "bell.slash.fill")
-                    .font(.caption2)
+                    .font(stateIconFont)
                     .foregroundStyle(.tertiary)
                     .help("Muted channel")
             }
             if store.channels[subscription.streamId]?.inviteOnly == true {
                 Image(systemName: "lock.fill")
-                    .font(.caption2)
+                    .font(stateIconFont)
                     .foregroundStyle(.secondary)
                     .help("Private channel")
             }
@@ -1209,7 +1219,7 @@ private struct SidebarTopicRow: View {
             // State icons trail, like the channel lock.
             if visibility == .followed {
                 Image(systemName: "plus.message.fill")
-                    .font(.caption2)
+                    .font(stateIconFont)
                     .foregroundStyle(.tint)
                     .help("Followed topic — new messages notify you")
                     .popoverTip(TopicStateIconsTip())
@@ -1217,7 +1227,7 @@ private struct SidebarTopicRow: View {
             }
             if TopicName.isResolved(topic.name) {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.caption2)
+                    .font(stateIconFont)
                     .foregroundStyle(.green)
                     .help("Resolved topic")
                     .dimsWhenWindowInactive()
