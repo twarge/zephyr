@@ -264,7 +264,17 @@ struct RootView: View {
                     .controlSize(.large)
                     .frame(minWidth: 400, minHeight: 300)
             case .needsAccount:
+                #if os(macOS)
                 LoginView()
+                #else
+                // Scrollable so the keyboard can't hide the lower fields
+                // or the error text under it on iPhone.
+                ScrollView {
+                    LoginView()
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollDismissesKeyboard(.interactively)
+                #endif
             case .failed(let message):
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
