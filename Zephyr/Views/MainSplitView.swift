@@ -992,9 +992,13 @@ private struct DetailSearchField: ViewModifier {
 
     private func searchable(_ content: Content) -> some View {
         content
+            // Explicit .toolbar placement: .automatic hoists the field
+            // into the iPad sidebar (duplicating the main-bar magnifier)
+            // and reserves the compact under-title drawer (a phantom top
+            // margin). The DefaultToolbarItem pins own the position.
             .searchable(
                 text: $search.filterText, tokens: $search.tokens,
-                prompt: "Filter or search"
+                placement: .toolbar, prompt: "Filter or search"
             ) { token in
                 Text(token.bubbleText)
             }
