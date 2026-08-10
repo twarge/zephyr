@@ -57,6 +57,7 @@ private struct GeneralSettings: View {
     @AppStorage("messageRetentionYears") private var messageRetentionYears = 5
     @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
     @AppStorage("recentSearchLimit") private var recentSearchLimit = 5
+    @AppStorage("channelsAboveDMs") private var channelsAboveDMs = true
 
     var body: some View {
         Form {
@@ -75,6 +76,7 @@ private struct GeneralSettings: View {
                 .foregroundStyle(.secondary)
             Divider()
                 .padding(.vertical, 4)
+            Toggle("Channels above direct messages", isOn: $channelsAboveDMs)
             Picker("Sort direct messages by:", selection: $dmSortOrder) {
                 ForEach(DmSortOrder.allCases) { order in
                     Text(order.label).tag(order.rawValue)

@@ -27,6 +27,7 @@ struct SidebarView: View {
     @State private var collapsedSections: Set<String>
     @State private var expandedChannels: Set<Int>
     @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
+    @AppStorage("channelsAboveDMs") private var channelsAboveDMs = true
     @State private var showOfflineUsers = false
     @State private var expandedInactiveSections: Set<String> = []
     /// Channels whose topic list shows everything (past the inline cap).
@@ -133,6 +134,70 @@ struct SidebarView: View {
         var visible: [User] = []
         var hiddenCount = 0
         var isEmpty: Bool { visible.isEmpty && hiddenCount == 0 }
+    }
+
+    /// The DM conversations section (recents, then the people directory).
+    @ViewBuilder
+    private var dmSection: some View {
+        Section(isExpanded: expansion("dms")) {
+            // Computed once per body pass — every row and the expander
+            // share it.
+            let directory = makeDirectory()
+            ForEach(dmRows) { conversation in
+                DirectMessageRow(store: store, conversation: conversation)
+                    .tag(Destination.conversation(conversation.key))
+                    .simultaneousGesture(
+                        detachGesture(.conversation(conversation.key)))
+            }
+            ForEach(directory.visible) { user in
+                let key = Unreads.dmKey(
+                    participantIds: [user.userId], selfUserId: store.selfUserId)
+                UserDirectMessageRow(store: store, user: user)
+                    .tag(Destination.conversation(key))
+                    .simultaneousGesture(detachGesture(.conversation(key)))
+            }
+            if directory.hiddenCount > 0 {
+                SidebarExpanderRow(
+                    title: "More conversations… (\(directory.hiddenCount))"
+                ) {
+                    showOfflineUsers = true
+                }
+            } else if showOfflineUsers && !isFiltering && !directory.isEmpty {
+                SidebarExpanderRow(title: "Fewer conversations") {
+                    showOfflineUsers = false
+                }
+            }
+        } header: {
+            if let startDirectMessage {
+                SectionHeaderWithAdd(
+                    title: "Direct messages", help: "New direct message",
+                    action: startDirectMessage)
+            } else {
+                Text("Direct messages")
+            }
+        }
+    }
+
+    /// The channel sections, one per folder (or a single Channels section).
+    @ViewBuilder
+    private var channelsSections: some View {
+        if store.channelFolders.isEmpty {
+            channelSection(
+                title: "Channels", id: "channels", channels: sortedSubscriptions,
+                showsJoin: true)
+        } else {
+            ForEach(
+                Array(store.channelFolders.enumerated()), id: \.element.id
+            ) { index, folder in
+                channelSection(
+                    title: folder.name, id: "folder-\(folder.id)",
+                    channels: channels(inFolder: folder.id),
+                    showsJoin: index == 0)
+            }
+            channelSection(
+                title: "Other channels", id: "folder-none",
+                channels: channels(inFolder: nil))
+        }
     }
 
     private func makeDirectory() -> Directory {
@@ -332,59 +397,12 @@ struct SidebarView: View {
                     }
                 }
             }
-            Section(isExpanded: expansion("dms")) {
-                // Computed once per body pass — every row and the expander
-                // share it.
-                let directory = makeDirectory()
-                ForEach(dmRows) { conversation in
-                    DirectMessageRow(store: store, conversation: conversation)
-                        .tag(Destination.conversation(conversation.key))
-                        .simultaneousGesture(
-                            detachGesture(.conversation(conversation.key)))
-                }
-                ForEach(directory.visible) { user in
-                    let key = Unreads.dmKey(
-                        participantIds: [user.userId], selfUserId: store.selfUserId)
-                    UserDirectMessageRow(store: store, user: user)
-                        .tag(Destination.conversation(key))
-                        .simultaneousGesture(detachGesture(.conversation(key)))
-                }
-                if directory.hiddenCount > 0 {
-                    SidebarExpanderRow(
-                        title: "More conversations… (\(directory.hiddenCount))"
-                    ) {
-                        showOfflineUsers = true
-                    }
-                } else if showOfflineUsers && !isFiltering && !directory.isEmpty {
-                    SidebarExpanderRow(title: "Fewer conversations") {
-                        showOfflineUsers = false
-                    }
-                }
-            } header: {
-                if let startDirectMessage {
-                    SectionHeaderWithAdd(
-                        title: "Direct messages", help: "New direct message",
-                        action: startDirectMessage)
-                } else {
-                    Text("Direct messages")
-                }
-            }
-            if store.channelFolders.isEmpty {
-                channelSection(
-                    title: "Channels", id: "channels", channels: sortedSubscriptions,
-                    showsJoin: true)
+            if channelsAboveDMs {
+                channelsSections
+                dmSection
             } else {
-                ForEach(
-                    Array(store.channelFolders.enumerated()), id: \.element.id
-                ) { index, folder in
-                    channelSection(
-                        title: folder.name, id: "folder-\(folder.id)",
-                        channels: channels(inFolder: folder.id),
-                        showsJoin: index == 0)
-                }
-                channelSection(
-                    title: "Other channels", id: "folder-none",
-                    channels: channels(inFolder: nil))
+                dmSection
+                channelsSections
             }
             if isFiltering && search.loadingAllTopics {
                 Label("Searching topics…", systemImage: "ellipsis")
