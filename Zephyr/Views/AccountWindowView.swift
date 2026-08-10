@@ -37,6 +37,12 @@ struct AccountWindowView: View {
                     initialSelection: accountId == defaultAccount ? initialSelection : nil,
                     startsWithSidebarClosed: startsWithSidebarClosed)
                     .id(accountId)
+            } else if model.global.enabledAccounts.isEmpty {
+                // Every server disabled: say so instead of spinning.
+                ContentUnavailableView(
+                    "All Servers Disabled", systemImage: "moon.zzz",
+                    description: Text("Re-enable a server in Settings → Accounts."))
+                    .frame(minWidth: 400, minHeight: 300)
             } else {
                 ProgressView()
                     .controlSize(.large)
@@ -71,11 +77,17 @@ struct AccountWindowView: View {
                 }
             }
         }
-        // A signed-out or disabled account falls back to whatever is left.
+        // A signed-out or disabled account falls back to whatever is left —
+        // and a window parked with NO account (every server was disabled)
+        // adopts the first one re-enabled, or it would spin forever.
         .onChange(of: model.global.enabledAccounts.map(\.id)) {
-            if let accountId,
-               !model.global.enabledAccounts.contains(where: { $0.id == accountId }) {
-                self.accountId = model.global.enabledAccounts.first?.id
+            let enabled = model.global.enabledAccounts
+            if let accountId {
+                if !enabled.contains(where: { $0.id == accountId }) {
+                    self.accountId = enabled.first?.id
+                }
+            } else {
+                accountId = enabled.first?.id
             }
         }
         // A notification click for another server hops this window (the
