@@ -28,7 +28,7 @@ struct RemindersView: View {
                 .listStyle(.plain)
             }
         }
-        .navigationTitle("Reminders")
+        .serverTitled("Reminders", store: store)
         .task { await store.refreshReminders() }
     }
 }

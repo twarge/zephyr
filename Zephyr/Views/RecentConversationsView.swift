@@ -110,7 +110,7 @@ struct RecentConversationsView: View {
                 .listStyle(.plain)
             }
         }
-        .navigationTitle("Recent conversations")
+        .serverTitled("Recent conversations", store: store)
         // Widen the recency window beyond the sidebar's initial seed.
         .task { await store.seedConversations(count: 200) }
     }

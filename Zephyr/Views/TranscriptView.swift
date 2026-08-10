@@ -72,7 +72,7 @@ struct TranscriptView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationTitle(windowTitle)
+        .serverTitled(windowTitle, store: store)
         // The title is a real window title (system-truncated, never
         // dropped); on macOS, channel navigation lives in its title menu —
         // attached only when it has content, or the bare chevron draws

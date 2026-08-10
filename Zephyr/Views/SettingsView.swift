@@ -58,6 +58,7 @@ private struct GeneralSettings: View {
     @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
     @AppStorage("recentSearchLimit") private var recentSearchLimit = 5
     @AppStorage("channelsAboveDMs") private var channelsAboveDMs = true
+    @AppStorage("serverNameInTitles") private var serverNameInTitles = true
 
     var body: some View {
         Form {
@@ -77,6 +78,7 @@ private struct GeneralSettings: View {
             Divider()
                 .padding(.vertical, 4)
             Toggle("Channels above direct messages", isOn: $channelsAboveDMs)
+            Toggle("Server name in window titles", isOn: $serverNameInTitles)
             Picker("Sort direct messages by:", selection: $dmSortOrder) {
                 ForEach(DmSortOrder.allCases) { order in
                     Text(order.label).tag(order.rawValue)

@@ -83,7 +83,7 @@ struct AllChannelsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationTitle("All Channels")
+        .serverTitled("All Channels", store: store)
         .task { await refresh() }
     }
 }

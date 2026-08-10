@@ -36,7 +36,7 @@ struct ChannelTopicsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationTitle("#\(channelName)")
+        .serverTitled("#\(channelName)", store: store)
         .task {
             do {
                 topics = try await store.connection.getTopics(streamId: streamId)

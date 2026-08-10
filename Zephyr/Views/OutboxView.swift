@@ -24,7 +24,7 @@ struct OutboxView: View {
                 }
             }
         }
-        .navigationTitle("Outbox")
+        .serverTitled("Outbox", store: store)
     }
 
     private func row(_ entry: OutboxMessage) -> some View {

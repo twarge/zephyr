@@ -37,7 +37,7 @@ struct NarrowFeedView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationTitle(title)
+        .serverTitled(title, store: store)
         // Store-keyed: re-binds when the store instance is replaced
         // (warm-launch swap, queue rebuild).
         .task(id: ObjectIdentifier(store)) {

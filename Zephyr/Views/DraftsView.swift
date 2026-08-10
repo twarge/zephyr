@@ -78,6 +78,6 @@ struct DraftsView: View {
                 }
             }
         }
-        .navigationTitle("Drafts")
+        .serverTitled("Drafts", store: store)
     }
 }

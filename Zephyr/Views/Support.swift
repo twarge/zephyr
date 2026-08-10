@@ -86,6 +86,27 @@ final class AvatarLoader {
 /// The realm's branding for the toolbar above the sidebar: the wide
 /// uploaded organization logo when there is one, else the square realm
 /// icon, else the realm's initial while loading.
+/// navigationTitle with the server name prefixed ("Twarge: Git › …"),
+/// preference-gated — with several servers connected at once, the title
+/// says which one this window is on.
+private struct ServerPrefixedTitle: ViewModifier {
+    let store: PerAccountStore
+    let title: String
+    @AppStorage("serverNameInTitles") private var serverNameInTitles = true
+
+    func body(content: Content) -> some View {
+        let name = store.realmName ?? ""
+        content.navigationTitle(
+            serverNameInTitles && !name.isEmpty ? "\(name): \(title)" : title)
+    }
+}
+
+extension View {
+    func serverTitled(_ title: String, store: PerAccountStore) -> some View {
+        modifier(ServerPrefixedTitle(store: store, title: title))
+    }
+}
+
 struct RealmLogoView: View {
     let store: PerAccountStore
     /// The bar's available content height (macOS toolbars are shorter
