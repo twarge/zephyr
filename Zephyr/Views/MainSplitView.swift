@@ -115,12 +115,12 @@ struct MainSplitView: View {
                 .toolbar {
                     if #available(iOS 26.0, *) {
                         ToolbarItem(placement: .topBarLeading) {
-                            RealmLogoView(store: store, height: 30)
+                            RealmLogoView(store: store, height: 38)
                         }
                         .sharedBackgroundVisibility(.hidden)
                     } else {
                         ToolbarItem(placement: .topBarLeading) {
-                            RealmLogoView(store: store, height: 30)
+                            RealmLogoView(store: store, height: 38)
                         }
                     }
                 }
