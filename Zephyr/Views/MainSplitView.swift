@@ -284,6 +284,10 @@ struct MainSplitView: View {
         stageOne
         .sheet(item: $newConversation) { mode in
             NewConversationSheet(store: store, selection: $selection, mode: mode)
+                #if !os(macOS)
+                .presentationDragIndicator(.visible)
+                .presentationDetents([.medium, .large])
+                #endif
         }
         .sheet(isPresented: Bindable(keys).showHelp) {
             ShortcutsHelpView()

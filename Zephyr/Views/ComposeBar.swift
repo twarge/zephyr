@@ -993,7 +993,7 @@ struct ComposeBar: View {
     }
 }
 
-private extension View {
+extension View {
     /// The HIG's 44pt minimum tap target on iOS; unchanged under a
     /// pointer on macOS. Nonisolated so nonisolated label builders
     /// (PhotosPicker's) can call it.

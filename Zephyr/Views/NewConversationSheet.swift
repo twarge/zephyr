@@ -1,5 +1,8 @@
+import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 import ZulipAPI
+import ZulipContent
 import ZulipModel
 
 /// How the new-conversation sheet is opened: the full ⌘N flow (people or
@@ -34,6 +37,23 @@ struct NewConversationSheet: View {
     @State private var topicText = ""
     @State private var messageText = ""
     @FocusState private var queryFocused: Bool
+    @State private var photoPickerItems: [PhotosPickerItem] = []
+    @State private var showFileImporter = false
+    @State private var activeUploads = 0
+    @State private var showPreview = false
+    @State private var previewContent: MessageContent?
+    @State private var previewTask: Task<Void, Never>?
+
+    // The compose bar's control metrics (touch-sized on iOS).
+    #if os(macOS)
+    private nonisolated static let attachIconSize: CGFloat = 16
+    private nonisolated static let sendIconSize: CGFloat = 24
+    private nonisolated static let columnSpacing: CGFloat = 10
+    #else
+    private nonisolated static let attachIconSize: CGFloat = 22
+    private nonisolated static let sendIconSize: CGFloat = 34
+    private nonisolated static let columnSpacing: CGFloat = 0
+    #endif
 
     init(
         store: PerAccountStore, selection: Binding<Destination?>,
@@ -86,6 +106,9 @@ struct NewConversationSheet: View {
     private var canSend: Bool {
         destination != nil
             && !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            // Sending waits for uploads: their [name](url) references only
+            // land in the text when the upload finishes.
+            && activeUploads == 0
     }
 
     var body: some View {
@@ -156,24 +179,130 @@ struct NewConversationSheet: View {
                     .zIndex(1)
             }
 
-            TextField("Message", text: $messageText, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(3...10)
-                .padding(8)
-                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
-
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Send") { send() }
-                    .keyboardShortcut(.defaultAction)
+            // The compose bar's expanded-mode editor: rounded editor with
+            // the trailing control column — file, photo, preview, send.
+            // No Cancel/Send row: the column sends, the sheet dismisses.
+            HStack(alignment: .bottom, spacing: 8) {
+                editor
+                VStack(spacing: Self.columnSpacing) {
+                    Button {
+                        showFileImporter = true
+                    } label: {
+                        Image(systemName: "paperclip")
+                            .font(.system(size: Self.attachIconSize))
+                            .foregroundStyle(.secondary)
+                            .touchTarget()
+                    }
+                    .buttonStyle(.plain)
+                    .help("Attach files")
+                    .fileImporter(
+                        isPresented: $showFileImporter,
+                        allowedContentTypes: [.item],
+                        allowsMultipleSelection: true
+                    ) { result in
+                        guard case .success(let urls) = result else { return }
+                        for url in urls {
+                            upload(fileURL: url)
+                        }
+                    }
+                    PhotosPicker(
+                        selection: $photoPickerItems,
+                        maxSelectionCount: 10,
+                        matching: .any(of: [.images, .videos])
+                    ) {
+                        Image(systemName: "photo")
+                            .font(.system(size: Self.attachIconSize))
+                            .foregroundStyle(.secondary)
+                            .touchTarget()
+                    }
+                    .buttonStyle(.plain)
+                    .help("Attach photos or videos")
+                    Button {
+                        togglePreview()
+                    } label: {
+                        Image(systemName: showPreview ? "eye.slash" : "eye")
+                            .font(.system(size: Self.attachIconSize))
+                            .foregroundStyle(.secondary)
+                            .touchTarget()
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!showPreview
+                        && messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .help(showPreview ? "Back to editing" : "Preview as it will send")
+                    Button(action: send) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: Self.sendIconSize))
+                            .foregroundStyle(
+                                canSend ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                            .touchTarget()
+                    }
+                    .buttonStyle(.plain)
                     .disabled(!canSend)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .help("Send (⌘Return)")
+                }
+            }
+            if activeUploads > 0 {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Uploading…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(16)
+        #if os(macOS)
         .frame(width: 460)
+        #endif
         .onAppear { queryFocused = true }
+        .onChange(of: photoPickerItems) {
+            guard !photoPickerItems.isEmpty else { return }
+            uploadPickedPhotos()
+        }
+    }
+
+    /// The message editor (or its server-rendered preview), styled like
+    /// the compose bar's expanded mode.
+    private var editor: some View {
+        ZStack(alignment: .topLeading) {
+            if showPreview {
+                ScrollView {
+                    Group {
+                        if let previewContent {
+                            MessageContentView(
+                                content: previewContent, connection: store.connection)
+                        } else {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                }
+            } else {
+                if messageText.isEmpty {
+                    Text("Message")
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 8)
+                        .padding(.leading, 10)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $messageText)
+                    .scrollContentBackground(.hidden)
+                    .font(.body)
+                    .padding(.horizontal, 5)
+                    #if os(macOS)
+                    .padding(.top, 8)
+                    .padding(.bottom, 1)
+                    #else
+                    .padding(.vertical, 1)
+                    #endif
+            }
+        }
+        .frame(minHeight: 120, maxHeight: .infinity)
+        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func chip(_ label: String, remove: @escaping () -> Void) -> some View {
@@ -203,6 +332,72 @@ struct NewConversationSheet: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: Attachments and preview (the compose bar's behavior)
+
+    private func upload(fileURL: URL) {
+        let scoped = fileURL.startAccessingSecurityScopedResource()
+        guard let data = try? Data(contentsOf: fileURL) else {
+            if scoped { fileURL.stopAccessingSecurityScopedResource() }
+            return
+        }
+        if scoped { fileURL.stopAccessingSecurityScopedResource() }
+        upload(data: data, filename: fileURL.lastPathComponent)
+    }
+
+    private func uploadPickedPhotos() {
+        let items = photoPickerItems
+        photoPickerItems = []
+        for pick in items {
+            Task {
+                guard let data = try? await pick.loadTransferable(type: Data.self)
+                else { return }
+                let ext = pick.supportedContentTypes.first?
+                    .preferredFilenameExtension ?? "jpeg"
+                let stamp = UUID().uuidString.prefix(8)
+                upload(data: data, filename: "photo-\(stamp).\(ext)")
+            }
+        }
+    }
+
+    /// Uploads and appends the `[filename](url)` reference to the draft
+    /// (images/audio embed with a leading "!").
+    private func upload(data: Data, filename: String) {
+        activeUploads += 1
+        let connection = store.connection
+        let fileExtension = (filename as NSString).pathExtension.lowercased()
+        let mimeType = UTType(filenameExtension: fileExtension)?.preferredMIMEType
+            ?? "application/octet-stream"
+        Task {
+            defer { activeUploads -= 1 }
+            guard let path = try? await connection.uploadFile(
+                data, filename: filename, mimeType: mimeType, progress: { _ in })
+            else { return }
+            let linkPath = path.replacingOccurrences(of: " ", with: "%20")
+            let embed = mimeType.hasPrefix("image/") || mimeType.hasPrefix("audio/")
+            let reference = "\(embed ? "!" : "")[\(filename)](\(linkPath))"
+            messageText = messageText.isEmpty
+                ? reference : "\(messageText)\n\(reference)"
+        }
+    }
+
+    /// Server-rendered preview (POST /messages/render): exactly what will
+    /// send, through the production renderer.
+    private func togglePreview() {
+        showPreview.toggle()
+        previewTask?.cancel()
+        guard showPreview else { return }
+        previewContent = nil
+        let content = messageText
+        let connection = store.connection
+        previewTask = Task {
+            let html = (try? await connection.renderMessage(content: content)) ?? ""
+            guard !Task.isCancelled else { return }
+            previewContent = ContentParser.parse(
+                html: html.isEmpty
+                    ? "<p><em>Preview unavailable (offline?)</em></p>" : html)
+        }
     }
 
     private func send() {
