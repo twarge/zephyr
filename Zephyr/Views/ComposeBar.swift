@@ -328,7 +328,20 @@ struct ComposeBar: View {
                         .onKeyPress(.upArrow) { moveSelection(-1) }
                         .onKeyPress(.downArrow) { moveSelection(1) }
                         .onKeyPress(.tab) { acceptSelection() }
-                        .onKeyPress(.return) { acceptSelection() }
+                        .onKeyPress(.return, phases: .down) { press in
+                            // iOS hardware keyboards: ⇧Return breaks a line
+                            // in the compact field (Return sends) — the
+                            // expanded editor reverses the roles. macOS
+                            // handles modifier-returns natively at the
+                            // insertion point.
+                            #if !os(macOS)
+                            if press.modifiers.contains(.shift) {
+                                text += "\n"
+                                return .handled
+                            }
+                            #endif
+                            return acceptSelection()
+                        }
                         .onKeyPress(.escape) {
                             guard !suggestions.isEmpty else { return .ignored }
                             suggestions = []
