@@ -927,6 +927,9 @@ struct ComposeBar: View {
         draftSaveTask = nil
         text = ""
         DraftStore.shared.setDraft("", for: destination, account: store.accountId)
+        // Keep composing: submit otherwise resigns focus (dropping the
+        // keyboard on iOS) after every message.
+        messageFocused = true
     }
 }
 
