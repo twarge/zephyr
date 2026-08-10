@@ -20,6 +20,13 @@ struct ZephyrApp: App {
         WindowGroup(id: "main") {
             RootView()
                 .environment(model)
+                // UIKit's keyboard-focus halo crashes (stale AttributeGraph
+                // read in SwiftUI's focusEffect getter) when the focused
+                // view is rebuilt in the same transaction the halo moves —
+                // our compose field does exactly that. No halo, no crash.
+                #if !os(macOS)
+                .focusEffectDisabled()
+                #endif
         }
         .commands { accountCommands }
         // Double-clicked sidebar entries open a fresh main window with the
@@ -28,6 +35,9 @@ struct ZephyrApp: App {
             if let window {
                 DetachedRootView(window: window)
                     .environment(model)
+                    #if !os(macOS)
+                    .focusEffectDisabled()
+                    #endif
             }
         }
         .defaultSize(width: 720, height: 640)
