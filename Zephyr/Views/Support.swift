@@ -86,13 +86,24 @@ final class AvatarLoader {
 /// The realm's branding for the toolbar above the sidebar: the wide
 /// uploaded organization logo when there is one, else the square realm
 /// icon, else the realm's initial while loading.
+/// The server-name-in-titles preference's default: on for macOS and
+/// iPad, off for iPhone — its narrow titles have no room for a prefix.
+var serverNameInTitlesDefault: Bool {
+    #if os(macOS)
+    true
+    #else
+    UIDevice.current.userInterfaceIdiom != .phone
+    #endif
+}
+
 /// navigationTitle with the server name prefixed ("Twarge: Git › …"),
 /// preference-gated — with several servers connected at once, the title
 /// says which one this window is on.
 private struct ServerPrefixedTitle: ViewModifier {
     let store: PerAccountStore
     let title: String
-    @AppStorage("serverNameInTitles") private var serverNameInTitles = true
+    @AppStorage("serverNameInTitles") private var serverNameInTitles =
+        serverNameInTitlesDefault
 
     func body(content: Content) -> some View {
         let name = store.realmName ?? ""

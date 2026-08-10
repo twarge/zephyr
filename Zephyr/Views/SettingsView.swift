@@ -79,7 +79,8 @@ private struct GeneralSettings: View {
     @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
     @AppStorage("recentSearchLimit") private var recentSearchLimit = 5
     @AppStorage("channelsAboveDMs") private var channelsAboveDMs = true
-    @AppStorage("serverNameInTitles") private var serverNameInTitles = true
+    @AppStorage("serverNameInTitles") private var serverNameInTitles =
+        serverNameInTitlesDefault
 
     var body: some View {
         #if os(macOS)
