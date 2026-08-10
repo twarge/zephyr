@@ -429,10 +429,22 @@ struct MessageFeedList: View {
     private func scrollToBottomSettled(_ proxy: ScrollViewProxy) {
         anchorId = Self.bottomAnchorId
         Task { @MainActor in
-            for delay in [250, 600] {
-                try? await Task.sleep(for: .milliseconds(delay))
+            // Same per-frame polling as selection reveals: watch the
+            // geometry, re-assert sparingly, finish with one exact pass
+            // the moment the viewport reaches the bottom neighborhood.
+            let clock = ContinuousClock()
+            let deadline = clock.now + .seconds(1)
+            var lastAssert = clock.now
+            while clock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(10))
                 guard anchorId == Self.bottomAnchorId else { return }
+                if nearBottom {
+                    proxy.scrollTo(Self.bottomAnchorId, anchor: .bottom)
+                    return
+                }
+                guard clock.now - lastAssert >= .milliseconds(150) else { continue }
                 proxy.scrollTo(Self.bottomAnchorId, anchor: .bottom)
+                lastAssert = clock.now
             }
         }
     }
@@ -470,16 +482,25 @@ struct MessageFeedList: View {
         let movingUp = previous.map { id < $0 } ?? false
         performReveal(id, movingUp: movingUp, proxy: proxy)
         Task { @MainActor in
-            for delay in [120, 350] {
-                try? await Task.sleep(for: .milliseconds(delay))
-                // The user moved on, or the scroll landed: stop.
-                guard keys.selectedMessageId == id, !revealPlaced(id) else { return }
+            // Poll per frame (geometry lands at most once per frame), so
+            // settling registers immediately; re-assert sparingly so the
+            // in-flight scroll animation gets room to run. One-second
+            // deadline; abandons the moment the selection moves on.
+            let clock = ContinuousClock()
+            let deadline = clock.now + .seconds(1)
+            var lastAssert = clock.now
+            while clock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(10))
+                guard keys.selectedMessageId == id else { return }
+                if revealPlaced(id) { return }
+                guard clock.now - lastAssert >= .milliseconds(150) else { continue }
                 if PerfLog.enabled {
                     let frameText = rowFrames.frames[id].map { String(describing: $0) }
                         ?? "nil (unrealized)"
                     print("perf reveal settle: id=\(id) frame=\(frameText)")
                 }
                 performReveal(id, movingUp: movingUp, proxy: proxy)
+                lastAssert = clock.now
             }
         }
     }
