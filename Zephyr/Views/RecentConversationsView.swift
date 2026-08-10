@@ -124,6 +124,20 @@ private struct RecentConversationRow: View {
     // The parent's Row type, re-exposed without generics noise.
     typealias RowData = RecentConversationsView.Row
 
+    #if !os(macOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
+    /// Compact width stacks the row on two lines; the wide table keeps
+    /// its aligned columns.
+    private var isCompact: Bool {
+        #if os(macOS)
+        false
+        #else
+        sizeClass == .compact
+        #endif
+    }
+
     private var channelColor: Color {
         guard let streamId = row.streamId else { return .gray }
         return store.subscriptions[streamId]?.color.flatMap(Color.init(zulipHex:))
@@ -132,58 +146,95 @@ private struct RecentConversationRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 8) {
-                HStack(spacing: 5) {
-                    if row.streamId != nil {
-                        Image(systemName: "number")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(channelColor)
-                        Text(row.channelName)
-                    } else {
-                        Image(systemName: "person.2.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("Direct messages")
-                            .foregroundStyle(.secondary)
+            if isCompact {
+                // Two lines: channel › title (+ badge), then the time —
+                // no fixed column widths; nothing aligns across lines.
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        channelLabel
+                        chevron
+                        titleText
+                        Spacer(minLength: 8)
+                        unreadBadge
                     }
+                    timeText
                 }
-                .font(.body)
-                .lineLimit(1)
-                .frame(width: 160, alignment: .leading)
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                Text(row.title)
-                    .font(.body.weight(.medium))
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                if row.unreadCount > 0 {
-                    Text("\(row.unreadCount)")
-                        .font(.caption.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(.tint, in: .capsule)
+                .contentShape(.rect)
+            } else {
+                HStack(spacing: 8) {
+                    channelLabel
+                        .frame(width: 160, alignment: .leading)
+                    chevron
+                    titleText
+                    Spacer(minLength: 8)
+                    unreadBadge
+                    timeText
+                        .frame(width: 118, alignment: .trailing)
                 }
-                Group {
-                    if let timestamp = row.timestamp {
-                        Text(
-                            Date(timeIntervalSince1970: TimeInterval(timestamp)),
-                            format: .relative(presentation: .named))
-                    } else {
-                        Text("")
-                    }
-                }
-                // The same small-caps time treatment as the message feed.
-                .font(.body.smallCaps())
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .frame(width: 118, alignment: .trailing)
+                .contentShape(.rect)
             }
-            .contentShape(.rect)
         }
         .buttonStyle(.plain)
+    }
+
+    private var channelLabel: some View {
+        HStack(spacing: 5) {
+            if row.streamId != nil {
+                Image(systemName: "number")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(channelColor)
+                Text(row.channelName)
+            } else {
+                Image(systemName: "person.2.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Direct messages")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.body)
+        .lineLimit(1)
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+    }
+
+    private var titleText: some View {
+        Text(row.title)
+            .font(.body.weight(.medium))
+            .lineLimit(1)
+    }
+
+    @ViewBuilder
+    private var unreadBadge: some View {
+        if row.unreadCount > 0 {
+            Text("\(row.unreadCount)")
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(.tint, in: .capsule)
+        }
+    }
+
+    private var timeText: some View {
+        Group {
+            if let timestamp = row.timestamp {
+                Text(
+                    Date(timeIntervalSince1970: TimeInterval(timestamp)),
+                    format: .relative(presentation: .named))
+            } else {
+                Text("")
+            }
+        }
+        // The same small-caps time treatment as the message feed.
+        .font(.body.smallCaps())
+        .monospacedDigit()
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
     }
 }
