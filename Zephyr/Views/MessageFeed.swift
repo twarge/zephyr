@@ -922,7 +922,12 @@ struct MessageRow: View {
         .overlay(alignment: .topTrailing) {
             // Fixed layout (opacity gating, not insertion) so the star sits
             // in exactly the same spot as control and as starred indicator.
+            // macOS reveals on hover; touch reveals on tap (selection).
+            #if os(macOS)
             let controlsActive = hovering || showReactionPicker
+            #else
+            let controlsActive = isKeySelected || showReactionPicker
+            #endif
             // Top-aligned: the buttons' padding would otherwise center the
             // time a few points below its message's first line.
             HStack(alignment: .top, spacing: 2) {
@@ -930,9 +935,9 @@ struct MessageRow: View {
                     showReactionPicker = true
                 } label: {
                     Image(systemName: "face.smiling")
-                        .font(.callout)
+                        .font(controlFont)
                         .foregroundStyle(.secondary)
-                        .padding(5)
+                        .padding(controlPadding)
                         .background(.quaternary.opacity(0.6), in: .circle)
                 }
                 .buttonStyle(.plain)
@@ -955,11 +960,11 @@ struct MessageRow: View {
                         reminderMenuItems()
                     } label: {
                         Image(systemName: reminder == nil ? "clock" : "clock.fill")
-                            .font(.callout)
+                            .font(controlFont)
                             .foregroundStyle(
                                 reminder == nil
                                     ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
-                            .padding(5)
+                            .padding(controlPadding)
                             .background(
                                 controlsActive
                                     ? AnyShapeStyle(.quaternary.opacity(0.6))
@@ -980,10 +985,10 @@ struct MessageRow: View {
                     store.setStarred(!isStarred, messageId: message.id)
                 } label: {
                     Image(systemName: isStarred ? "star.fill" : "star")
-                        .font(.callout)
+                        .font(controlFont)
                         .foregroundStyle(
                             isStarred ? AnyShapeStyle(.yellow) : AnyShapeStyle(.secondary))
-                        .padding(5)
+                        .padding(controlPadding)
                         .background(
                             controlsActive
                                 ? AnyShapeStyle(.quaternary.opacity(0.6))
@@ -1040,6 +1045,23 @@ struct MessageRow: View {
     static func reminderTimeText(_ reminder: Reminder) -> String {
         Date(timeIntervalSince1970: TimeInterval(reminder.scheduledDeliveryTimestamp))
             .formatted(date: .abbreviated, time: .shortened)
+    }
+
+    /// Hover-control metrics: pointer-sized on macOS, tap-sized on touch.
+    private var controlFont: Font {
+        #if os(macOS)
+        .callout
+        #else
+        .title3
+        #endif
+    }
+
+    private var controlPadding: CGFloat {
+        #if os(macOS)
+        5
+        #else
+        10
+        #endif
     }
 
     /// The reminder actions, shared by the hover clock button and the
