@@ -42,6 +42,12 @@ final class KeyboardRouter {
     /// A menu-bar action aimed at the selected message; the owning row
     /// consumes it (same pattern as editRequestId).
     var messageActionRequest: MessageActionRequest?
+    /// iOS counterpart of the macOS first-responder text check: single-key
+    /// navigation must stay quiet while any text input in the detail focus
+    /// scope is active (compose, topic field, message editor).
+    var composeInputFocused = false
+    var editingMessage = false
+    var textInputActive: Bool { composeInputFocused || editingMessage }
     /// Set by "Mark as Unread from Here": suppresses visibility-based read
     /// marking so the freshly unread messages don't immediately re-mark;
     /// cleared when a feed (re)appears.

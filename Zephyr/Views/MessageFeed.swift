@@ -878,6 +878,16 @@ struct MessageRow: View {
         .simultaneousGesture(TapGesture().onEnded {
             keys.selectedMessageId = message.id
         })
+        .onChange(of: editing) {
+            // The inline editor's TextField must also silence single-key
+            // navigation (it shares the detail focus scope).
+            keys.editingMessage = editing
+        }
+        .onDisappear {
+            if editing {
+                keys.editingMessage = false
+            }
+        }
         .onChange(of: keys.editRequestId) { _, requested in
             guard requested == message.id else { return }
             keys.editRequestId = nil

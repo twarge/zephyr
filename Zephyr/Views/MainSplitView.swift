@@ -751,6 +751,9 @@ struct MainSplitView: View {
 
     #if os(iOS)
     private func handleKeyPress(_ press: KeyPress) -> Bool {
+        // Typing wins: no single-key navigation while a text input in this
+        // window is active (macOS does this via its first-responder check).
+        guard !keys.textInputActive else { return false }
         guard press.modifiers.isDisjoint(with: [.command, .control, .option])
         else { return false }
         switch press.key {

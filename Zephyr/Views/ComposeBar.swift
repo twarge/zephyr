@@ -174,6 +174,7 @@ struct ComposeBar: View {
 
     @State private var text = ""
     @State private var draftSaveTask: Task<Void, Never>?
+    @State private var topicFieldFocused = false
     @State private var topicText = ""
     @State private var topicPrefill = ""
     @State private var suggestions: [ComposeSuggestion] = []
@@ -283,7 +284,11 @@ struct ComposeBar: View {
                     TopicAutocompleteField(
                         store: store, streamId: streamId, topic: $topicText,
                         plainStyle: true, dropUp: true,
-                        onCommit: { messageFocused = true })
+                        onCommit: { messageFocused = true },
+                        onFocusChange: { focused in
+                            topicFieldFocused = focused
+                            updateComposeInputFocus()
+                        })
                         .frame(maxWidth: 260)
                 }
                 if expanded {
@@ -383,8 +388,12 @@ struct ComposeBar: View {
         }
         .onDisappear {
             flushDraftSave()
+            keys.composeInputFocused = false
             keys.unregisterUpload(owner: uploadOwnerId)
             keys.unregisterComposeInsertion(owner: uploadOwnerId)
+        }
+        .onChange(of: messageFocused) {
+            updateComposeInputFocus()
         }
         .onChange(of: text) {
             if case .fixed(let destination, _) = mode {
@@ -805,6 +814,10 @@ struct ComposeBar: View {
     }
 
     // MARK: Send
+
+    private func updateComposeInputFocus() {
+        keys.composeInputFocused = messageFocused || topicFieldFocused
+    }
 
     /// Draft writes coalesce to one per typing pause: the sidebar's Drafts
     /// section observes the DraftStore, so per-keystroke writes re-rendered

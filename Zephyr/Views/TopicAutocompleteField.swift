@@ -25,6 +25,9 @@ struct TopicAutocompleteField: View {
     /// Return with no selection, and every accept, land here (e.g. focus
     /// the message field).
     var onCommit: (() -> Void)?
+    /// Reports focus changes (the compose bar suppresses single-key
+    /// navigation while any of its inputs are active).
+    var onFocusChange: ((Bool) -> Void)?
 
     @State private var topics: [ChannelTopic]?
     @State private var loadedStreamId: Int?
@@ -92,6 +95,7 @@ struct TopicAutocompleteField: View {
             }
             .onChange(of: focused) {
                 if focused { loadIfNeeded() }
+                onFocusChange?(focused)
             }
             .onChange(of: streamId) {
                 topics = nil
