@@ -302,9 +302,6 @@ struct ComposeBar: View {
                                 topicFieldFocused = focused
                                 updateComposeInputFocus()
                             })
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .composeGlass(in: Capsule())
                             .frame(maxWidth: 260)
                     }
                     if expanded {

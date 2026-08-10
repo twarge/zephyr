@@ -19,9 +19,10 @@ struct TopicAutocompleteField: View {
     /// overlay floated over neighboring rows) vs. an overlay dropping
     /// below the field (sheets, where growth would jump the layout).
     var dropUp = false
-    /// Cap on visible suggestions — sheets with limited room in the card's
-    /// direction pass fewer so their bounds never clip it.
-    var maxSuggestions = 8
+    /// Cap on listed suggestions — the card scrolls beyond its height
+    /// cap, so the default is generous; sheets with limited room in the
+    /// card's direction pass fewer so their bounds never clip it.
+    var maxSuggestions = 50
     /// Return with no selection, and every accept, land here (e.g. focus
     /// the message field).
     var onCommit: (() -> Void)?
@@ -37,6 +38,7 @@ struct TopicAutocompleteField: View {
     /// typing in the topic binding's onChange.
     @State private var accepting = false
     @State private var cardHeight: CGFloat = 0
+    @State private var listHeight: CGFloat = 0
     @FocusState private var focused: Bool
 
     /// No selection is the default so Return keeps a freshly typed new
@@ -107,11 +109,13 @@ struct TopicAutocompleteField: View {
     @ViewBuilder
     private var styledField: some View {
         if plainStyle {
+            // One container only: the compose bar's glass pill IS the
+            // field chrome (no outer wrapper).
             field
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 17))
+                .composeGlass(in: RoundedRectangle(cornerRadius: 17))
         } else {
             field
                 .textFieldStyle(.roundedBorder)
@@ -147,40 +151,63 @@ struct TopicAutocompleteField: View {
             }
     }
 
+    /// The card scrolls past this height (a busy channel lists dozens
+    /// of topics).
+    private static let cardMaxHeight: CGFloat = 248
+
     private var card: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            ForEach(Array(suggestions.enumerated()), id: \.element) { index, name in
-                Button {
-                    accept(name)
-                } label: {
-                    HStack(spacing: 5) {
-                        if TopicName.isResolved(name) {
-                            Image(systemName: "checkmark")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(Array(suggestions.enumerated()), id: \.element) { index, name in
+                        Button {
+                            accept(name)
+                        } label: {
+                            HStack(spacing: 5) {
+                                if TopicName.isResolved(name) {
+                                    Image(systemName: "checkmark")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Text(TopicName.displayName(name))
+                                    .lineLimit(1)
+                            }
+                            .font(.callout)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                index == selection
+                                    ? AnyShapeStyle(.tint.opacity(0.2))
+                                    : AnyShapeStyle(.clear),
+                                in: RoundedRectangle(cornerRadius: 5))
+                            .contentShape(.rect)
                         }
-                        Text(TopicName.displayName(name))
-                            .lineLimit(1)
+                        .buttonStyle(.plain)
+                        .id(index)
                     }
-                    .font(.callout)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        index == selection
-                            ? AnyShapeStyle(.tint.opacity(0.2))
-                            : AnyShapeStyle(.clear),
-                        in: RoundedRectangle(cornerRadius: 5))
-                    .contentShape(.rect)
                 }
-                .buttonStyle(.plain)
+                .padding(4)
+                // Hug short lists: a ScrollView takes its proposed
+                // height regardless of content, so measure and clamp.
+                .onGeometryChange(for: CGFloat.self) {
+                    $0.size.height
+                } action: { height in
+                    listHeight = height
+                }
             }
+            .frame(width: 260, alignment: .leading)
+            .frame(height: min(listHeight, Self.cardMaxHeight))
+            .scrollBounceBehavior(.basedOnSize)
+            // Arrow keys keep the highlighted row in view.
+            .onChange(of: selection) {
+                guard selection >= 0 else { return }
+                proxy.scrollTo(selection)
+            }
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
+            .shadow(color: .black.opacity(0.18), radius: 10, y: 2)
         }
-        .padding(4)
-        .frame(width: 260, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
-        .shadow(color: .black.opacity(0.18), radius: 10, y: 2)
     }
 
     private func move(_ delta: Int) -> KeyPress.Result {
