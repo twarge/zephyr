@@ -182,6 +182,10 @@ struct ComposeBar: View {
     /// Set around our own ⇧Return newline so the Send-key detector
     /// below doesn't mistake it for the keyboard's Send.
     @State private var pendingHardwareNewline = false
+    /// When the field last lost focus — opening the + menu blurs it, so
+    /// "was focused" for the editor-mode toggle means focused now OR
+    /// blurred moments ago.
+    @State private var composeBlurredAt = Date.distantPast
     @State private var topicText = ""
     @State private var topicPrefill = ""
     @State private var suggestions: [ComposeSuggestion] = []
@@ -383,7 +387,10 @@ struct ComposeBar: View {
             keys.unregisterUpload(owner: uploadOwnerId)
             keys.unregisterComposeInsertion(owner: uploadOwnerId)
         }
-        .onChange(of: messageFocused) {
+        .onChange(of: messageFocused) { _, focused in
+            if !focused {
+                composeBlurredAt = .now
+            }
             updateComposeInputFocus()
         }
         .onChange(of: photoPickerItems) {
@@ -424,9 +431,22 @@ struct ComposeBar: View {
                     ? "rectangle.compress.vertical" : "rectangle.expand.vertical"
             ) {
                 LongFormComposeTip().invalidate(reason: .actionPerformed)
+                let restoreFocus = messageFocused
+                    || Date.now.timeIntervalSince(composeBlurredAt) < 3
                 withAnimation(.snappy) { expanded.toggle() }
                 showPreview = false
                 previewTask?.cancel()
+                // A focused field stays focused across the swap; the
+                // compact field exposes no cursor position, so entering
+                // the editor lands the insertion point at the end.
+                guard restoreFocus else { return }
+                let entering = expanded
+                Task { @MainActor in
+                    if entering {
+                        editorSelection = TextSelection(insertionPoint: text.endIndex)
+                    }
+                    messageFocused = true
+                }
             }
             if expanded {
                 Button(
