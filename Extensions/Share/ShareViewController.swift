@@ -24,7 +24,7 @@ final class ShareViewController: NSViewController {
             Task { @MainActor in
                 // Best effort: bring the app up so the picker appears now.
                 if let url = URL(string: "zephyr://share") {
-                    self?.extensionContext?.open(url)
+                    _ = await self?.extensionContext?.open(url)
                 }
                 self?.extensionContext?.completeRequest(returningItems: nil)
             }
