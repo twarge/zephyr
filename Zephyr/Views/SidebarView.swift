@@ -418,6 +418,10 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        #if !os(macOS)
+        // Mail-style bold section headers.
+        .headerProminence(.increased)
+        #endif
         // One field, two roles: typing filters the sidebar live (suggestions
         // pop over beside the field); committed tokens search immediately;
         // Return searches the free text and records it in Recent Searches.
@@ -557,9 +561,14 @@ struct SidebarView: View {
 
 
     private static var searchPlacement: SearchFieldPlacement {
-        // .automatic: the window toolbar on macOS (Mail-style), the
-        // sidebar's navigation bar on iPad.
+        // macOS: the window toolbar (Mail-style). iOS: the standard
+        // toolbar search control — .automatic pinned a nonstandard
+        // field above the list instead.
+        #if os(macOS)
         .automatic
+        #else
+        .toolbar
+        #endif
     }
 
     /// Runs the current query. Return finalizes it: the query is recorded in
@@ -829,12 +838,17 @@ private struct SectionHeaderWithAdd: View {
             Button(action: action) {
                 // Filled variant: solid disc with a knocked-out plus.
                 Image(systemName: "plus.circle.fill")
+                    #if !os(macOS)
+                    .frame(width: 36, height: 36)
+                    .contentShape(.rect)
+                    #endif
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .padding(.trailing, 8)
             .help(help)
             #if os(macOS)
+            // Nudged in from the overlay scroller; invisible until hover.
+            .padding(.trailing, 8)
             .opacity(hovering ? 1 : 0)
             #endif
         }
@@ -1056,11 +1070,16 @@ private struct ChannelRow: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        // Same glyph, comfortable hit area — nudged in from
-                        // the edge so the overlay scroller (which wins
-                        // clicks while visible) doesn't cover the target.
+                        // Same glyph, comfortable hit area — on macOS nudged
+                        // in from the edge so the overlay scroller (which
+                        // wins clicks while visible) doesn't cover the
+                        // target; on iOS a full 44pt touch target.
+                        #if os(macOS)
                         .frame(width: 26, height: 26)
                         .padding(.trailing, 8)
+                        #else
+                        .frame(width: 44, height: 44)
+                        #endif
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
@@ -1134,6 +1153,14 @@ private struct SidebarTopicRow: View {
     @State private var showRename = false
     @State private var renameText = ""
 
+    /// macOS's sidebar runs smaller than body; iOS keeps every row
+    /// body-sized like Mail's.
+    #if os(macOS)
+    private static let topicFont = Font.callout
+    #else
+    private static let topicFont = Font.body
+    #endif
+
     private var channelColor: Color {
         store.subscriptions[streamId]?.color.flatMap(Color.init(zulipHex:))
             ?? .stableColor(for: streamId)
@@ -1161,7 +1188,7 @@ private struct SidebarTopicRow: View {
             Label {
                 Text(TopicName.displayName(topic.name).isEmpty
                     ? "general chat" : TopicName.displayName(topic.name))
-                    .font(.callout.weight(unreadCount > 0 ? .semibold : .regular))
+                    .font(Self.topicFont.weight(unreadCount > 0 ? .semibold : .regular))
                     .lineLimit(1)
             } icon: {
                 if let rail {
@@ -1267,6 +1294,7 @@ struct CountBadge: View {
     let count: Int
 
     var body: some View {
+        #if os(macOS)
         Text("\(count)")
             .font(.caption2.weight(.medium))
             .monospacedDigit()
@@ -1274,6 +1302,13 @@ struct CountBadge: View {
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
             .background(.quaternary.opacity(0.7), in: RoundedRectangle(cornerRadius: 4))
+        #else
+        // Native sidebar counts (Mail's): plain secondary numbers, no
+        // capsule.
+        Text("\(count)")
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+        #endif
     }
 }
 
