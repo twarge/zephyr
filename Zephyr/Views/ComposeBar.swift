@@ -236,17 +236,18 @@ struct ComposeBar: View {
 
     // Touch-sized controls on iOS (44pt targets via touchTarget(); the
     // send glyph fills the field's height); compact pointer targets on
-    // macOS.
+    // macOS. Nonisolated so nonisolated label builders (PhotosPicker's)
+    // can read them.
     #if os(macOS)
-    private static let chevronIconSize: CGFloat = 14
-    private static let attachIconSize: CGFloat = 16
-    private static let sendIconSize: CGFloat = 24
-    private static let columnSpacing: CGFloat = 10
+    private nonisolated static let chevronIconSize: CGFloat = 14
+    private nonisolated static let attachIconSize: CGFloat = 16
+    private nonisolated static let sendIconSize: CGFloat = 24
+    private nonisolated static let columnSpacing: CGFloat = 10
     #else
-    private static let chevronIconSize: CGFloat = 20
-    private static let attachIconSize: CGFloat = 22
-    private static let sendIconSize: CGFloat = 34
-    private static let columnSpacing: CGFloat = 0
+    private nonisolated static let chevronIconSize: CGFloat = 20
+    private nonisolated static let attachIconSize: CGFloat = 22
+    private nonisolated static let sendIconSize: CGFloat = 34
+    private nonisolated static let columnSpacing: CGFloat = 0
     #endif
 
     var body: some View {
