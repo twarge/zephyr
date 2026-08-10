@@ -715,8 +715,16 @@ struct MessageFeedList: View {
                 lost: lost,
                 containerHeight: geometry.containerSize.height)
         } action: { old, new in
-            nearBottom = new.nearBottom
             viewportHeight = new.containerHeight
+            // Distance alone misfires: the floating bar's bottom insets
+            // can park the rest position right at the 60pt threshold,
+            // showing the jump arrow while visually at the bottom. The
+            // last row's actual frame is authoritative when realized —
+            // bottom message in view means no arrow.
+            let lastRowVisible = model.messages.last
+                .flatMap { rowFrames.frames[$0.id] }
+                .map { $0.minY < new.containerHeight && $0.maxY > 0 } ?? false
+            nearBottom = new.nearBottom || lastRowVisible
             if new.lost, !old.lost {
                 recoverNonce &+= 1
             }
