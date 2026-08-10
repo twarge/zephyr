@@ -480,7 +480,7 @@ struct MessageFeedList: View {
         }
         guard !placed else { return }
         let movingUp = previous.map { id < $0 } ?? false
-        performReveal(id, movingUp: movingUp, proxy: proxy)
+        assertReveal(id, movingUp: movingUp, proxy: proxy)
         Task { @MainActor in
             // Poll per frame (geometry lands at most once per frame), so
             // settling registers immediately; re-assert sparingly so the
@@ -492,16 +492,37 @@ struct MessageFeedList: View {
             while clock.now < deadline {
                 try? await Task.sleep(for: .milliseconds(10))
                 guard keys.selectedMessageId == id else { return }
-                if revealPlaced(id) { return }
+                if revealPlaced(id) {
+                    if PerfLog.enabled {
+                        let frameText = rowFrames.frames[id]
+                            .map { String(describing: $0) } ?? "nil"
+                        print("perf reveal settled: id=\(id) frame=\(frameText)")
+                    }
+                    return
+                }
                 guard clock.now - lastAssert >= .milliseconds(150) else { continue }
                 if PerfLog.enabled {
                     let frameText = rowFrames.frames[id].map { String(describing: $0) }
                         ?? "nil (unrealized)"
                     print("perf reveal settle: id=\(id) frame=\(frameText)")
                 }
-                performReveal(id, movingUp: movingUp, proxy: proxy)
+                assertReveal(id, movingUp: movingUp, proxy: proxy)
                 lastAssert = clock.now
             }
+        }
+    }
+
+    /// One reveal assertion. A realized row gets the exact sentinel
+    /// placement; an unrealized one is unreachable by proxy.scrollTo (its
+    /// id isn't registered — the no-op could never realize it), so the
+    /// scroll-position BINDING coarse-jumps there instead: it resolves ids
+    /// through the scroll-target layout, which knows estimated positions
+    /// for unrealized children. The next poll lands the exact placement.
+    private func assertReveal(_ id: Int, movingUp: Bool, proxy: ScrollViewProxy) {
+        if rowFrames.frames[id] == nil {
+            anchorId = "msgtop-\(id)"
+        } else {
+            performReveal(id, movingUp: movingUp, proxy: proxy)
         }
     }
 
