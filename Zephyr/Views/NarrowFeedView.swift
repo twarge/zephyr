@@ -9,6 +9,9 @@ struct NarrowFeedView: View {
     let title: String
     let narrow: Narrow
     var useMatchHighlights = false
+    /// Tapping a message opens its own conversation, anchored there
+    /// (Combined, Mentions, Starred).
+    var tapOpensConversation = false
     @Binding var selection: Destination?
 
     @State private var model: MessageListModel?
@@ -30,6 +33,7 @@ struct NarrowFeedView: View {
                         onHeaderTap: { key in
                             selection = .conversation(key)
                         },
+                        tapOpensConversation: tapOpensConversation,
                         marksReadOnView: narrow == .combinedFeed)
                 }
             } else {

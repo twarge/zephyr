@@ -32,6 +32,9 @@ struct MessageFeedList: View {
     /// instead of the plain content.
     var useMatchHighlights = false
     var onHeaderTap: ((ConversationKey) -> Void)?
+    /// Cross-conversation feeds (Combined, Mentions, Starred): tapping a
+    /// message opens its own conversation, anchored at the message.
+    var tapOpensConversation = false
     var onNewMessages: (() -> Void)?
     /// Cross-conversation feeds: a message scrolled into view is marked
     /// read (batched).
@@ -51,6 +54,7 @@ struct MessageFeedList: View {
         store: PerAccountStore, model: MessageListModel, cache: MessageContentCache,
         headerMode: HeaderMode = .hidden, useMatchHighlights: Bool = false,
         onHeaderTap: ((ConversationKey) -> Void)? = nil,
+        tapOpensConversation: Bool = false,
         onNewMessages: (() -> Void)? = nil,
         marksReadOnView: Bool = false
     ) {
@@ -60,6 +64,7 @@ struct MessageFeedList: View {
         self.headerMode = headerMode
         self.useMatchHighlights = useMatchHighlights
         self.onHeaderTap = onHeaderTap
+        self.tapOpensConversation = tapOpensConversation
         self.onNewMessages = onNewMessages
         self.marksReadOnView = marksReadOnView
         // The scroll target must be known BEFORE the first layout pass:
@@ -388,7 +393,8 @@ struct MessageFeedList: View {
                 showHeader: showHeader, cache: cache,
                 useMatchHighlights: useMatchHighlights,
                 isKeySelected: keys.selectedMessageId == message.id,
-                isLinkTarget: keys.highlightMessageId == message.id)
+                isLinkTarget: keys.highlightMessageId == message.id,
+                opensConversationOnTap: tapOpensConversation)
                 // Actual viewport visibility, not lazy-stack realization
                 // (which includes off-screen rows). The low threshold lets
                 // rows taller than the window still count once a fifth is
@@ -943,6 +949,9 @@ struct MessageRow: View {
     var isKeySelected = false
     /// A followed message link flashes its target.
     var isLinkTarget = false
+    /// Set in cross-conversation feeds: a tap navigates to the message's
+    /// own conversation (anchored there) instead of just selecting.
+    var opensConversationOnTap = false
 
     @Environment(KeyboardRouter.self) private var keys
     @State private var hovering = false
@@ -1125,6 +1134,16 @@ struct MessageRow: View {
             keys.selectedMessageId = message.id
             // Clicking a message reclaims arrow keys from the sidebar.
             keys.focusMessages?()
+            // Cross-conversation feeds: the tap also opens the message's
+            // conversation, anchored at (and flashing) this message —
+            // the near-link navigation pattern.
+            if opensConversationOnTap,
+               let key = Unreads.conversationKey(
+                   for: message, selfUserId: store.selfUserId) {
+                keys.highlightMessageId = message.id
+                keys.pendingNear = (key, message.id)
+                keys.navigate?(.conversation(key))
+            }
         })
         .onChange(of: editing) {
             // The inline editor's TextField must also silence single-key
