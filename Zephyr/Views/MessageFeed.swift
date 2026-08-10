@@ -290,16 +290,17 @@ struct MessageFeedList: View {
                                 && (rowHeights[newId] ?? 0) > viewportHeight * 0.8
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 if movingUp || tall {
-                                    // Top sentinel at 8% of the viewport:
-                                    // the row's top lands below the pinned
-                                    // section header.
+                                    // Top edge lands at 8% of the viewport
+                                    // — below the pinned section header.
                                     proxy.scrollTo(
                                         "msgtop-\(newId)",
                                         anchor: UnitPoint(x: 0.5, y: 0.08))
                                 } else {
+                                    // Bottom edge lands at 92% — clear of
+                                    // the bottom edge for any row height.
                                     proxy.scrollTo(
-                                        "msg-\(newId)",
-                                        anchor: UnitPoint(x: 0.5, y: 0.9))
+                                        "msgbot-\(newId)",
+                                        anchor: UnitPoint(x: 0.5, y: 0.92))
                                 }
                             }
                         }
@@ -424,13 +425,19 @@ struct MessageFeedList: View {
                 } action: { height in
                     rowHeights[message.id] = height
                 }
-                // A zero-height top-edge sentinel: anchoring IT at a small
-                // viewport fraction places the row's TOP at a fixed offset
-                // (below the pinned header) — row-anchor math can't.
+                // Zero-height edge sentinels: anchoring THEM at a viewport
+                // fraction places the row's top/bottom at an exact offset
+                // regardless of the row's height — row-anchor math drifts
+                // with height (tall rows landed touching the bottom edge).
                 .overlay(alignment: .top) {
                     Color.clear
                         .frame(height: 1)
                         .id("msgtop-\(message.id)")
+                }
+                .overlay(alignment: .bottom) {
+                    Color.clear
+                        .frame(height: 1)
+                        .id("msgbot-\(message.id)")
                 }
         }
     }
