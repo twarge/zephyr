@@ -235,6 +235,16 @@ struct AvatarView: View {
 struct PresenceDot: View {
     let state: PresenceState
 
+    // Sized to the platform's type: 8pt beside macOS's 13pt sidebar
+    // rows read right; iOS's body-sized rows want ~50% more.
+    #if os(macOS)
+    private static let size: CGFloat = 8
+    private static let stroke: CGFloat = 1.5
+    #else
+    private static let size: CGFloat = 12
+    private static let stroke: CGFloat = 2
+    #endif
+
     var body: some View {
         Group {
             switch state {
@@ -243,10 +253,10 @@ struct PresenceDot: View {
             case .idle:
                 Circle().fill(.orange)
             case .offline:
-                Circle().strokeBorder(.tertiary, lineWidth: 1.5)
+                Circle().strokeBorder(.tertiary, lineWidth: Self.stroke)
             }
         }
-        .frame(width: 8, height: 8)
+        .frame(width: Self.size, height: Self.size)
         .help(helpText)
     }
 
