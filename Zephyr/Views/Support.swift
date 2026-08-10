@@ -123,14 +123,27 @@ struct RealmLogoView: View {
     /// The bar's available content height (macOS toolbars are shorter
     /// than iPad navigation bars); width scales with it.
     var height: CGFloat = 20
+    /// Available width for the mark, when the caller measures it (the
+    /// macOS sidebar bar): a wide logo that would overflow falls back
+    /// to the square realm icon — macOS toolbars otherwise push the
+    /// overflowing item into a ">>" submenu. nil = no width gate.
+    var maxWidth: CGFloat?
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var logo: PlatformImage?
     @State private var icon: PlatformImage?
 
+    /// The wide logo only when it fits the measured room at full size.
+    private var fittedLogo: PlatformImage? {
+        guard let logo else { return nil }
+        guard let maxWidth else { return logo }
+        let aspect = logo.size.width / max(logo.size.height, 1)
+        return height * aspect <= maxWidth ? logo : nil
+    }
+
     var body: some View {
         Group {
-            if let logo {
+            if let logo = fittedLogo {
                 Image(platform: logo)
                     .resizable()
                     .scaledToFit()
@@ -161,9 +174,9 @@ struct RealmLogoView: View {
         .task(id: "\(store.accountId)|\(colorScheme == .dark)") {
             logo = await AvatarLoader.shared.realmLogo(
                 store: store, dark: colorScheme == .dark)
-            if logo == nil {
-                icon = await AvatarLoader.shared.realmIcon(store: store)
-            }
+            // The icon loads regardless (cached): it's the live fallback
+            // whenever a resize squeezes the wide logo out.
+            icon = await AvatarLoader.shared.realmIcon(store: store)
         }
     }
 }

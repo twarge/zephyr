@@ -188,9 +188,13 @@ struct MainSplitView: View {
                             }
                             .help("Hide Sidebar")
                         }
-                        if sidebarWidth >= 210 {
+                        // ~150pt reserves the window controls + toggle; the
+                        // view fits-or-falls-back (wide mark → square icon)
+                        // within what's left, and below icon size the item
+                        // drops outright — never the ">>" overflow submenu.
+                        if sidebarWidth - 150 >= 20 {
                             ToolbarItem(placement: .automatic) {
-                                RealmLogoView(store: store)
+                                RealmLogoView(store: store, maxWidth: sidebarWidth - 150)
                             }
                             .sharedBackgroundVisibility(.hidden)
                         }
