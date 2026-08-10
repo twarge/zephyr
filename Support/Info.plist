@@ -14,6 +14,10 @@
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>com.twarge.zephyr.conversation</string>
+		<!-- Required by App Store validation for the communication-
+		     notifications entitlement (Messages-style sender avatars):
+		     the app donates INSendMessageIntent for those. -->
+		<string>INSendMessageIntent</string>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
