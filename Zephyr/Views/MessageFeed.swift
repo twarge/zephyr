@@ -262,6 +262,19 @@ struct MessageFeedList: View {
                             proxy.scrollTo("msg-\(newId)", anchor: .center)
                             scheduleHighlightClear()
                         }
+                        // Selection follows into view: anchor nil scrolls
+                        // the minimum to make the row wholly visible and
+                        // no-ops when it already is — keyboard moves to
+                        // off-screen messages scroll smoothly, clicks and
+                        // on-screen moves don't jolt.
+                        .onChange(of: keys.selectedMessageId) { _, newId in
+                            guard let newId,
+                                  model.messages.contains(where: { $0.id == newId })
+                            else { return }
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                proxy.scrollTo("msg-\(newId)", anchor: nil)
+                            }
+                        }
                         .overlay(alignment: .bottomTrailing) {
                             if !nearBottom || !model.haveNewest {
                                 Button {
