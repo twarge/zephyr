@@ -1,3 +1,6 @@
+#if os(macOS)
+import AppKit
+#endif
 import SwiftUI
 import TipKit
 import ZulipModel
@@ -175,9 +178,39 @@ struct GoCommands: Commands {
 }
 
 extension ZephyrApp {
+    #if os(macOS)
+    private func showAboutPanel() {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        let base: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .paragraphStyle: paragraph,
+        ]
+        let credits = NSMutableAttributedString(
+            string: "A native Zulip client.\n\n", attributes: base)
+        var link = base
+        link[.link] = URL(string: "https://www.apache.org/licenses/LICENSE-2.0")!
+        credits.append(NSAttributedString(string: "Apache License 2.0", attributes: link))
+        credits.append(NSAttributedString(
+            string: "\n© 2026 Twarge LLC"
+                + "\nIncludes GRDB.swift, SwiftSoup, and SwiftMath (MIT).",
+            attributes: base))
+        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
+    }
+    #endif
+
     @CommandsBuilder
     var accountCommands: some Commands {
         GoCommands(model: model)
+        #if os(macOS)
+        // The standard About panel, with license credits (kept in code —
+        // no Credits.rtf resource — so the text lives next to the
+        // dependencies it names).
+        CommandGroup(replacing: .appInfo) {
+            Button("About Zephyr") { showAboutPanel() }
+        }
+        #endif
         CommandGroup(replacing: .newItem) {
             Button("New Conversation") {
                 model.pendingNewConversation = true
