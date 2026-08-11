@@ -316,7 +316,10 @@ struct StoreEventTests {
         let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
 
         store.remindAboutMessage(100, at: Date(timeIntervalSince1970: 1_800_000_000))
-        try await eventually("reminder sent") { transport.requests.count == 1 }
+        // >= not ==: the create is followed by a reminders refetch
+        // (request #2), and under CI load the first poll can land after
+        // both — an exact ==1 then never holds (the flake this replaced).
+        try await eventually("reminder sent") { transport.requests.count >= 1 }
         let request = transport.requests[0]
         #expect(request.path.hasSuffix("/reminders"))
         #expect(request.formValue("message_id") == "100")
