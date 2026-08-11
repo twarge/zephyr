@@ -51,9 +51,13 @@ public final class MessageListModel: Identifiable {
     public private(set) var isFetching = false
     public private(set) var fetchError: (any Error)?
     public private(set) var didInitialFetch = false
-    /// True when `messages` came from the offline cache because the initial
-    /// fetch failed; the list refetches when connectivity returns.
+    /// True while `messages` is the offline copy (rendered ahead of the
+    /// initial fetch, or left showing after it failed); the list refetches
+    /// when connectivity returns.
     public private(set) var isOfflineFallback = false
+    /// The initial fetch has come back from the server; late-arriving cache
+    /// reads must not overwrite its answer (even an empty one).
+    private var serverDidRespond = false
     /// The first unread message at open time — the "NEW" marker's position.
     /// Set once by the initial fetch and left stable as reading proceeds.
     public private(set) var firstUnreadMarkerId: Int?
@@ -105,17 +109,11 @@ public final class MessageListModel: Identifiable {
         } else {
             anchor = .firstUnread
         }
-        // A known-dead connection (the event stream is already recovering)
-        // renders the cached transcript immediately instead of holding a
-        // spinner for the fetch's full timeout. The fetch below still
-        // runs: success replaces the preview and clears the fallback flag;
+        // Offline-first: render the cached transcript immediately, anchored
+        // where the server render will land. The fetch below still runs:
+        // success replaces the preview and clears the fallback flag;
         // failure leaves it showing, and reconnect refetches.
-        if store.isRecoveringEventStream {
-            populateOfflineFallback()
-            if !messages.isEmpty {
-                didInitialFetch = true
-            }
-        }
+        populateOfflineFallback()
         do {
             var result = try await store.connection.getMessages(
                 anchor: anchor, numBefore: count,
@@ -152,6 +150,7 @@ public final class MessageListModel: Identifiable {
             fetchError = nil
             didInitialFetch = true
             isOfflineFallback = false
+            serverDidRespond = true
         } catch is CancellationError {
         } catch {
             guard generation == gen else { return }
@@ -207,6 +206,7 @@ public final class MessageListModel: Identifiable {
             haveNewest = result.foundNewest ?? true
             haveOldest = result.foundOldest ?? false
             fetchError = nil
+            serverDidRespond = true
         } catch is CancellationError {
         } catch {
             guard generation == gen else { return }
@@ -214,9 +214,10 @@ public final class MessageListModel: Identifiable {
         }
     }
 
-    /// Renders the transcript from the store's cached messages when the
-    /// network is down. Live events still append (`haveNewest`), and the
-    /// store triggers a real refetch on reconnect.
+    /// Renders the transcript from the local cache ahead of (or instead of)
+    /// the initial fetch: the in-memory map when it covers the narrow, the
+    /// SQLite store when it doesn't. Live events still append
+    /// (`haveNewest`), and the store triggers a real refetch on reconnect.
     private func populateOfflineFallback() {
         guard messages.isEmpty, let store else { return }
         // Search narrows can't be matched client-side, but the local FTS
@@ -231,25 +232,79 @@ public final class MessageListModel: Identifiable {
             Task { [weak self] in
                 guard let self, let store = self.store else { return }
                 let results = await store.searchOffline(text)
-                guard self.generation == gen, self.messages.isEmpty, !results.isEmpty
+                guard self.generation == gen, self.messages.isEmpty,
+                      !self.serverDidRespond, !results.isEmpty
                 else { return }
                 self.messages = results
                 self.isOfflineFallback = true
+                self.didInitialFetch = true
             }
             return
         }
         let cached = store.messages.values
             .filter { narrow.containsMessage($0, selfUserId: store.selfUserId) }
             .sorted { $0.id < $1.id }
-        guard !cached.isEmpty else { return }
-        messages = Array(cached.suffix(100))
-        haveNewest = true
+        if !cached.isEmpty {
+            applyCachedWindow(cached)
+            return
+        }
+        // The launch restore holds only the newest ~50 per conversation;
+        // a narrow it doesn't cover pages out of the database instead.
+        let gen = generation
+        Task { [weak self] in
+            guard let self, let store = self.store else { return }
+            let rows = await store.olderFromCache(than: .max, narrow: narrow)
+            guard self.generation == gen, self.messages.isEmpty,
+                  !self.serverDidRespond, !rows.isEmpty
+            else { return }
+            store.installCachedMessages(rows)
+            self.applyCachedWindow(rows.map { store.messages[$0.id] ?? $0 })
+        }
+    }
+
+    /// Shows a cached slice, anchored the way the server render will be —
+    /// a linked message, else the first unread, else the newest — so the
+    /// fetch's replace lands where the reader already is.
+    private func applyCachedWindow(_ cached: [Message], count: Int = 100) {
+        var anchorIndex: Int?
+        if let target = initialAnchorMessageId {
+            // A linked message the cache doesn't hold: wait for the server.
+            guard let index = cached.firstIndex(where: { $0.id == target })
+            else { return }
+            anchorIndex = index
+        } else if let index = cached.firstIndex(where: {
+            !($0.flags ?? []).contains("read")
+        }), Date.now.timeIntervalSince1970 - TimeInterval(cached[index].timestamp)
+            <= Self.staleBacklogAge {
+            // The same stale-backlog rule as the fetch: an ancient first
+            // unread opens at the newest messages, with no NEW marker.
+            anchorIndex = index
+            firstUnreadMarkerId = cached[index].id
+        }
+        if let anchorIndex {
+            let start = max(cached.startIndex, anchorIndex - count)
+            let end = min(cached.endIndex, anchorIndex + count)
+            messages = Array(cached[start..<end])
+            haveNewest = end == cached.endIndex
+        } else {
+            messages = Array(cached.suffix(count))
+            haveNewest = true
+        }
         isOfflineFallback = true
+        didInitialFetch = true
     }
 
     func refetchIfOfflineFallback() {
         guard isOfflineFallback else { return }
         Task { await self.fetchInitial() }
+    }
+
+    /// The launch restore hydrated the store after this list opened (it
+    /// found an empty map): render the now-available cache unless the
+    /// server has already answered.
+    func cacheDidRestore() {
+        guard messages.isEmpty, !serverDidRespond else { return }
+        populateOfflineFallback()
     }
 
     /// Safe to call repeatedly from scroll tracking; no-ops while busy or at
@@ -281,7 +336,7 @@ public final class MessageListModel: Identifiable {
             guard generation == gen, let currentFirst = messages.first?.id else { return }
             let older = cached.filter { $0.id < currentFirst }
             guard !older.isEmpty else { return }
-            store.reconcileFetchedMessages(older)
+            store.installCachedMessages(older)
             messages.insert(
                 contentsOf: older.map { store.messages[$0.id] ?? $0 }, at: 0)
             trimWindowKeepingOldest()

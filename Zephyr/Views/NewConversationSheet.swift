@@ -265,6 +265,7 @@ struct NewConversationSheet: View {
             }
         }
         .padding(16)
+        .padding(.top, 8)
         #if os(macOS)
         .frame(width: 460)
         #endif

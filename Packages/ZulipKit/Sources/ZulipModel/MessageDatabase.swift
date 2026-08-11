@@ -203,6 +203,25 @@ public final class MessageDatabase: Sendable {
         }
     }
 
+    /// A channel's distinct topics by recency — the offline counterpart of
+    /// GET /users/me/{stream_id}/topics. SQLite's bare-column rule makes
+    /// `topic` come from the MAX(id) row, so casing follows the newest
+    /// message, and case-variants merge like the index does.
+    public func recentTopics(streamId: Int, limit: Int = 100) throws -> [ChannelTopic] {
+        try queue.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT topic, MAX(id) AS max_id FROM message
+                    WHERE stream_id = ? AND topic IS NOT NULL
+                    GROUP BY topic COLLATE NOCASE
+                    ORDER BY max_id DESC LIMIT ?
+                    """,
+                arguments: [streamId, limit])
+            return rows.map { ChannelTopic(name: $0["topic"], maxId: $0["max_id"]) }
+        }
+    }
+
     /// Full-text search over body, topic, and sender name; newest first.
     public func search(_ text: String, limit: Int = 100) throws -> [Message] {
         let terms = text.split(whereSeparator: \.isWhitespace)

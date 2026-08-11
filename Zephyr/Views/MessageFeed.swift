@@ -32,9 +32,9 @@ struct MessageFeedList: View {
     /// instead of the plain content.
     var useMatchHighlights = false
     var onHeaderTap: ((ConversationKey) -> Void)?
-    /// Cross-conversation feeds (Combined, Mentions, Starred): the hover/
-    /// tap controls show a go-to-conversation jump in place of quoted
-    /// reply (which belongs to in-conversation views).
+    /// Cross-conversation feeds (Combined, Mentions, Starred, Search):
+    /// the hover/tap controls show a go-to-conversation jump in place of
+    /// quoted reply (which belongs to in-conversation views).
     var showsConversationJump = false
     var onNewMessages: (() -> Void)?
     /// Cross-conversation feeds: a message scrolled into view is marked

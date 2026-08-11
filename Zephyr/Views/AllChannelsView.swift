@@ -84,7 +84,15 @@ struct AllChannelsView: View {
             }
         }
         .serverTitled("All Channels", store: store)
-        .task { await refresh() }
+        .task {
+            // Offline-first: the register snapshot already knows every
+            // visible channel; render it now and let the server list fold
+            // in what only it has (archived channels, permission changes).
+            if channels == nil, !store.channels.isEmpty {
+                channels = Array(store.channels.values)
+            }
+            await refresh()
+        }
     }
 }
 

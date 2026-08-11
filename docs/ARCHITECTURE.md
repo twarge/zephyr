@@ -268,12 +268,22 @@ out) so Plans A/B swap without touching the model.
     triggers) over cheaply tag-stripped text. Writes are incremental: events mark
     message ids dirty; a 2s-debounced batch upserts them (synchronously at quit).
     Serving three features: cold launch restores the newest ~50 per conversation in
-    one window-function query (also seeding sidebar recency); offline scrollback
-    pages older history into transcripts when the network fetch fails
-    (topic/channel/DM/combined narrows); offline search answers `search` narrows
-    from the FTS index (`MessageListModel.isOfflineFallback` refetches server-side
-    on reconnect). Reconcile is *reversed* for cache-restored ids: a fetched copy
-    replaces them (the server is fresher than last session), via `cachedMessageIds`.
+    one window-function query (also seeding sidebar recency); transcripts render
+    offline-first — `fetchInitial` shows the cached slice immediately (in-memory
+    map, falling back to a database read for narrows the launch restore doesn't
+    cover), anchored where the server render will land (linked message, else
+    first unread with the NEW marker, else newest), and the fetch replaces it
+    when it answers (a list that opened before the launch restore finished is
+    nudged to re-populate when it lands — narrows only the in-memory map can
+    serve, like starred/mentions, would otherwise hold a spinner); offline
+    scrollback pages older history into transcripts when
+    the network fetch fails (topic/channel/DM/combined narrows); offline search
+    answers `search` narrows from the FTS index (`MessageListModel.isOfflineFallback`
+    refetches server-side on reconnect). The channel-topics and All Channels views
+    follow the same pattern (seeded from `recentTopics` and the register snapshot's
+    channel map). Reconcile is *reversed* for cache-restored ids: a fetched copy
+    replaces them (the server is fresher than last session), via `cachedMessageIds`
+    (`installCachedMessages` applies the same rule to mid-session database reads).
     The old `messages.json` cache is imported once and deleted. Retention: a
     pruning policy (Settings → General, default 5 years, "forever" available)
     deletes older rows at store creation and on setting change — starred
@@ -282,6 +292,9 @@ out) so Plans A/B swap without touching the model.
     `internal import` — its SQL string-literal extensions must not leak into
     importers' overload resolution (this bit us in tests: a `[String].joined` in
     scope with GRDB silently inferred `SQL` elements).
+  - `brand-*` — realm branding bytes (icon, logo, night logo) as fetched, so
+    the toolbar brand renders offline (`AvatarLoader` reads disk first and
+    refreshes in the background; the media session itself is ephemeral).
   - `outbox.json` — unsent messages survive relaunch. Failure classification decides
     resend policy: errors proving the request never left (`isDefinitelyOfflineError`)
     park the entry as `.queued` for automatic resend; anything ambiguous (timeout,

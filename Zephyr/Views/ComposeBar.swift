@@ -1127,11 +1127,16 @@ extension View {
     /// fallback pre-26.
     @ViewBuilder
     func composeGlass(in shape: some Shape) -> some View {
+        #if os(visionOS)
+        // No glassEffect on visionOS — material is the native look there.
+        background(.regularMaterial, in: shape)
+        #else
         if #available(iOS 26.0, macOS 26.0, *) {
             glassEffect(.regular, in: shape)
         } else {
             background(.regularMaterial, in: shape)
         }
+        #endif
     }
 
     /// The HIG's 44pt minimum tap target on iOS; unchanged under a

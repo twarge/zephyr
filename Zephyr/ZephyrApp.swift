@@ -283,7 +283,10 @@ struct RootView: View {
                     LoginView()
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                // visionOS has no scrollDismissesKeyboard.
+                #if !os(visionOS)
                 .scrollDismissesKeyboard(.interactively)
+                #endif
                 #endif
             case .failed(let message):
                 VStack(spacing: 12) {

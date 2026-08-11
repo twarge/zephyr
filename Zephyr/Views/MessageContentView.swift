@@ -536,7 +536,12 @@ func mediaDragProvider(path: String, connection: ApiConnection) -> NSItemProvide
         .flatMap { $0.isEmpty ? nil : $0 } ?? "file"
     let contentType = UTType(filenameExtension: (filename as NSString).pathExtension) ?? .data
     let provider = NSItemProvider()
-    provider.suggestedName = filename
+    // The receiver appends the content type's extension to suggestedName
+    // itself — suggesting the full "image.png" landed as "image.png.png".
+    // Only when the type is a known one, though: bare .data appends
+    // nothing, so unknown extensions keep the full name.
+    provider.suggestedName = contentType == .data
+        ? filename : (filename as NSString).deletingPathExtension
     provider.registerFileRepresentation(
         for: contentType, visibility: .all
     ) { completion in

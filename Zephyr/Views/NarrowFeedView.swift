@@ -10,7 +10,7 @@ struct NarrowFeedView: View {
     let narrow: Narrow
     var useMatchHighlights = false
     /// The control row swaps quoted reply for a go-to-conversation jump
-    /// (Combined, Mentions, Starred).
+    /// (Combined, Mentions, Starred, Search).
     var showsConversationJump = false
     @Binding var selection: Destination?
 

@@ -46,6 +46,9 @@ targets:
         IPHONEOS_DEPLOYMENT_TARGET: "18.0"
         XROS_DEPLOYMENT_TARGET: "26.0"
         TARGETED_DEVICE_FAMILY: "1,2"
+        # Native Apple Vision app, not iPad-compatibility mode.
+        TARGETED_DEVICE_FAMILY[sdk=xros*]: "7"
+        TARGETED_DEVICE_FAMILY[sdk=xrsimulator*]: "7"
         SWIFT_VERSION: "6.0"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: YES

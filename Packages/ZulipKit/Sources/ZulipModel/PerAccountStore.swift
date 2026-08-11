@@ -226,6 +226,10 @@ public final class PerAccountStore {
             cachedMessageIds.insert(message.id)
         }
         conversations.seed(messages: cached, selfUserId: selfId)
+        // Lists that opened before this restore landed (the launch-selected
+        // view) found an empty map and may still be waiting on their fetch:
+        // hand them the now-hydrated cache.
+        forEachMessageList { $0.cacheDidRestore() }
         if Self.perfLogEnabled {
             logger.info("offline restore: \(cached.count) messages in \((clock.now - start).ms, privacy: .public) ms")
         }
@@ -578,6 +582,38 @@ public final class PerAccountStore {
         guard let database else { return [] }
         return await Task.detached {
             (try? database.search(text)) ?? []
+        }.value
+    }
+
+    /// Installs database-restored copies into the canonical map the same
+    /// way the launch restore does: marked cached, so any fetched copy
+    /// replaces them (the server is fresher than last session). Copies
+    /// already in memory win — events applied to them can't be replayed.
+    func installCachedMessages(_ batch: [Message]) {
+        for message in batch where messages[message.id] == nil {
+            messages[message.id] = message
+            cachedMessageIds.insert(message.id)
+        }
+        conversations.seed(messages: batch, selfUserId: selfUserId)
+    }
+
+    /// Realm branding (logo/icon) bytes persisted for offline launches.
+    /// Nonisolated: callers read them off the main actor before the first
+    /// toolbar render.
+    public nonisolated func cachedBrandImageData(key: String) -> Data? {
+        offline?.loadBrandImage(key: key)
+    }
+
+    public nonisolated func saveBrandImageData(_ data: Data, key: String) {
+        offline?.saveBrandImage(data, key: key)
+    }
+
+    /// A channel's recent topics from the local database — the offline
+    /// seed the topics view renders while GET /topics is in flight.
+    public func recentTopicsFromCache(streamId: Int) async -> [ChannelTopic] {
+        guard let database else { return [] }
+        return await Task.detached {
+            (try? database.recentTopics(streamId: streamId)) ?? []
         }.value
     }
 

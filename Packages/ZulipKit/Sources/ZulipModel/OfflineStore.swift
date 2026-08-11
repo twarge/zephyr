@@ -70,6 +70,18 @@ public struct OfflineStore: Sendable {
         try? FileManager.default.removeItem(at: url("messages.json"))
     }
 
+    // MARK: Realm branding
+
+    /// Realm branding images (logo/icon variants) by stable key, so the
+    /// toolbar brand renders offline. Bytes exactly as fetched.
+    public func loadBrandImage(key: String) -> Data? {
+        try? Data(contentsOf: url("brand-\(key)"))
+    }
+
+    public func saveBrandImage(_ data: Data, key: String) {
+        try? data.write(to: url("brand-\(key)"), options: .atomic)
+    }
+
     // MARK: Outbox
 
     public func loadOutbox() -> [OutboxMessage] {

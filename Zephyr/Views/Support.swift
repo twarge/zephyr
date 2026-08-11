@@ -73,11 +73,29 @@ final class AvatarLoader {
             return hit
         }
         guard let path,
-              let url = URL(string: path, relativeTo: store.connection.realmURL),
-              let (data, _) = try? await ApiConnection.mediaSession.data(
-                  for: URLRequest(url: url.absoluteURL)),
+              let url = URL(string: path, relativeTo: store.connection.realmURL)
+        else { return nil }
+        let request = URLRequest(url: url.absoluteURL)
+        // Offline-first: the copy persisted last session renders
+        // immediately; the network refreshes it in the background for the
+        // next render (realm branding rarely changes).
+        if let data = store.cachedBrandImageData(key: cacheKey),
+           let image = PlatformImage(data: data) {
+            cache.setObject(image, forKey: key)
+            Task {
+                guard let (fresh, _) = try? await ApiConnection.mediaSession.data(for: request),
+                      fresh != data,
+                      let freshImage = PlatformImage(data: fresh)
+                else { return }
+                store.saveBrandImageData(fresh, key: cacheKey)
+                self.cache.setObject(freshImage, forKey: key)
+            }
+            return image
+        }
+        guard let (data, _) = try? await ApiConnection.mediaSession.data(for: request),
               let image = PlatformImage(data: data)
         else { return nil }
+        store.saveBrandImageData(data, key: cacheKey)
         cache.setObject(image, forKey: key)
         return image
     }

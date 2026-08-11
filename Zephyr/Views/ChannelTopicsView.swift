@@ -38,10 +38,21 @@ struct ChannelTopicsView: View {
         }
         .serverTitled("#\(channelName)", store: store)
         .task {
+            // Offline-first: the local database's recent topics render
+            // immediately; the server list replaces them when it lands
+            // (and a failure leaves them showing).
+            if topics == nil {
+                let cached = await store.recentTopicsFromCache(streamId: streamId)
+                if topics == nil, !cached.isEmpty {
+                    topics = cached
+                }
+            }
             do {
                 topics = try await store.connection.getTopics(streamId: streamId)
             } catch {
-                errorText = error.localizedDescription
+                if topics == nil {
+                    errorText = error.localizedDescription
+                }
             }
         }
     }

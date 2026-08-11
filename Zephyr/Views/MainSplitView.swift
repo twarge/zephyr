@@ -132,6 +132,12 @@ struct MainSplitView: View {
                     search: search, selection: $selection,
                     isCompact: horizontalSizeClass == .compact))
                 .toolbar {
+                    #if os(visionOS)
+                    // No shared toolbar background to hide on visionOS.
+                    ToolbarItem(placement: .topBarLeading) {
+                        RealmLogoView(store: store, height: 30)
+                    }
+                    #else
                     if #available(iOS 26.0, *) {
                         ToolbarItem(placement: .topBarLeading) {
                             RealmLogoView(store: store, height: 30)
@@ -142,6 +148,7 @@ struct MainSplitView: View {
                             RealmLogoView(store: store, height: 30)
                         }
                     }
+                    #endif
                     if horizontalSizeClass == .compact {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("Settings", systemImage: "gear") {
@@ -150,6 +157,15 @@ struct MainSplitView: View {
                         }
                         // Messages-style bottom bar: the expanded search
                         // field with the write button beside it.
+                        #if os(visionOS)
+                        // ToolbarSpacer doesn't exist on visionOS.
+                        DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                        ToolbarItem(placement: .bottomBar) {
+                            Button("New Conversation", systemImage: "square.and.pencil") {
+                                model.pendingNewConversation = true
+                            }
+                        }
+                        #else
                         if #available(iOS 26.0, *) {
                             DefaultToolbarItem(kind: .search, placement: .bottomBar)
                             ToolbarSpacer(.flexible, placement: .bottomBar)
@@ -159,6 +175,7 @@ struct MainSplitView: View {
                                 }
                             }
                         }
+                        #endif
                     }
                 }
                 .sheet(isPresented: $showSettingsSheet) {
@@ -520,6 +537,21 @@ struct MainSplitView: View {
         #if os(macOS)
         detailLeadingToolbar
         #else
+        #if os(visionOS)
+        // Same layout as iOS 26, minus ToolbarSpacer (not on visionOS).
+        if horizontalSizeClass == .compact {
+            if !selectionHasComposer {
+                DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                ToolbarItem(placement: .bottomBar) {
+                    Button("New Conversation", systemImage: "square.and.pencil") {
+                        model.pendingNewConversation = true
+                    }
+                }
+            }
+        } else {
+            DefaultToolbarItem(kind: .search, placement: .topBarLeading)
+        }
+        #else
         if #available(iOS 26.0, *) {
             if horizontalSizeClass == .compact {
                 // Messages-style bottom bar on views without a composer:
@@ -540,6 +572,7 @@ struct MainSplitView: View {
                 DefaultToolbarItem(kind: .search, placement: .topBarLeading)
             }
         }
+        #endif
         #endif
         detailTrailingToolbar
     }
@@ -600,9 +633,11 @@ struct MainSplitView: View {
                     }
                     .help("Go to #\(channelName(streamId))")
                 }
+                #if !os(visionOS)
                 if #available(iOS 26.0, *) {
                     ToolbarSpacer(.fixed, placement: .primaryAction)
                 }
+                #endif
             }
             // Compact width keeps the detail's top bar minimal: the gear
             // lives on the root list, and compose rides the bottom bar.
@@ -612,9 +647,11 @@ struct MainSplitView: View {
                         showSettingsSheet = true
                     }
                 }
+                #if !os(visionOS)
                 if #available(iOS 26.0, *) {
                     ToolbarSpacer(.fixed, placement: .primaryAction)
                 }
+                #endif
                 ToolbarItem(placement: .primaryAction) {
                     Button("New Conversation", systemImage: "square.and.pencil") {
                         model.pendingNewConversation = true
@@ -623,6 +660,11 @@ struct MainSplitView: View {
             }
             #endif
             if store.isRecoveringEventStream {
+                #if os(visionOS)
+                ToolbarItem(placement: .automatic) {
+                    connectionLostBadge
+                }
+                #else
                 if #available(iOS 26.0, *) {
                     ToolbarItem(placement: .automatic) {
                         connectionLostBadge
@@ -633,6 +675,7 @@ struct MainSplitView: View {
                         connectionLostBadge
                     }
                 }
+                #endif
             }
     }
 
@@ -789,7 +832,8 @@ struct MainSplitView: View {
         Image(systemName: "exclamationmark.triangle.fill")
             .symbolRenderingMode(.multicolor)
             .foregroundStyle(.yellow)
-            .help("Connection lost — reconnecting…")
+            .font(.title3)
+            .help("No connection to server")
     }
 
     /// A plain function, not an inline switch expression: the latter blew
@@ -926,7 +970,8 @@ struct MainSplitView: View {
                 NarrowFeedView(
                     store: store, title: "Search: \(query.displayDescription)",
                     narrow: .custom(query.narrowElements),
-                    useMatchHighlights: true, selection: $selection)
+                    useMatchHighlights: true, showsConversationJump: true,
+                    selection: $selection)
                     .id(query)
             case .allChannels:
                 AllChannelsView(store: store, search: search, selection: $selection)

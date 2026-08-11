@@ -5,6 +5,11 @@ import Foundation
 public struct ChannelTopic: Decodable, Sendable, Hashable {
     public var name: String
     public var maxId: Int
+
+    public init(name: String, maxId: Int) {
+        self.name = name
+        self.maxId = maxId
+    }
 }
 
 extension ApiConnection {

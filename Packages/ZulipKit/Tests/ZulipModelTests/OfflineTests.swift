@@ -28,10 +28,14 @@ struct OfflineTests {
             transport)
     }
 
-    private func fixtureMessage(id: Int, topic: String = "greetings") throws -> Message {
+    private func fixtureMessage(
+        id: Int, topic: String = "greetings",
+        timestamp: Int = 1750000000, flags: [String]? = ["read"]
+    ) throws -> Message {
         try ZulipJSON.decoder.decode(
             Message.self,
-            from: Data(Fixtures.channelMessageJSON(id: id, topic: topic, flags: ["read"]).utf8))
+            from: Data(Fixtures.channelMessageJSON(
+                id: id, topic: topic, timestamp: timestamp, flags: flags).utf8))
     }
 
     // MARK: Message database
@@ -54,6 +58,23 @@ struct OfflineTests {
         #expect(byTopic["greetings"]?.map(\.id).min() == 11)
         #expect(byTopic["other"]?.count == 3)
         #expect(restored.map(\.id) == restored.map(\.id).sorted())
+    }
+
+    @Test func databaseServesRecentTopics() throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        let db = try #require(offline.openDatabase())
+        var all = try (1...3).map { try fixtureMessage(id: $0, topic: "alpha") }
+        all += try (4...5).map { try fixtureMessage(id: $0, topic: "Beta") }
+        // A case-variant merges into one topic, keeping the newest casing.
+        all.append(try fixtureMessage(id: 6, topic: "beta"))
+        try db.upsert(all, selfUserId: 1)
+
+        #expect(try db.recentTopics(streamId: 10) == [
+            ChannelTopic(name: "beta", maxId: 6),
+            ChannelTopic(name: "alpha", maxId: 3),
+        ])
+        #expect(try db.recentTopics(streamId: 99).isEmpty)
     }
 
     @Test func databasePagesOlderHistory() throws {
@@ -317,6 +338,98 @@ struct OfflineTests {
         #expect(list.isOfflineFallback)
         #expect(list.messages.map(\.id) == [1, 2, 3, 4, 5])
         #expect(list.fetchError != nil)
+    }
+
+    @Test func cachedTranscriptRendersBeforeFetchResolves() async throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        try #require(offline.openDatabase())
+            .upsert(try (1...5).map { try fixtureMessage(id: $0) }, selfUserId: 1)
+
+        // An empty script leaves the initial fetch hanging (the transport's
+        // default), the way a slow network would: the cached transcript must
+        // render without waiting for it.
+        let (store, _) = try makeStore(script: [], offline: offline)
+        await store.restoreOfflineCache()
+
+        let list = MessageListModel(store: store, narrow: .topic(streamId: 10, topic: "greetings"))
+        let fetch = Task { await list.fetchInitial() }
+        defer { fetch.cancel() }
+        try await eventually("cached render while the fetch is pending") {
+            list.didInitialFetch && list.isOfflineFallback
+                && list.messages.map(\.id) == [1, 2, 3, 4, 5]
+        }
+        #expect(list.fetchError == nil)
+    }
+
+    @Test func cachedWindowAnchorsAtFirstUnread() async throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        // Ids 1–2 read, 3–5 unread and recent (a stale backlog would open
+        // at the newest instead, with no marker).
+        let now = Int(Date.now.timeIntervalSince1970)
+        var all = try (1...2).map { try fixtureMessage(id: $0, timestamp: now) }
+        all += try (3...5).map { try fixtureMessage(id: $0, timestamp: now, flags: []) }
+        try #require(offline.openDatabase()).upsert(all, selfUserId: 1)
+
+        let (store, _) = try makeStore(script: [.networkError], offline: offline)
+        await store.restoreOfflineCache()
+        let list = MessageListModel(store: store, narrow: .topic(streamId: 10, topic: "greetings"))
+        await list.fetchInitial()
+        #expect(list.firstUnreadMarkerId == 3)
+        #expect(list.messages.map(\.id) == [1, 2, 3, 4, 5])
+    }
+
+    @Test func listOpenedBeforeRestoreRendersWhenRestoreLands() async throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        // A starred narrow: the database can't filter it (flags live in
+        // the payload), so only the restored in-memory map can serve it —
+        // the cold-launch shape that used to stick at a spinner.
+        var all = try (1...3).map { try fixtureMessage(id: $0) }
+        all += try (4...5).map { try fixtureMessage(id: $0, flags: ["read", "starred"]) }
+        try #require(offline.openDatabase()).upsert(all, selfUserId: 1)
+
+        // An empty script leaves the fetch hanging, like a dead network.
+        let (store, _) = try makeStore(script: [], offline: offline)
+        let list = MessageListModel(store: store, narrow: .starred)
+        let fetch = Task { await list.fetchInitial() }
+        defer { fetch.cancel() }
+        try await eventually("fetch is pending") { list.isFetching }
+        #expect(!list.didInitialFetch)
+
+        // The launch restore lands and hands the waiting list its cache.
+        await store.restoreOfflineCache()
+        try await eventually("starred render after restore") {
+            list.didInitialFetch && list.messages.map(\.id) == [4, 5]
+        }
+    }
+
+    @Test func brandImagesRoundTrip() {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        #expect(offline.loadBrandImage(key: "realm-icon") == nil)
+        let bytes = Data([0x89, 0x50, 0x4e, 0x47])
+        offline.saveBrandImage(bytes, key: "realm-icon")
+        #expect(offline.loadBrandImage(key: "realm-icon") == bytes)
+    }
+
+    @Test func uncoveredNarrowFallsBackToDatabase() async throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        try #require(offline.openDatabase())
+            .upsert(try (1...5).map { try fixtureMessage(id: $0) }, selfUserId: 1)
+
+        // No restore: the in-memory map is empty, as for a conversation
+        // whose history never entered this session.
+        let (store, _) = try makeStore(script: [.networkError], offline: offline)
+        let list = MessageListModel(store: store, narrow: .topic(streamId: 10, topic: "greetings"))
+        await list.fetchInitial()
+        try await eventually("database-backed render") {
+            list.isOfflineFallback && list.messages.map(\.id) == [1, 2, 3, 4, 5]
+        }
+        // Database copies are cache-marked: a later fetched copy replaces them.
+        #expect(store.cachedMessageIds.contains(3))
     }
 
     @Test func offlineScrollbackPagesFromDatabase() async throws {
