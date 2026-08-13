@@ -345,13 +345,10 @@ struct ComposeBar: View {
             selection: $photoPickerItems,
             maxSelectionCount: 10,
             matching: .any(of: [.images, .videos]))
-        .dropDestination(for: URL.self) { urls, _ in
-            let fileURLs = urls.filter(\.isFileURL)
-            guard !fileURLs.isEmpty else { return false }
-            for url in fileURLs {
+        .mediaDropTarget { urls in
+            for url in urls {
                 upload(fileURL: url, securityScoped: false)
             }
-            return true
         }
         .onAppear {
             if case .fixed(let destination, _) = mode {

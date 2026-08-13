@@ -233,6 +233,7 @@ final class SidebarSearchModel {
 /// anchored to the field by the system.
 struct SearchReturnCapture: View {
     let search: SidebarSearchModel
+    let searchFocused: Bool
     let onSubmitSearch: () -> Void
 
     @Environment(\.isSearching) private var isSearching
@@ -242,12 +243,17 @@ struct SearchReturnCapture: View {
         Color.clear
             .frame(height: 1)
             .onChange(of: isSearching) { syncMonitor() }
+            .onChange(of: searchFocused) { syncMonitor() }
             .onAppear { syncMonitor() }
             .onDisappear { removeMonitor() }
     }
 
     private func syncMonitor() {
-        if isSearching {
+        // `isSearching` describes the lifetime of the native search session,
+        // not keyboard focus. It can remain true after the user selects a
+        // conversation and starts typing in its composer, so only intercept
+        // Return while the search field itself is focused.
+        if isSearching && searchFocused {
             installMonitor()
         } else {
             removeMonitor()
@@ -311,8 +317,39 @@ nonisolated struct SearchQuery: Hashable, Codable {
     var tokens: [SearchToken]
     var text: String
 
+    /// Terms omitted by Zulip's default English full-text-search dictionary.
+    /// Keep this in sync with `zulip_english.stop` in the Zulip server repo.
+    private static let ignoredSearchWords: Set<String> = [
+        "a", "about", "above", "after", "again", "against", "all", "am", "an", "and",
+        "any", "are", "as", "at", "b", "be", "because", "been", "before", "being",
+        "below", "between", "both", "but", "by", "c", "can", "d", "did", "do", "does",
+        "doing", "don", "down", "during", "e", "each", "f", "few", "for", "from",
+        "further", "g", "h", "had", "has", "have", "having", "he", "her", "here",
+        "hers", "herself", "him", "himself", "his", "how", "i", "if", "in", "into",
+        "is", "it", "its", "itself", "j", "just", "k", "l", "m", "me", "more",
+        "most", "my", "myself", "n", "no", "nor", "not", "now", "o", "of", "off",
+        "on", "once", "only", "or", "other", "our", "ours", "ourselves", "out", "over",
+        "own", "p", "q", "r", "s", "same", "she", "should", "so", "some", "such",
+        "t", "than", "that", "the", "their", "theirs", "them", "themselves", "then",
+        "there", "these", "they", "this", "those", "through", "to", "too", "u", "under",
+        "until", "up", "v", "very", "w", "was", "we", "were", "what", "when", "where",
+        "which", "while", "who", "whom", "why", "will", "with", "x", "y", "you", "your",
+        "yours", "yourself", "yourselves", "z",
+    ]
+
     var isEmpty: Bool {
         tokens.isEmpty && text.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Non-empty only when the keyword portion contains no searchable word.
+    /// A mixed query such as "this launch" remains an ordinary search because
+    /// "launch" is meaningful even though "this" is ignored.
+    var exclusivelyIgnoredSearchWords: [String]? {
+        let words = text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        guard !words.isEmpty, words.allSatisfy(Self.ignoredSearchWords.contains) else {
+            return nil
+        }
+        return words
     }
 
     var narrowElements: [NarrowElement] {

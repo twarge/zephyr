@@ -413,7 +413,7 @@ struct SidebarView: View {
         // Return capture lives inside the searchable subtree so it sees
         // `isSearching`.
         .safeAreaInset(edge: .top, spacing: 0) {
-            SearchReturnCapture(search: search) {
+            SearchReturnCapture(search: search, searchFocused: searchFocused) {
                 runSearch(recordInRecents: true)
             }
         }

@@ -368,27 +368,9 @@ final class KeyboardRouter {
             uploadFiles(urls)
             return true
         }
-        let pngData = pasteboard.data(forType: .png)
-            ?? pasteboard.data(forType: .tiff).flatMap {
-                NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:])
-            }
-        guard let pngData else { return false }
-        // No spaces: the filename ends up inside a markdown link URL, and
-        // raw spaces break Zulip's link parsing (and the server preview).
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd-HH.mm.ss"
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ZephyrPaste", isDirectory: true)
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let fileURL = directory
-            .appendingPathComponent("Pasted-\(formatter.string(from: .now)).png")
-        do {
-            try FileManager.default.createDirectory(
-                at: directory, withIntermediateDirectories: true)
-            try pngData.write(to: fileURL)
-        } catch {
-            return false
-        }
+        guard let pngData = MediaStaging.pngData(from: pasteboard),
+              let fileURL = MediaStaging.stagePNG(pngData, prefix: "Pasted")
+        else { return false }
         uploadFiles([fileURL])
         return true
     }

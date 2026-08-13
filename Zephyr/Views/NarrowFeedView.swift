@@ -9,6 +9,7 @@ struct NarrowFeedView: View {
     let title: String
     let narrow: Narrow
     var useMatchHighlights = false
+    var ignoredSearchWords: [String]?
     /// The control row swaps quoted reply for a go-to-conversation jump
     /// (Combined, Mentions, Starred, Search).
     var showsConversationJump = false
@@ -25,6 +26,11 @@ struct NarrowFeedView: View {
                         "Couldn't Load Messages",
                         systemImage: "exclamationmark.triangle",
                         description: Text(error.localizedDescription))
+                } else if model.messages.isEmpty, let ignoredSearchWords {
+                    ContentUnavailableView(
+                        "Search Terms Ignored",
+                        systemImage: "magnifyingglass",
+                        description: Text(ignoredSearchDescription(ignoredSearchWords)))
                 } else {
                     MessageFeedList(
                         store: store, model: model, cache: cache,
@@ -56,5 +62,13 @@ struct NarrowFeedView: View {
                 model = list
             }
         }
+    }
+
+    private func ignoredSearchDescription(_ words: [String]) -> String {
+        let terms = words.map { "\u{201c}\($0)\u{201d}" }.joined(separator: ", ")
+        let verb = words.count == 1 ? "is" : "are"
+        let pronoun = words.count == 1 ? "it" : "them"
+        return "\(terms) \(verb) too common to search for, so Zulip ignores \(pronoun). "
+            + "Try adding a more distinctive word."
     }
 }

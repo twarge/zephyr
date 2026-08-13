@@ -233,16 +233,14 @@ struct MainSplitView: View {
                     suppressWhenCompactComposer: selectionHasComposer))
                 #endif
                 .popoverTip(QuickLookNavigationTip())
-                // Files dropped anywhere in the conversation area upload via
+                // Media dropped anywhere in the conversation area uploads via
                 // the visible compose bar (nil when this view has none —
                 // the drop is refused).
-                .dropDestination(for: URL.self) { urls, _ in
-                    let files = urls.filter(\.isFileURL)
-                    guard !files.isEmpty, let upload = keys.uploadFiles else { return false }
-                    upload(files)
-                    return true
-                } isTargeted: { targeted in
-                    dropTargeted = targeted
+                .mediaDropTarget(
+                    isTargeted: $dropTargeted,
+                    canAccept: { keys.uploadFiles != nil }
+                ) { files in
+                    keys.uploadFiles?(files)
                 }
                 .overlay {
                     if dropTargeted && keys.uploadFiles != nil {
@@ -970,7 +968,9 @@ struct MainSplitView: View {
                 NarrowFeedView(
                     store: store, title: "Search: \(query.displayDescription)",
                     narrow: .custom(query.narrowElements),
-                    useMatchHighlights: true, showsConversationJump: true,
+                    useMatchHighlights: true,
+                    ignoredSearchWords: query.exclusivelyIgnoredSearchWords,
+                    showsConversationJump: true,
                     selection: $selection)
                     .id(query)
             case .allChannels:
