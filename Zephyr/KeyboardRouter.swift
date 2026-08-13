@@ -369,7 +369,7 @@ final class KeyboardRouter {
             return true
         }
         guard let pngData = MediaStaging.pngData(from: pasteboard),
-              let fileURL = MediaStaging.stagePNG(pngData, prefix: "Pasted")
+              let fileURL = MediaStaging.stage(pngData, extension: "png", prefix: "Pasted")
         else { return false }
         uploadFiles([fileURL])
         return true

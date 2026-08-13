@@ -234,11 +234,13 @@ struct MainSplitView: View {
                 #endif
                 .popoverTip(QuickLookNavigationTip())
                 // Media dropped anywhere in the conversation area uploads via
-                // the visible compose bar (nil when this view has none —
-                // the drop is refused).
+                // the visible compose bar, and dragged links insert into its
+                // draft (both nil when this view has neither — the drop is
+                // refused).
                 .mediaDropTarget(
                     isTargeted: $dropTargeted,
-                    canAccept: { keys.uploadFiles != nil }
+                    canAccept: { keys.uploadFiles != nil },
+                    onText: { keys.insertIntoCompose?($0) }
                 ) { files in
                     keys.uploadFiles?(files)
                 }

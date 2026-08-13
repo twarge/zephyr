@@ -28,17 +28,17 @@ enum MediaStaging {
     }
     #endif
 
-    /// Writes PNG data into a fresh staging directory. No spaces in the
+    /// Writes raw data into a fresh staging directory. No spaces in the
     /// filename: it ends up inside a markdown link URL, and raw spaces
     /// break Zulip's link parsing (and the server preview).
-    static func stagePNG(_ pngData: Data, prefix: String) -> URL? {
+    static func stage(_ data: Data, extension ext: String, prefix: String) -> URL? {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd-HH.mm.ss"
         guard let directory = freshDirectory() else { return nil }
         let fileURL = directory
-            .appendingPathComponent("\(prefix)-\(formatter.string(from: .now)).png")
+            .appendingPathComponent("\(prefix)-\(formatter.string(from: .now)).\(ext)")
         do {
-            try pngData.write(to: fileURL)
+            try data.write(to: fileURL)
         } catch {
             return nil
         }
@@ -64,43 +64,61 @@ enum MediaStaging {
 // MARK: - Drop target
 
 extension View {
-    /// Accepts media dragged in from other apps, funneled to file URLs
-    /// for the upload path. Drags arrive in three shapes: real file URLs
-    /// (Finder), file *promises* (Photos, Safari, Mail — the source
-    /// writes the file only once someone accepts), and raw image data
-    /// with no file behind it (rendered-image drags). SwiftUI's
-    /// `dropDestination` can express only the first, so macOS uses an
-    /// AppKit catcher; the other platforms take files and image data
-    /// through a Transferable.
+    /// Accepts media dragged in from other apps. Drags arrive in four
+    /// shapes: real file URLs (Finder), file *promises* (Photos, Safari,
+    /// Mail — the source writes the file only once someone accepts), raw
+    /// image or PDF data with no file behind it (rendered-image drags),
+    /// and bare web links (a page link or address bar — these insert
+    /// into the draft via `onText` rather than uploading a .webloc).
+    /// SwiftUI's `dropDestination` can express only the first, so macOS
+    /// uses an AppKit catcher; the other platforms go through a
+    /// Transferable.
+    ///
+    /// Plain-*text* drags are deliberately not taken: this layer sits in
+    /// front of the compose editor, so claiming them would break native
+    /// caret-position drops into the editor and turn an intra-editor
+    /// drag-to-move into delete-and-append. Text dropped directly on the
+    /// editor already inserts natively.
     func mediaDropTarget(
         isTargeted: Binding<Bool>? = nil,
         canAccept: @escaping () -> Bool = { true },
+        onText: ((String) -> Void)? = nil,
         onFiles: @escaping ([URL]) -> Void
     ) -> some View {
         #if canImport(AppKit)
         overlay {
             MediaDropCatcher(
-                canAccept: canAccept, isTargeted: isTargeted, onFiles: onFiles)
+                canAccept: canAccept, isTargeted: isTargeted,
+                onText: onText, onFiles: onFiles)
             .allowsHitTesting(false)
         }
         #else
         dropDestination(for: DroppedMedia.self) { items, _ in
             guard canAccept() else { return false }
             var files: [URL] = []
+            var links: [String] = []
             for item in items {
                 switch item {
                 case .file(let url):
                     files.append(url)
                 case .image(let data):
                     if let png = MediaStaging.pngData(fromImage: data),
-                       let staged = MediaStaging.stagePNG(png, prefix: "Dropped") {
+                       let staged = MediaStaging.stage(
+                        png, extension: "png", prefix: "Dropped") {
                         files.append(staged)
                     }
+                case .pdf(let data):
+                    if let staged = MediaStaging.stage(
+                        data, extension: "pdf", prefix: "Dropped") {
+                        files.append(staged)
+                    }
+                case .link(let url):
+                    if !url.isFileURL { links.append(url.absoluteString) }
                 }
             }
-            guard !files.isEmpty else { return false }
-            onFiles(files)
-            return true
+            if !files.isEmpty { onFiles(files) }
+            if let onText, !links.isEmpty { onText(links.joined(separator: "\n")) }
+            return !files.isEmpty || (onText != nil && !links.isEmpty)
         } isTargeted: { targeted in
             isTargeted?.wrappedValue = targeted
         }
@@ -116,6 +134,7 @@ extension View {
 private struct MediaDropCatcher: NSViewRepresentable {
     var canAccept: () -> Bool
     var isTargeted: Binding<Bool>?
+    var onText: ((String) -> Void)?
     var onFiles: ([URL]) -> Void
 
     func makeNSView(context: Context) -> CatcherView {
@@ -123,12 +142,13 @@ private struct MediaDropCatcher: NSViewRepresentable {
         view.registerForDraggedTypes(
             NSFilePromiseReceiver.readableDraggedTypes
                 .map { NSPasteboard.PasteboardType($0) }
-                + [.fileURL, .png, .tiff])
+                + [.fileURL, .png, .tiff, .pdf, .URL])
         return view
     }
 
     func updateNSView(_ view: CatcherView, context: Context) {
         view.canAccept = canAccept
+        view.onText = onText
         view.onFiles = onFiles
         let isTargeted = isTargeted
         view.onTargeted = { isTargeted?.wrappedValue = $0 }
@@ -136,6 +156,7 @@ private struct MediaDropCatcher: NSViewRepresentable {
 
     final class CatcherView: NSView {
         var canAccept: () -> Bool = { true }
+        var onText: ((String) -> Void)?
         var onFiles: ([URL]) -> Void = { _ in }
         var onTargeted: (Bool) -> Void = { _ in }
 
@@ -159,7 +180,8 @@ private struct MediaDropCatcher: NSViewRepresentable {
             onTargeted(false)
             let pasteboard = sender.draggingPasteboard
             // Real files first; then promises (the promised file keeps
-            // its own name); raw image data last, staged into a PNG.
+            // its own name); then raw image/PDF data staged into a temp
+            // file; bare web links last, inserted as draft text.
             if let urls = pasteboard.readObjects(
                 forClasses: [NSURL.self],
                 options: [.urlReadingFileURLsOnly: true]) as? [URL],
@@ -167,10 +189,18 @@ private struct MediaDropCatcher: NSViewRepresentable {
                 onFiles(urls)
                 return true
             }
-            if let receivers = pasteboard.readObjects(
+            // Link drags (Safari page links, address bars) also promise a
+            // .webloc; those fall through to the link path below instead
+            // of uploading a bookmark file.
+            let receivers = ((pasteboard.readObjects(
                 forClasses: [NSFilePromiseReceiver.self], options: nil)
-                as? [NSFilePromiseReceiver],
-               !receivers.isEmpty {
+                as? [NSFilePromiseReceiver]) ?? [])
+                .filter { receiver in
+                    let types = receiver.fileTypes.compactMap { UTType($0) }
+                    return types.isEmpty
+                        || types.contains { !$0.conforms(to: .internetLocation) }
+                }
+            if !receivers.isEmpty {
                 let onFiles = onFiles
                 var receiving = false
                 for receiver in receivers {
@@ -186,12 +216,26 @@ private struct MediaDropCatcher: NSViewRepresentable {
                         MainActor.assumeIsolated { onFiles([url]) }
                     }
                 }
-                return receiving
+                if receiving { return true }
             }
             if let png = MediaStaging.pngData(from: pasteboard),
-               let staged = MediaStaging.stagePNG(png, prefix: "Dropped") {
+               let staged = MediaStaging.stage(png, extension: "png", prefix: "Dropped") {
                 onFiles([staged])
                 return true
+            }
+            if let pdf = pasteboard.data(forType: .pdf),
+               let staged = MediaStaging.stage(pdf, extension: "pdf", prefix: "Dropped") {
+                onFiles([staged])
+                return true
+            }
+            if let onText,
+               let urls = pasteboard.readObjects(
+                forClasses: [NSURL.self], options: nil) as? [URL] {
+                let links = urls.filter { !$0.isFileURL }
+                if !links.isEmpty {
+                    onText(links.map(\.absoluteString).joined(separator: "\n"))
+                    return true
+                }
             }
             return false
         }
@@ -202,16 +246,22 @@ private struct MediaDropCatcher: NSViewRepresentable {
                 options: [.urlReadingFileURLsOnly: true])
                 || pasteboard.canReadObject(
                     forClasses: [NSFilePromiseReceiver.self], options: nil)
-                || pasteboard.availableType(from: [.png, .tiff]) != nil
+                || pasteboard.availableType(from: [.png, .tiff, .pdf]) != nil
+                || (onText != nil
+                    && pasteboard.canReadObject(forClasses: [NSURL.self], options: nil))
         }
     }
 }
 #else
-/// What a drop can carry on the UIKit platforms: a file on disk, or
-/// image bytes with no file behind them.
+/// What a drop can carry on the UIKit platforms: a file on disk, image
+/// or PDF bytes with no file behind them, or a bare web link.
+/// Declaration order is match priority: an image drag that also carries
+/// the image's remote URL must land as the image, not the link.
 private enum DroppedMedia: Transferable {
     case file(URL)
     case image(Data)
+    case pdf(Data)
+    case link(URL)
 
     nonisolated static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(importedContentType: .fileURL) { data in
@@ -221,6 +271,13 @@ private enum DroppedMedia: Transferable {
             return DroppedMedia.file(url)
         }
         DataRepresentation(importedContentType: .image) { DroppedMedia.image($0) }
+        DataRepresentation(importedContentType: .pdf) { DroppedMedia.pdf($0) }
+        DataRepresentation(importedContentType: .url) { data in
+            guard let url = URL(dataRepresentation: data, relativeTo: nil) else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            return DroppedMedia.link(url)
+        }
     }
 }
 #endif

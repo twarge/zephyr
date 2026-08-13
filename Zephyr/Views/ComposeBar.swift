@@ -345,7 +345,7 @@ struct ComposeBar: View {
             selection: $photoPickerItems,
             maxSelectionCount: 10,
             matching: .any(of: [.images, .videos]))
-        .mediaDropTarget { urls in
+        .mediaDropTarget(onText: { appendToDraft($0) }) { urls in
             for url in urls {
                 upload(fileURL: url, securityScoped: false)
             }
@@ -372,11 +372,7 @@ struct ComposeBar: View {
             }
             // Quote-and-reply appends to the draft.
             keys.registerComposeInsertion(owner: uploadOwnerId) { snippet in
-                if text.isEmpty {
-                    text = snippet
-                } else {
-                    text += (text.hasSuffix("\n") ? "" : "\n") + snippet
-                }
+                appendToDraft(snippet)
             }
             // Replying to a message in the channel feed steers the topic
             // field to that message's topic (set as prefill, so the
@@ -1038,6 +1034,16 @@ struct ComposeBar: View {
             "doc.text"
         default:
             "doc"
+        }
+    }
+
+    /// Quote-and-reply snippets and dropped links land on their own line
+    /// below whatever's already drafted.
+    private func appendToDraft(_ snippet: String) {
+        if text.isEmpty {
+            text = snippet
+        } else {
+            text += (text.hasSuffix("\n") ? "" : "\n") + snippet
         }
     }
 
