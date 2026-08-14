@@ -210,6 +210,19 @@ struct MessageFeedList: View {
     }
     @State private var rowFrames = RowFrames()
     @State private var viewportHeight: CGFloat = 0
+    /// Content hit response is paused while the feed scrolls: rows
+    /// crossing a stationary cursor otherwise flip their hover state —
+    /// a full row re-render (the controls overlay) per crossing, which
+    /// stutters heavy transcripts. Restored shortly after the scroll
+    /// settles; AppKit then re-delivers hover to the row under the
+    /// cursor. (Parity: native scroll views swallow mid-momentum clicks.)
+    @State private var isScrolling = false
+    /// Debounce box for the hit-response restore (a reference box — a
+    /// Task in @State would re-render the feed on every reassignment).
+    private final class IdleDebounce {
+        var task: Task<Void, Never>?
+    }
+    @State private var idleDebounce = IdleDebounce()
 
     var body: some View {
         let _ = PerfLog.render("FeedList")
@@ -697,6 +710,11 @@ struct MessageFeedList: View {
             }
             .scrollTargetLayout()
             .padding(.horizontal, 16)
+            // See isScrolling: hover, cursor rects, and clicks pause
+            // while scrolling. Content only — the scroll view itself
+            // still receives wheel/trackpad events, and the jump-to-
+            // bottom overlay (outside the content) stays clickable.
+            .allowsHitTesting(!isScrolling)
         }
         // Clicking or tapping empty feed space (not on a message) drops
         // the selection, like Escape — rows and interactive content
@@ -707,6 +725,22 @@ struct MessageFeedList: View {
         }
         .defaultScrollAnchor(.bottom)
         .scrollPosition(id: $anchorId, anchor: .bottom)
+        .onScrollPhaseChange { _, newPhase in
+            idleDebounce.task?.cancel()
+            if newPhase.isScrolling {
+                // Same-value writes still invalidate; write only edges.
+                if !isScrolling { isScrolling = true }
+            } else {
+                // Debounced restore: a physical scroll wheel bounces
+                // through idle between ticks — re-enabling per tick
+                // would thrash hover (and re-render the feed) mid-scroll.
+                idleDebounce.task = Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(120))
+                    guard !Task.isCancelled else { return }
+                    isScrolling = false
+                }
+            }
+        }
         // One geometry observer for both signals (two separate ones
         // double-fired per frame): bottom proximity, and the blank-view
         // failure mode — the viewport parked outside the content bounds
