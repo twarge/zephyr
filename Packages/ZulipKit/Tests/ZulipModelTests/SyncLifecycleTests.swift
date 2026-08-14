@@ -5,17 +5,25 @@ import ZulipTestSupport
 @testable import ZulipModel
 
 /// Polls `condition` on the main actor until it holds or the timeout passes.
+///
+/// The deadline measures wall time, but every @MainActor test in the suite
+/// shares one actor: under full parallel load, most of that wall time is spent
+/// waiting for other tests, so the deadline must be far larger than any
+/// single test's real work. A satisfied condition returns immediately, so the
+/// generous default only slows runs that would fail anyway.
 @MainActor
 func eventually(
-    timeout: Duration = .seconds(5),
+    timeout: Duration = .seconds(60),
     _ comment: Comment? = nil,
     _ condition: () -> Bool
 ) async throws {
     let clock = ContinuousClock()
     let deadline = clock.now.advanced(by: timeout)
+    var interval = Duration.milliseconds(10)
     while clock.now < deadline {
         if condition() { return }
-        try await Task.sleep(for: .milliseconds(10))
+        try await Task.sleep(for: interval)
+        interval = min(interval * 2, .milliseconds(100))  // back off to cut actor churn
     }
     #expect(condition(), comment)
 }

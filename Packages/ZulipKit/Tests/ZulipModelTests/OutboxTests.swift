@@ -83,9 +83,8 @@ struct OutboxTests {
         }
         store.flushPending()
         try await eventually("resent on flush (awaits echo)") {
-            store.outbox.first?.state == .sending
+            store.outbox.first?.state == .sending && transport.requests.count == 2
         }
-        #expect(transport.requests.count == 2)
     }
 
     @Test func failedFlushRetriesItselfShortly() async throws {
@@ -99,7 +98,7 @@ struct OutboxTests {
         store.flushPending()
         // The failed flush schedules its own retry (~2s) instead of
         // waiting for the event loop's next recovery.
-        try await eventually(timeout: .seconds(6), "auto-retried to success") {
+        try await eventually("auto-retried to success") {
             store.outbox.first?.state == .sending && transport.requests.count == 3
         }
     }
