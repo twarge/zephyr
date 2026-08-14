@@ -158,6 +158,10 @@ struct MessageFeedList: View {
     /// multi-conversation feeds); consecutive messages from the same sender
     /// within 5 minutes coalesce under one header.
     private var items: [Item] {
+        PerfLog.measure("FeedList.items") { buildItems() }
+    }
+
+    private func buildItems() -> [Item] {
         var out: [Item] = []
         var lastDay: DateComponents?
         var lastKey: ConversationKey?
@@ -203,6 +207,10 @@ struct MessageFeedList: View {
     /// `items` split at conversation headers; header-less feeds (topic/DM
     /// transcripts) collapse to one anonymous section.
     private var sections: [FeedSection] {
+        PerfLog.measure("FeedList.sections") { buildSections() }
+    }
+
+    private func buildSections() -> [FeedSection] {
         var out: [FeedSection] = []
         var current = FeedSection()
         for item in items {
@@ -382,6 +390,9 @@ struct MessageFeedList: View {
                                 await model.jumpToNewest()
                                 scrollToBottomSettled(proxy)
                             }
+                        }
+                        .task {
+                            await runAutoScrollIfRequested(proxy)
                         }
                 }
             }
@@ -663,6 +674,102 @@ struct MessageFeedList: View {
                 proxy.scrollTo("msgbot-\(id)", anchor: UnitPoint(x: 0.5, y: 0.92))
             }
         }
+    }
+
+    /// One auto-scroll pass per launch, no matter how many feeds open.
+    @MainActor private static var didRunAutoScroll = false
+
+    /// Perf harness (`make perf` plus `-perfAutoScroll YES`): drives a fast
+    /// upward scroll through history and back down to the bottom, so probe
+    /// numbers are repeatable without hand-scrolling. Paging kicks in the
+    /// same way it does for a real fling (the top loader realizes as the
+    /// viewport reaches it). No-op unless both flags are set.
+    private func runAutoScrollIfRequested(_ proxy: ScrollViewProxy) async {
+        guard PerfLog.enabled,
+              UserDefaults.standard.bool(forKey: "perfAutoScroll"),
+              case .channel = model.narrow,  // The harness's own target.
+              !Self.didRunAutoScroll
+        else { return }
+        Self.didRunAutoScroll = true
+        // Wait out the initial server fetch — paging is blocked behind
+        // isFetching, and the offline preview's window is not the real one.
+        for _ in 0..<80 {
+            if model.didInitialFetch, !model.isFetching { break }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        try? await Task.sleep(for: .seconds(2))
+        // A perf pass must not touch server state: cross-conversation
+        // feeds mark rows read as they scroll into view. (The next feed's
+        // onAppear unpauses, so this only covers the harness itself.)
+        keys.readMarkingPaused = true
+        print(
+            "perf autoscroll: begin narrow=\(model.narrow) "
+                + "messages=\(model.messages.count) haveOldest=\(model.haveOldest) "
+                + "offline=\(model.isOfflineFallback)")
+        // Fill the window to its cap up front (the loader row's onAppear
+        // does not re-fire under programmatic sweeps), so the sweeps
+        // traverse the largest window the channel supports.
+        var lastCount = -1
+        while model.messages.count < 590, !model.haveOldest,
+              model.messages.count != lastCount {
+            lastCount = model.messages.count
+            await model.fetchOlder()
+        }
+        print(
+            "perf autoscroll: window filled, messages=\(model.messages.count) "
+                + "haveOldest=\(model.haveOldest) "
+                + "error=\(model.fetchError.map { String(describing: $0) } ?? "none")")
+        // Upward in continuous sweeps: ~45 rows over 1.4 s each, so rows
+        // cross the scroll anchor continuously, like a real fling. Keeps
+        // going while older history pages in, until the window is full
+        // (the 600 cap) or history runs out.
+        var cursor = model.messages.last?.id
+        for sweep in 0..<24 {
+            guard !Task.isCancelled, let id = cursor, !model.messages.isEmpty
+            else { break }
+            let index = model.messages.firstIndex { $0.id == id }
+                ?? model.messages.count / 2  // Cursor row trimmed away.
+            let nextIndex = max(0, index - 45)
+            let next = model.messages[nextIndex].id
+            withAnimation(.linear(duration: 1.4)) {
+                // At the very top, land the first row at the viewport
+                // bottom instead: the older-history loader sits above it
+                // and must come on screen to realize and page.
+                proxy.scrollTo(
+                    "msg-\(next)", anchor: nextIndex == 0 ? .bottom : .top)
+            }
+            cursor = next
+            try? await Task.sleep(for: .milliseconds(1500))
+            if nextIndex == 0 {
+                if model.haveOldest || model.messages.count >= 590 {
+                    print("perf autoscroll: top of window at sweep \(sweep), messages=\(model.messages.count)")
+                    break
+                }
+                // At the top edge while more history pages in.
+                try? await Task.sleep(for: .milliseconds(700))
+            }
+        }
+        print("perf autoscroll: up leg done, messages=\(model.messages.count)")
+        // Downward: same sweeps back to the newest message (paging newer
+        // again if the window trimmed the bottom away).
+        for _ in 0..<24 {
+            guard !Task.isCancelled, let id = cursor, !model.messages.isEmpty
+            else { break }
+            let index = model.messages.firstIndex { $0.id == id }
+                ?? model.messages.count / 2
+            let nextIndex = min(model.messages.count - 1, index + 45)
+            let next = model.messages[nextIndex].id
+            withAnimation(.linear(duration: 1.4)) {
+                proxy.scrollTo("msg-\(next)", anchor: .bottom)
+            }
+            cursor = next
+            try? await Task.sleep(for: .milliseconds(1500))
+            if nextIndex == model.messages.count - 1, model.haveNewest {
+                break
+            }
+        }
+        proxy.scrollTo(Self.bottomAnchorId, anchor: .bottom)
+        print("perf autoscroll: done, messages=\(model.messages.count)")
     }
 
     /// Seen-in-view read marking, batched so a scroll doesn't spam the
