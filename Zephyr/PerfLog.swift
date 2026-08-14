@@ -10,6 +10,7 @@ enum PerfLog {
     static let enabled = UserDefaults.standard.bool(forKey: "perfLog")
 
     private static var renderCounts: [String: Int] = [:]
+    private static var timings: [String: (count: Int, totalMs: Double)] = [:]
     private static var flushScheduled = false
 
     /// Call at the top of a View body: counts evaluations per label.
@@ -17,6 +18,23 @@ enum PerfLog {
         guard enabled else { return }
         renderCounts[label, default: 0] += 1
         scheduleFlush()
+    }
+
+    /// Wraps a hot computation: counts calls and accumulates their time,
+    /// flushed alongside the render summary every 2 seconds.
+    static func measure<T>(_ label: String, _ body: () -> T) -> T {
+        guard enabled else { return body() }
+        let start = ContinuousClock.now
+        let result = body()
+        let elapsed = ContinuousClock.now - start
+        let ms = Double(elapsed.components.seconds) * 1000
+            + Double(elapsed.components.attoseconds) / 1e15
+        var entry = timings[label] ?? (0, 0)
+        entry.count += 1
+        entry.totalMs += ms
+        timings[label] = entry
+        scheduleFlush()
+        return result
     }
 
     private static func scheduleFlush() {
@@ -29,6 +47,18 @@ enum PerfLog {
                 .map { "\($0.key)=\($0.value)" }
                 .joined(separator: " ")
             print("perf renders/2s: \(summary)")
+            if !timings.isEmpty {
+                let timingSummary = timings
+                    .sorted { $0.value.totalMs > $1.value.totalMs }
+                    .map {
+                        String(
+                            format: "%@=%dx %.1fms",
+                            $0.key, $0.value.count, $0.value.totalMs)
+                    }
+                    .joined(separator: " ")
+                print("perf timings/2s: \(timingSummary)")
+                timings = [:]
+            }
             renderCounts = [:]
             flushScheduled = false
         }
@@ -39,6 +69,10 @@ enum PerfLog {
     /// or blocked. Correlate the timestamps with what you were doing.
     static func startWatchdogIfEnabled() {
         guard enabled else { return }
+        // Probe output must reach pipes and log files as it happens, not
+        // when an 8KB block fills (stdout is only line-buffered on a tty).
+        setvbuf(stdout, nil, _IONBF, 0)
+        print("perf probes on: pid \(ProcessInfo.processInfo.processIdentifier)")
         Task { @MainActor in
             let clock = ContinuousClock()
             var last = clock.now

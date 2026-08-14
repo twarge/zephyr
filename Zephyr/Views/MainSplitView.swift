@@ -454,6 +454,9 @@ struct MainSplitView: View {
             keys.removeMonitor()
             #endif
         }
+        .task {
+            await navigateForPerfHarnessIfRequested()
+        }
         // The store is replaced on event-queue rebuild while this view (keyed
         // by account id) survives; keep the router pointed at the live one.
         .onChange(of: ObjectIdentifier(store)) {
@@ -479,6 +482,45 @@ struct MainSplitView: View {
         .onContinueUserActivity("com.twarge.zephyr.conversation") { activity in
             continueHandoff(activity)
         }
+    }
+
+    /// Perf harness navigation (`make perf` plus `-perfAutoScroll YES`):
+    /// the restored selection may not be a channel feed, so open the
+    /// busiest cached channel for the feed's auto-scroll pass — then put
+    /// the persisted selection and recents back, so the run leaves the
+    /// user's restored state untouched. No-op unless both flags are set.
+    private func navigateForPerfHarnessIfRequested() async {
+        guard PerfLog.enabled,
+              UserDefaults.standard.bool(forKey: "perfAutoScroll") else { return }
+        if case .channel? = selection { return }  // Already a channel feed.
+        let savedSelection = AppStateStore.selection(for: store.accountId)
+        let savedRecents = AppStateStore.recentChannels(for: store.accountId)
+        let savedWindowState = storedDestination
+        // Wait out the launch restore so the cache can nominate a channel.
+        for _ in 0..<40 {
+            if store.messages.count >= 100 { break }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        let counts = store.messages.values.reduce(into: [Int: Int]()) { acc, message in
+            if let streamId = message.streamId, store.subscriptions[streamId] != nil {
+                acc[streamId, default: 0] += 1
+            }
+        }
+        guard let busiest = counts.max(by: { $0.value < $1.value })?.key else {
+            print("perf autoscroll: no cached channel to open")
+            return
+        }
+        print("perf autoscroll: opening streamId=\(busiest) (\(counts[busiest] ?? 0) cached)")
+        selection = .channel(streamId: busiest)
+        // selectionChanged persists the perf selection on the next update
+        // tick; put the user's stored state back once that has happened.
+        try? await Task.sleep(for: .seconds(1))
+        AppStateStore.setSelection(savedSelection, for: store.accountId)
+        UserDefaults.standard.set(
+            savedRecents, forKey: "recentChannels-\(store.accountId.uuidString)")
+        // The window's scene snapshot must not resurrect the perf channel
+        // on the user's next launch either.
+        storedDestination = savedWindowState
     }
 
     private func selectionChanged() {
