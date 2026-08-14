@@ -58,6 +58,7 @@
 		A395FC333148C3BE66791CC5 /* ChannelTopicsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB37E72A9961DF2EB9503B4D /* ChannelTopicsView.swift */; };
 		A4DAC225CFBF91023FFE91B3 /* ZulipAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 27D0006F9ED91CF207CFAA5B /* ZulipAPI */; };
 		A82A7771694C25DF30CA4009 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28E9D19485B08518476527C2 /* LoginView.swift */; };
+		B1054F65A0FA0D40D60D9523 /* FeedWarmCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B107C9FA821BCB2E527459E9 /* FeedWarmCache.swift */; };
 		B25F5C4B54A1AD406C201ECB /* ZephyrIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14B376B2915109D9F3810E20 /* ZephyrIntents.swift */; };
 		B8CB761D6FE61F47C1E0FCBC /* ZephyrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066FAF47CC310A2445AAB0A9 /* ZephyrApp.swift */; };
 		BB931F8230B45BC90B104176 /* MessageFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BD4EE59C8A33FC99AA510C3 /* MessageFeed.swift */; };
@@ -147,6 +148,7 @@
 		A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiPickerView.swift; sourceTree = "<group>"; };
 		A9AF8AD4ED790447AC128257 /* WidgetSummaryWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSummaryWriter.swift; sourceTree = "<group>"; };
 		AD6E84868E4713FC5F20FD6B /* Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Support.swift; sourceTree = "<group>"; };
+		B107C9FA821BCB2E527459E9 /* FeedWarmCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedWarmCache.swift; sourceTree = "<group>"; };
 		B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewConversationSheet.swift; sourceTree = "<group>"; };
 		BC85F6AA56F7EF9105F7742E /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
 		BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -210,6 +212,7 @@
 				DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */,
 				9BABEF92E892ACE3DBCEF0E5 /* DraftsView.swift */,
 				A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */,
+				B107C9FA821BCB2E527459E9 /* FeedWarmCache.swift */,
 				BC85F6AA56F7EF9105F7742E /* HelpView.swift */,
 				28E9D19485B08518476527C2 /* LoginView.swift */,
 				3B2CA9D7CF1C06AA7B0A1D52 /* MainSplitView.swift */,
@@ -508,6 +511,7 @@
 				9890C37B9865F39B29EDF88D /* DraftSync.swift in Sources */,
 				25FE3BFD9203521A1B8E2231 /* DraftsView.swift in Sources */,
 				67B681DC63058035652E4E1A /* EmojiPickerView.swift in Sources */,
+				B1054F65A0FA0D40D60D9523 /* FeedWarmCache.swift in Sources */,
 				428E7CBC70049F69CF04CAB5 /* HelpView.swift in Sources */,
 				188461C8A7C5D3500365BA6D /* KeyboardRouter.swift in Sources */,
 				A82A7771694C25DF30CA4009 /* LoginView.swift in Sources */,

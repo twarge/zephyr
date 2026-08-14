@@ -221,6 +221,16 @@ anchor. SwiftUI has no direct equivalent, so this is our highest-risk UI area:
 The `MessageListModel` is deliberately UI-agnostic (items + anchors in, scroll intents
 out) so Plans A/B swap without touching the model.
 
+Navigating back to a recent conversation is instant: the app layer parks the last few
+(model, parsed-content cache, scroll position) triples in `FeedWarmCache` (LRU, bounded).
+Parked models stay registered with their store's event fan-out, so they absorb live
+events while hidden; views are never parked, keeping read-marking and keyboard routing
+exclusive to the visible feed. A store replacement (queue rebuild) invalidates entries by
+identity. The viewport restores exactly: the feed continuously records the bottom-most
+visible row and its bottom edge's viewport fraction (at the bottom it records sticky
+bottom instead), and a warm reopen re-anchors on that row pre-layout, then settles the
+exact offset through the row's edge sentinel — no marker nudge, no animation.
+
 ## 7. Auth and accounts
 
 - **Realm entry**: user enters a realm URL → unauthenticated `GET /server_settings` →

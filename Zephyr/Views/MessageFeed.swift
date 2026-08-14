@@ -40,9 +40,19 @@ struct MessageFeedList: View {
     /// Cross-conversation feeds: a message scrolled into view is marked
     /// read (batched).
     var marksReadOnView = false
+    /// Warm-cache plumbing: where the viewport sits, recorded every scroll
+    /// tick and read back on a warm reopen to land exactly there.
+    var scrollMemory: FeedScrollMemory?
 
     @Environment(KeyboardRouter.self) private var keys
     @State private var anchorId: String?
+    /// A parked position being restored (nil on fresh opens): overrides
+    /// the marker/bottom opening behavior, validated against the model in
+    /// init (a row evicted while parked falls back to a fresh open).
+    @State private var restoredPosition: FeedScrollPosition?
+    /// The mid-history restore ran (one-shot): re-appears of the same view
+    /// (sheet dismissals) neither re-restore nor marker-nudge.
+    @State private var didRestore = false
     @State private var nearBottom = true
     @State private var quickLook = FeedQuickLook()
     @State private var pendingReadIds: Set<Int> = []
@@ -57,7 +67,8 @@ struct MessageFeedList: View {
         onHeaderTap: ((ConversationKey) -> Void)? = nil,
         showsConversationJump: Bool = false,
         onNewMessages: (() -> Void)? = nil,
-        marksReadOnView: Bool = false
+        marksReadOnView: Bool = false,
+        scrollMemory: FeedScrollMemory? = nil
     ) {
         self.store = store
         self.model = model
@@ -68,12 +79,30 @@ struct MessageFeedList: View {
         self.showsConversationJump = showsConversationJump
         self.onNewMessages = onNewMessages
         self.marksReadOnView = marksReadOnView
+        self.scrollMemory = scrollMemory
+        // A parked viewport position resumes exactly (a remembered row
+        // must still be in the window — paging may have trimmed it).
+        var restored = scrollMemory?.position
+        if case .row(let id, _) = restored,
+           !model.messages.contains(where: { $0.id == id })
+        {
+            restored = nil
+        }
+        _restoredPosition = State(initialValue: restored)
         // The scroll target must be known BEFORE the first layout pass:
         // an onAppear write lands after it, re-targeting the lazy stack
         // mid-estimation — which could park the viewport in unrealized
         // space (a blank transcript until a resize forced re-layout).
-        _anchorId = State(initialValue:
-            model.firstUnreadMarkerId != nil ? "unread-marker" : Self.bottomAnchorId)
+        // The restored row is a coarse first-frame stand-in (its bottom at
+        // the viewport bottom); onAppear's settle pass nails the offset.
+        let initialAnchor: String =
+            switch restored {
+            case .bottom: Self.bottomAnchorId
+            case .row(let id, _): "msg-\(id)"
+            case nil:
+                model.firstUnreadMarkerId != nil ? "unread-marker" : Self.bottomAnchorId
+            }
+        _anchorId = State(initialValue: initialAnchor)
     }
 
     private var outboxMessages: [OutboxMessage] {
@@ -245,9 +274,23 @@ struct MessageFeedList: View {
                             if let highlight = keys.highlightMessageId,
                                model.messages.contains(where: { $0.id == highlight }) {
                                 target = "msg-\(highlight)"
-                            } else if model.firstUnreadMarkerId != nil {
+                            } else if case .row(let id, let fraction) = restoredPosition,
+                                      !didRestore {
+                                // Warm reopen mid-history: place the
+                                // remembered row's bottom edge back at its
+                                // remembered viewport fraction — no
+                                // animation, no marker nudge. One-shot: a
+                                // later re-appear (sheet dismissal) must
+                                // not yank the viewport back.
+                                didRestore = true
+                                settleRestore(id: id, fraction: fraction, proxy: proxy)
+                                return
+                            } else if restoredPosition == nil,
+                                      model.firstUnreadMarkerId != nil {
                                 target = "unread-marker"
                             } else {
+                                // Fresh bottom-anchored open, or a warm
+                                // reopen parked at the bottom.
                                 target = nil
                             }
                             guard let target else {
@@ -464,6 +507,33 @@ struct MessageFeedList: View {
                 }
                 guard clock.now - lastAssert >= .milliseconds(150) else { continue }
                 proxy.scrollTo(Self.bottomAnchorId, anchor: .bottom)
+                lastAssert = clock.now
+            }
+        }
+    }
+
+    /// Restores a parked viewport: the remembered row's bottom edge back
+    /// at its remembered viewport fraction. The init anchor put the row's
+    /// neighborhood on screen (realizing it); the exact pass targets the
+    /// row's bottom sentinel — a fractional row anchor would drift with
+    /// row height. Same settle-poll shape as scrollToBottomSettled: lazy
+    /// height estimates land the first pass short, re-asserts converge.
+    private func settleRestore(id: Int, fraction: CGFloat, proxy: ScrollViewProxy) {
+        let fraction = min(max(fraction, 0), 1)
+        Task { @MainActor in
+            let clock = ContinuousClock()
+            let deadline = clock.now + .seconds(1)
+            var lastAssert = clock.now
+            proxy.scrollTo("msgbot-\(id)", anchor: UnitPoint(x: 0, y: fraction))
+            while clock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(10))
+                if let frame = rowFrames.frames[id], viewportHeight > 0,
+                   abs(frame.maxY - fraction * viewportHeight) < 2
+                {
+                    return
+                }
+                guard clock.now - lastAssert >= .milliseconds(150) else { continue }
+                proxy.scrollTo("msgbot-\(id)", anchor: UnitPoint(x: 0, y: fraction))
                 lastAssert = clock.now
             }
         }
@@ -773,6 +843,23 @@ struct MessageFeedList: View {
                 .flatMap { rowFrames.frames[$0.id] }
                 .map { $0.minY < new.containerHeight && $0.maxY > 0 } ?? false
             nearBottom = new.nearBottom || lastRowVisible
+            // Park the viewport for a warm reopen: at the bottom the
+            // restore sticks to bottom (newest); mid-history it's the
+            // bottom-most row whose bottom edge is on screen, plus that
+            // edge's viewport fraction. Continuous (a reference box, no
+            // invalidation) — teardown order makes a one-shot
+            // onDisappear read unreliable.
+            if let scrollMemory, new.containerHeight > 0 {
+                if nearBottom {
+                    scrollMemory.position = .bottom
+                } else if let (id, frame) = rowFrames.frames
+                    .filter({ $0.value.maxY > 0 && $0.value.maxY <= new.containerHeight })
+                    .max(by: { $0.value.maxY < $1.value.maxY })
+                {
+                    scrollMemory.position = .row(
+                        id: id, fraction: frame.maxY / new.containerHeight)
+                }
+            }
             if new.lost, !old.lost {
                 recoverNonce &+= 1
             }

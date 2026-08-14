@@ -17,6 +17,37 @@ struct NarrowFeedView: View {
 
     @State private var model: MessageListModel?
     @State private var cache = MessageContentCache()
+    @State private var scrollMemory = FeedScrollMemory()
+
+    private var isCustomNarrow: Bool {
+        if case .custom = narrow { true } else { false }
+    }
+
+    init(
+        store: PerAccountStore, title: String, narrow: Narrow,
+        useMatchHighlights: Bool = false,
+        ignoredSearchWords: [String]? = nil,
+        showsConversationJump: Bool = false,
+        selection: Binding<Destination?>
+    ) {
+        self.store = store
+        self.title = title
+        self.narrow = narrow
+        self.useMatchHighlights = useMatchHighlights
+        self.ignoredSearchWords = ignoredSearchWords
+        self.showsConversationJump = showsConversationJump
+        _selection = selection
+        // A recently viewed feed resumes its parked model — set before
+        // the first layout pass so there is no spinner frame. Search
+        // narrows (`.custom`) never park: they can't live-append (see
+        // Narrow.custom), so a parked one would silently go stale.
+        if case .custom = narrow { return }
+        if let warm = FeedWarmCache.shared.lookup(narrow: narrow, store: store) {
+            _model = State(initialValue: warm.model)
+            _cache = State(initialValue: warm.cache)
+            _scrollMemory = State(initialValue: warm.scrollMemory)
+        }
+    }
 
     var body: some View {
         Group {
@@ -40,7 +71,8 @@ struct NarrowFeedView: View {
                             selection = .conversation(key)
                         },
                         showsConversationJump: showsConversationJump,
-                        marksReadOnView: narrow == .combinedFeed)
+                        marksReadOnView: narrow == .combinedFeed,
+                        scrollMemory: scrollMemory)
                 }
             } else {
                 ProgressView()
@@ -51,6 +83,13 @@ struct NarrowFeedView: View {
         // Store-keyed: re-binds when the store instance is replaced
         // (warm-launch swap, queue rebuild).
         .task(id: ObjectIdentifier(store)) {
+            // A healthy model bound to this store (warm start, or a
+            // reappearing live view) needs no refetch.
+            if let model, model.isBound(to: store),
+               model.didInitialFetch, model.fetchError == nil
+            {
+                return
+            }
             let list = MessageListModel(store: store, narrow: narrow)
             if model == nil {
                 model = list
@@ -60,6 +99,11 @@ struct NarrowFeedView: View {
                 // replacement has content.
                 await list.fetchInitial(count: 100)
                 model = list
+            }
+            if list.fetchError == nil, !isCustomNarrow {
+                FeedWarmCache.shared.insert(
+                    model: list, cache: cache, scrollMemory: scrollMemory,
+                    narrow: narrow, store: store)
             }
         }
     }

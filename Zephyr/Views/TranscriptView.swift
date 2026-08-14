@@ -44,6 +44,25 @@ struct TranscriptView: View {
     @Environment(KeyboardRouter.self) private var keys
     @State private var model: MessageListModel?
     @State private var cache = MessageContentCache()
+    @State private var scrollMemory = FeedScrollMemory()
+
+    init(
+        store: PerAccountStore, conversation: ConversationKey,
+        selection: Binding<Destination?>
+    ) {
+        self.store = store
+        self.conversation = conversation
+        _selection = selection
+        // A recently viewed conversation resumes its parked model — set
+        // before the first layout pass so there is no spinner frame.
+        if let warm = FeedWarmCache.shared.lookup(
+            narrow: conversation.narrow(selfUserId: store.selfUserId), store: store)
+        {
+            _model = State(initialValue: warm.model)
+            _cache = State(initialValue: warm.cache)
+            _scrollMemory = State(initialValue: warm.scrollMemory)
+        }
+    }
 
     private func channelName(_ streamId: Int) -> String {
         store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel"
@@ -66,7 +85,8 @@ struct TranscriptView: View {
             if let model, model.didInitialFetch {
                 MessageFeedList(
                     store: store, model: model, cache: cache,
-                    onNewMessages: { store.markConversationRead(conversation) })
+                    onNewMessages: { store.markConversationRead(conversation) },
+                    scrollMemory: scrollMemory)
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -98,9 +118,19 @@ struct TranscriptView: View {
                 anchor = pending.messageId
                 keys.pendingNear = nil
             }
+            let narrow = conversation.narrow(selfUserId: store.selfUserId)
+            // A healthy model already bound to this store (warm start, or
+            // a reappearing live view) needs no refetch — parked models
+            // keep absorbing live events. Only a message-link anchor
+            // forces a fresh fetch.
+            if anchor == nil, let model, model.isBound(to: store),
+               model.didInitialFetch, model.fetchError == nil
+            {
+                store.markConversationRead(conversation)
+                return
+            }
             let list = MessageListModel(
-                store: store, narrow: conversation.narrow(selfUserId: store.selfUserId),
-                anchorMessageId: anchor)
+                store: store, narrow: narrow, anchorMessageId: anchor)
             if model == nil {
                 // First open: show the fetch in progress.
                 model = list
@@ -111,6 +141,13 @@ struct TranscriptView: View {
                 // has content — no blank flash mid-read.
                 await list.fetchInitial()
                 model = list
+            }
+            // Park for instant return. Anchored fetches stay out: they
+            // resume mid-history, which a plain reopen shouldn't.
+            if anchor == nil, list.fetchError == nil {
+                FeedWarmCache.shared.insert(
+                    model: list, cache: cache, scrollMemory: scrollMemory,
+                    narrow: narrow, store: store)
             }
             store.markConversationRead(conversation)
         }

@@ -10,6 +10,22 @@ struct ChannelFeedView: View {
 
     @State private var model: MessageListModel?
     @State private var cache = MessageContentCache()
+    @State private var scrollMemory = FeedScrollMemory()
+
+    init(store: PerAccountStore, streamId: Int, selection: Binding<Destination?>) {
+        self.store = store
+        self.streamId = streamId
+        _selection = selection
+        // A recently viewed channel resumes its parked model — set before
+        // the first layout pass so there is no spinner frame.
+        if let warm = FeedWarmCache.shared.lookup(
+            narrow: .channel(streamId: streamId), store: store)
+        {
+            _model = State(initialValue: warm.model)
+            _cache = State(initialValue: warm.cache)
+            _scrollMemory = State(initialValue: warm.scrollMemory)
+        }
+    }
 
     private var channelName: String {
         store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel"
@@ -26,7 +42,8 @@ struct ChannelFeedView: View {
                     },
                     // Only messages actually scrolled into view are marked
                     // read — opening the channel doesn't clear its backlog.
-                    marksReadOnView: true)
+                    marksReadOnView: true,
+                    scrollMemory: scrollMemory)
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -39,7 +56,15 @@ struct ChannelFeedView: View {
         // Store-keyed: re-binds when the store instance is replaced
         // (warm-launch swap, queue rebuild).
         .task(id: ObjectIdentifier(store)) {
-            let list = MessageListModel(store: store, narrow: .channel(streamId: streamId))
+            // A healthy model bound to this store (warm start, or a
+            // reappearing live view) needs no refetch.
+            if let model, model.isBound(to: store),
+               model.didInitialFetch, model.fetchError == nil
+            {
+                return
+            }
+            let narrow = Narrow.channel(streamId: streamId)
+            let list = MessageListModel(store: store, narrow: narrow)
             if model == nil {
                 model = list
                 await list.fetchInitial(count: 100)
@@ -48,6 +73,11 @@ struct ChannelFeedView: View {
                 // replacement has content.
                 await list.fetchInitial(count: 100)
                 model = list
+            }
+            if list.fetchError == nil {
+                FeedWarmCache.shared.insert(
+                    model: list, cache: cache, scrollMemory: scrollMemory,
+                    narrow: narrow, store: store)
             }
         }
     }

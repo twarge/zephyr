@@ -335,6 +335,7 @@ final class AppModel {
 
     /// Signs out one account; windows showing it fall back on their own.
     func signOut(accountId: Account.ID) async {
+        FeedWarmCache.shared.removeAll(for: accountId)
         try? await global.removeAccount(accountId)
         if global.accounts.isEmpty {
             phase = .needsAccount
@@ -349,6 +350,7 @@ final class AppModel {
             await signOut(accountId: defaultAccountId)
         } else {
             for account in global.accounts {
+                FeedWarmCache.shared.removeAll(for: account.id)
                 try? await global.removeAccount(account.id)
             }
             phase = .needsAccount

@@ -89,6 +89,13 @@ public final class MessageListModel: Identifiable {
         store?.unregister(id)
     }
 
+    /// True while this list is fed by `store`'s event fan-out. A queue
+    /// rebuild replaces the store, so a list kept warm across navigation
+    /// is stale exactly when this turns false.
+    public func isBound(to store: PerAccountStore) -> Bool {
+        self.store === store
+    }
+
     // MARK: Fetching
 
     public func fetchInitial(count: Int = 60) async {
