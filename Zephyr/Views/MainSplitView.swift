@@ -687,7 +687,7 @@ struct MainSplitView: View {
         return model.global.stores.values.reduce(0) { total, store in
             switch policy {
             case .dmsAndMentions:
-                total + store.unreads.dmCount + store.unreads.mentionIds.count
+                total + store.unreads.dmAndMentionCount
             case .allUnreads:
                 total + store.unreads.totalCount
             case .none:

@@ -44,6 +44,30 @@ struct StoreEventTests {
             store.unreads.unreadIds[.topic(streamId: 10, topic: "greetings")] == [100])
     }
 
+    @Test func dmWithMentionCountsOnceInBadge() throws {
+        let store = try makeStore()
+        // A DM that also mentions you: in unreadIds AND mentionIds.
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.dmMessageJSON(id: 100),
+                    flags: ["mentioned"])))
+        #expect(store.unreads.dmCount == 1)
+        #expect(store.unreads.mentionIds == [100])
+        #expect(store.unreads.dmAndMentionCount == 1)
+        // A channel mention adds one; a plain DM adds one more.
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 2, message: Fixtures.channelMessageJSON(id: 101),
+                    flags: ["mentioned"])))
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 3, message: Fixtures.dmMessageJSON(id: 102))))
+        #expect(store.unreads.dmAndMentionCount == 3)
+    }
+
     @Test func ownMessageIsNotUnread() throws {
         let store = try makeStore()
         try store.handleEvent(

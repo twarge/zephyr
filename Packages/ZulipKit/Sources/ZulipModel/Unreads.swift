@@ -40,6 +40,23 @@ public final class Unreads {
         }
     }
 
+    /// The "DMs and mentions" badge: every unread DM plus mentions
+    /// elsewhere. A DM that also mentions you is in both `unreadIds`
+    /// and `mentionIds` — naive addition counted it twice.
+    public var dmAndMentionCount: Int {
+        var count = 0
+        var dmIds: Set<Int> = []
+        for (key, ids) in unreadIds where isDm(key) {
+            count += ids.count
+            dmIds.formUnion(ids)
+        }
+        return count + mentionIds.subtracting(dmIds).count
+    }
+
+    private nonisolated func isDm(_ key: ConversationKey) -> Bool {
+        if case .dm = key { true } else { false }
+    }
+
     public func unreadCount(inChannel streamId: Int) -> Int {
         unreadIds.reduce(0) { total, entry in
             if case .topic(let id, _) = entry.key, id == streamId {
