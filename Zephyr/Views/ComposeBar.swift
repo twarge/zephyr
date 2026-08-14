@@ -948,6 +948,14 @@ struct ComposeBar: View {
             return
         }
         text.replaceSubrange(triggerIndex..<text.endIndex, with: suggestion.completion)
+        // The long-form editor's selection binding pins the caret at its
+        // old offset through a programmatic edit; move it past the
+        // completion. (The compact field has no selection binding and
+        // advances on its own. The token is trailing, so the completion
+        // always ends at endIndex.)
+        if expanded {
+            editorSelection = TextSelection(insertionPoint: text.endIndex)
+        }
         suggestions = []
         tokenTriggerIndex = nil
         messageFocused = true
