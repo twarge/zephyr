@@ -41,6 +41,34 @@ enum Platform {
         #endif
     }
 
+    /// Jumps to the app's page in the system notification settings — once
+    /// the permission prompt has been answered there is no API to show it
+    /// again, so a denial can only be undone there.
+    static func openNotificationSettings() {
+        #if canImport(AppKit)
+        if let url = URL(
+            string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id="
+                + (Bundle.main.bundleIdentifier ?? ""))
+        {
+            NSWorkspace.shared.open(url)
+        }
+        #else
+        if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+        #endif
+    }
+
+    /// Fires when the app returns to the foreground (e.g. back from
+    /// System Settings).
+    static var didBecomeActiveNotification: Notification.Name {
+        #if canImport(AppKit)
+        NSApplication.didBecomeActiveNotification
+        #else
+        UIApplication.didBecomeActiveNotification
+        #endif
+    }
+
     /// Opens a downloaded file in the platform's default viewer. Returns
     /// false when the platform has no such concept (iOS) — callers fall back
     /// to Quick Look.

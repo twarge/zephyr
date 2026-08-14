@@ -1,5 +1,24 @@
 import SwiftUI
+import UserNotifications
 import ZulipModel
+
+/// System Settings states that silently defeat the preferences below:
+/// a denied permission suppresses banners and the app icon badge alike,
+/// and the badge has its own per-app toggle.
+private enum SystemNotificationIssue {
+    case denied
+    case badgesOff
+
+    var explanation: String {
+        switch self {
+        case .denied:
+            "Notifications are turned off for Zephyr in System Settings, "
+                + "so message banners and the app icon badge won't appear."
+        case .badgesOff:
+            "App icon badges are turned off for Zephyr in System Settings."
+        }
+    }
+}
 
 enum BadgePolicy: String, CaseIterable, Identifiable {
     case dmsAndMentions
@@ -81,13 +100,59 @@ private struct GeneralSettings: View {
     @AppStorage("channelsAboveDMs") private var channelsAboveDMs = true
     @AppStorage("serverNameInTitles") private var serverNameInTitles =
         serverNameInTitlesDefault
+    @State private var notificationIssue: SystemNotificationIssue?
 
     var body: some View {
-        #if os(macOS)
-        macForm
-        #else
-        iosForm
-        #endif
+        Group {
+            #if os(macOS)
+            macForm
+            #else
+            iosForm
+            #endif
+        }
+        .task { await refreshNotificationIssue() }
+        .onChange(of: badgePolicy) {
+            Task { await refreshNotificationIssue() }
+        }
+        // Re-check on return from System Settings.
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: Platform.didBecomeActiveNotification)
+        ) { _ in
+            Task { await refreshNotificationIssue() }
+        }
+    }
+
+    private func refreshNotificationIssue() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        notificationIssue =
+            switch settings.authorizationStatus {
+            case .denied: .denied
+            case .authorized, .provisional:
+                settings.badgeSetting == .disabled
+                    && (BadgePolicy(rawValue: badgePolicy) ?? .dmsAndMentions) != .none
+                    ? .badgesOff : nil
+            default: nil
+            }
+    }
+
+    @ViewBuilder
+    private var notificationIssueRows: some View {
+        if let issue = notificationIssue {
+            Label(issue.explanation, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+            #if os(macOS)
+            Button("Open System Settings…") {
+                Platform.openNotificationSettings()
+            }
+            .controlSize(.small)
+            #else
+            Button("Open Notification Settings") {
+                Platform.openNotificationSettings()
+            }
+            #endif
+        }
     }
 
     private func applyRetention() {
@@ -114,6 +179,7 @@ private struct GeneralSettings: View {
             }
             .pickerStyle(.inline)
             Toggle("Show notifications for messages", isOn: $notificationsEnabled)
+            notificationIssueRows
             Toggle("Show in menu bar", isOn: $showMenuBarExtra)
             Text("Direct messages and mentions notify while Zephyr is running. (Zulip has no push service for desktop clients.)")
                 .font(.caption)
@@ -160,6 +226,7 @@ private struct GeneralSettings: View {
                     }
                 }
                 Toggle("Show notifications for messages", isOn: $notificationsEnabled)
+                notificationIssueRows
             } footer: {
                 Text("Direct messages and mentions notify while Zephyr is running. (Zulip has no push service for desktop clients.)")
             }
