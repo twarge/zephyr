@@ -222,6 +222,14 @@ extension ZephyrApp {
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
         }
+        #if os(macOS)
+        // File → Export Selected…: the selected attachment (or message as
+        // text) through a save panel. Like the Message menu, it targets
+        // the key window's selection and no-ops without one.
+        CommandGroup(after: .saveItem) {
+            Button("Export Selected…") { model.pendingCommand = .exportSelected }
+        }
+        #endif
         // Edit → Find focuses the search field, like the / key. macOS
         // only: iPadOS's system menu already owns ⌘F, and duplicate
         // UIKeyCommands are undefined behavior (the / key and toolbar

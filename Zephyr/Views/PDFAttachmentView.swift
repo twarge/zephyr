@@ -54,8 +54,14 @@ struct PDFAttachmentView: View {
             width: thumbnail.size.width * scale, height: thumbnail.size.height * scale)
     }
 
-    private var showsSelection: Bool {
-        keys?.selectedMediaId == mediaId
+    /// Full accent for the anchor, lighter for extended members.
+    private var selectionRing: Color? {
+        guard let keys else { return nil }
+        if keys.selectedMediaId == mediaId { return .accentColor }
+        if keys.selectedMediaIds.contains(mediaId) {
+            return Color.accentColor.opacity(0.45)
+        }
+        return nil
     }
 
     var body: some View {
@@ -79,8 +85,8 @@ struct PDFAttachmentView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .strokeBorder(
-                        showsSelection ? Color.accentColor : Color.secondary.opacity(0.3),
-                        lineWidth: showsSelection ? 3 : 1))
+                        selectionRing ?? Color.secondary.opacity(0.3),
+                        lineWidth: selectionRing != nil ? 3 : 1))
             HStack(spacing: 5) {
                 Image(systemName: "doc.richtext")
                     .font(.caption)

@@ -443,8 +443,14 @@ private struct MediaAttachmentChip: View {
 
     private var mediaId: String { MessageAttachment.chip(path: path).mediaId }
 
-    private var showsSelection: Bool {
-        keys?.selectedMediaId == mediaId
+    /// Full accent for the anchor, lighter for extended members.
+    private var selectionRing: Color? {
+        guard let keys else { return nil }
+        if keys.selectedMediaId == mediaId { return .accentColor }
+        if keys.selectedMediaIds.contains(mediaId) {
+            return Color.accentColor.opacity(0.45)
+        }
+        return nil
     }
 
     var body: some View {
@@ -466,7 +472,8 @@ private struct MediaAttachmentChip: View {
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color.accentColor, lineWidth: showsSelection ? 3 : 0))
+                .strokeBorder(
+                    selectionRing ?? .clear, lineWidth: selectionRing != nil ? 3 : 0))
         .onTapGesture(count: 2) {
             Task {
                 if let url = await download(), !Platform.openFile(url) {
@@ -838,8 +845,14 @@ private struct MessageImageView: View {
 
     /// Selection lives in the router on both platforms (it survives row
     /// re-renders, which were killing FocusState a beat after each click).
-    private var showsSelection: Bool {
-        keys?.selectedMediaId == mediaId
+    /// Full accent for the anchor, lighter for extended members.
+    private var selectionRing: Color? {
+        guard let keys else { return nil }
+        if keys.selectedMediaId == mediaId { return .accentColor }
+        if keys.selectedMediaIds.contains(mediaId) {
+            return Color.accentColor.opacity(0.45)
+        }
+        return nil
     }
 
     private var displaySize: CGSize {
@@ -876,7 +889,8 @@ private struct MessageImageView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color.accentColor, lineWidth: showsSelection ? 3 : 0))
+                .strokeBorder(
+                    selectionRing ?? .clear, lineWidth: selectionRing != nil ? 3 : 0))
         .onTapGesture(count: 2) { openInDefaultViewer() }
         // Simultaneous: fires on the first click immediately — a plain tap
         // gesture would wait out the double-click window.

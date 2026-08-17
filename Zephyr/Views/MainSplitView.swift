@@ -39,6 +39,16 @@ struct MainSplitView: View {
     @State private var sidebarWidth: CGFloat = 300
     /// The iOS toolbar gear's Settings sheet.
     @State private var showSettingsSheet = false
+    #if os(macOS)
+    /// Staged sharing-picker content (the selected attachment's file, or
+    /// the selected message as text); the toolbar anchor presents and
+    /// clears it.
+    @State private var macShareItems: [Any]?
+    #else
+    /// Staged share-sheet content (the selected attachment's file, or the
+    /// selected message as text); presented while non-nil.
+    @State private var sharePayload: SharePayload?
+    #endif
 
     /// Whether RealmLogoView will render an actual image (uploaded logo
     /// or realm icon) rather than the initial-letter stand-in.
@@ -233,6 +243,12 @@ struct MainSplitView: View {
                     suppressWhenCompactComposer: selectionHasComposer))
                 #endif
                 .popoverTip(QuickLookNavigationTip())
+                #if !os(macOS)
+                .sheet(item: $sharePayload) { payload in
+                    ShareActivityView(items: payload.items) { sharePayload = nil }
+                        .presentationDetents([.medium, .large])
+                }
+                #endif
                 // Media dropped anywhere in the conversation area uploads via
                 // the visible compose bar, and dragged links insert into its
                 // draft (both nil when this view has neither — the drop is
@@ -662,6 +678,20 @@ struct MainSplitView: View {
                         .popoverTip(PerWindowServersTip())
                 }
             }
+            #if os(macOS)
+            // Contextual share, like iOS: appears while a message or
+            // attachment is selected. The picker anchors to the button;
+            // File → Export Selected… saves to disk instead.
+            if keys.selectedMessageId != nil || keys.selectedMediaId != nil {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Share", systemImage: "square.and.arrow.up") {
+                        shareSelection()
+                    }
+                    .background(SharingServiceAnchor(items: $macShareItems))
+                    .help("Share selected message or attachment")
+                }
+            }
+            #endif
             #if !os(macOS)
             // Fixed spacers split the trailing group's shared glass
             // capsule so each button gets its own standard circular
@@ -674,6 +704,20 @@ struct MainSplitView: View {
                         Image(systemName: channelGlyph(streamId))
                     }
                     .help("Go to #\(channelName(streamId))")
+                }
+                #if !os(visionOS)
+                if #available(iOS 26.0, *) {
+                    ToolbarSpacer(.fixed, placement: .primaryAction)
+                }
+                #endif
+            }
+            // Contextual share: appears while a message or attachment is
+            // selected — the system sheet covers save, send, and print.
+            if keys.selectedMessageId != nil || keys.selectedMediaId != nil {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Share", systemImage: "square.and.arrow.up") {
+                        shareSelection()
+                    }
                 }
                 #if !os(visionOS)
                 if #available(iOS 26.0, *) {
@@ -859,6 +903,10 @@ struct MainSplitView: View {
             }
         case .shortcutsHelp:
             keys.showHelp = true
+        case .exportSelected:
+            #if os(macOS)
+            exportSelected()
+            #endif
         }
     }
 
@@ -943,6 +991,123 @@ struct MainSplitView: View {
         }
         selection = pending.destination
     }
+
+    /// Stages the current selection for sharing: the selected attachments'
+    /// downloaded files when any are selected, else the selected
+    /// message(s) as attributed plain text, transcript order. iOS presents
+    /// the share sheet; macOS the sharing picker off the toolbar button.
+    private func shareSelection() {
+        Task {
+            let items: [Any]
+            let attachments = keys.selectedAttachments()
+            if !attachments.isEmpty {
+                var urls: [URL] = []
+                for attachment in attachments {
+                    if let url = await downloadMediaFile(
+                        path: attachment.path, connection: store.connection) {
+                        urls.append(url)
+                    }
+                }
+                guard !urls.isEmpty else { return }
+                items = urls
+            } else {
+                let messages = keys.selectedMessages()
+                guard !messages.isEmpty else { return }
+                items = [messages.map { messageShareText($0) }.joined(separator: "\n\n")]
+            }
+            #if os(macOS)
+            macShareItems = items
+            #else
+            sharePayload = SharePayload(items: items)
+            #endif
+        }
+    }
+
+    #if os(macOS)
+    /// File → Export Selected…: the selected attachment(s) — a save panel
+    /// for one, a folder chooser for several — or the selected message(s)
+    /// as one text file, transcript order.
+    private func exportSelected() {
+        let attachments = keys.selectedAttachments()
+        if attachments.count > 1 {
+            exportFolderPanel { folder in
+                Task {
+                    for attachment in attachments {
+                        guard let url = await downloadMediaFile(
+                            path: attachment.path, connection: store.connection)
+                        else { continue }
+                        // Collision-safe: "name-2.ext" rather than a
+                        // silent overwrite in a folder the panel never
+                        // confirmed replacements for.
+                        let destination = Self.uniqueDestination(
+                            for: url.lastPathComponent, in: folder)
+                        try? FileManager.default.copyItem(at: url, to: destination)
+                    }
+                }
+            }
+        } else if let attachment = attachments.first {
+            Task {
+                guard let url = await downloadMediaFile(
+                    path: attachment.path, connection: store.connection) else { return }
+                savePanel(suggestedName: url.lastPathComponent) { destination in
+                    // The panel already confirmed any replacement.
+                    if FileManager.default.fileExists(atPath: destination.path) {
+                        try? FileManager.default.removeItem(at: destination)
+                    }
+                    try? FileManager.default.copyItem(at: url, to: destination)
+                }
+            }
+        } else {
+            let messages = keys.selectedMessages()
+            guard !messages.isEmpty else { return }
+            let text = messages.map { messageShareText($0) }.joined(separator: "\n\n")
+            let name = messages.count == 1
+                ? "Message from \(messages[0].senderFullName).txt"
+                : "Messages.txt"
+            savePanel(suggestedName: name) { destination in
+                try? text.write(to: destination, atomically: true, encoding: .utf8)
+            }
+        }
+    }
+
+    private func savePanel(suggestedName: String, write: @escaping (URL) -> Void) {
+        guard let window = keys.hostWindow else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = suggestedName
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url else { return }
+            write(url)
+        }
+    }
+
+    /// Multi-attachment export: one folder choice, every file into it.
+    private func exportFolderPanel(_ handler: @escaping (URL) -> Void) {
+        guard let window = keys.hostWindow else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.prompt = "Export"
+        panel.message = "Choose a folder for the exported attachments"
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url else { return }
+            handler(url)
+        }
+    }
+
+    private static func uniqueDestination(for name: String, in folder: URL) -> URL {
+        var url = folder.appendingPathComponent(name)
+        let base = (name as NSString).deletingPathExtension
+        let ext = (name as NSString).pathExtension
+        var counter = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            let candidate = ext.isEmpty ? "\(base)-\(counter)" : "\(base)-\(counter).\(ext)"
+            url = folder.appendingPathComponent(candidate)
+            counter += 1
+        }
+        return url
+    }
+    #endif
 
     #if os(iOS)
     private func handleKeyPress(_ press: KeyPress) -> Bool {
@@ -1196,3 +1361,27 @@ struct ServerMenu: View {
         "\(account.realmName ?? account.realmURL.host() ?? "?") — \(account.email)"
     }
 }
+
+#if os(macOS)
+/// Presents the system sharing picker anchored to the view it backs
+/// whenever `items` lands, then clears it. AppKit-side because SwiftUI has
+/// no programmatic ShareLink presentation and the picker needs an anchor
+/// view (it draws its popover off this rect).
+struct SharingServiceAnchor: NSViewRepresentable {
+    @Binding var items: [Any]?
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        guard let staged = items else { return }
+        // Presenting (and clearing the binding) must wait out the current
+        // view update.
+        DispatchQueue.main.async {
+            guard items != nil else { return }
+            items = nil
+            NSSharingServicePicker(items: staged)
+                .show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
+        }
+    }
+}
+#endif

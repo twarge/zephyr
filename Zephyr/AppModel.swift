@@ -33,6 +33,9 @@ enum AppCommand: Equatable {
     case find
     case reload
     case shortcutsHelp
+    /// macOS File menu: save the selected attachment (or message text)
+    /// via a save panel.
+    case exportSelected
 }
 
 /// A navigation request (notification click, cross-realm message link),

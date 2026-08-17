@@ -33,6 +33,29 @@ enum Platform {
         #endif
     }
 
+    #if canImport(AppKit)
+    /// The pasteboard type carrying a copied message's Zulip quote block:
+    /// pasting into the compose draft reads it; every other paste target
+    /// sees only the plain-text sibling written alongside.
+    static let messageQuoteType = NSPasteboard.PasteboardType(
+        "com.twarge.zephyr.message-quote")
+
+    /// ⌘C on a selected message: one pasteboard item, two faces — the
+    /// quote block for in-app compose pastes, plain sender-and-text for
+    /// everything else.
+    static func copyMessage(quote: String, plainText: String) {
+        let item = NSPasteboardItem()
+        item.setString(plainText, forType: .string)
+        item.setString(quote, forType: messageQuoteType)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([item])
+    }
+
+    static func pasteboardMessageQuote() -> String? {
+        NSPasteboard.general.string(forType: messageQuoteType)
+    }
+    #endif
+
     static func setAppBadge(_ count: Int) {
         #if canImport(AppKit)
         NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : ""

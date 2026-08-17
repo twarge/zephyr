@@ -568,3 +568,71 @@ func daySeparatorLabel(for date: Date) -> String {
     }
     return date.formatted(date: .abbreviated, time: .omitted)
 }
+
+// MARK: - Sharing
+
+#if canImport(UIKit)
+/// Items staged for the system share sheet.
+struct SharePayload: Identifiable {
+    let id = UUID()
+    let items: [Any]
+}
+
+/// The system share sheet (AirDrop, Messages, Save to Files, print…) as
+/// sheet content. `onComplete` must clear the presenting state — the
+/// controller's completion dismisses only the UIKit side, and a stale
+/// item binding would re-present.
+struct ShareActivityView: UIViewControllerRepresentable {
+    let items: [Any]
+    var onComplete: () -> Void = {}
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(
+            activityItems: items, applicationActivities: nil)
+        let complete = onComplete
+        controller.completionWithItemsHandler = { _, _, _, _ in
+            complete()
+        }
+        return controller
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+#endif
+
+/// A message as share-sheet text — attribution line plus plain content, so
+/// it pastes cleanly and prints legibly. Parses the message's HTML when the
+/// caller has no cached MessageContent at hand.
+@MainActor
+func messageShareText(_ message: Message, content: MessageContent? = nil) -> String {
+    let parsed = content ?? ContentParser.parse(html: message.content)
+    let date = Date(timeIntervalSince1970: TimeInterval(message.timestamp))
+        .formatted(date: .abbreviated, time: .shortened)
+    return "\(message.senderFullName) — \(date)\n\(parsed.plainText)"
+}
+
+/// A copied message's plain-text face — what a paste outside the app
+/// lands: just the sender and the message text.
+@MainActor
+func messageCopyText(_ message: Message, content: MessageContent? = nil) -> String {
+    let parsed = content ?? ContentParser.parse(html: message.content)
+    return "\(message.senderFullName): \(parsed.plainText)"
+}
+
+/// Zulip's quote block from a message's raw markdown — quote-and-reply,
+/// forwarding, and ⌘C copy share this form:
+///   @_**Name|id** [said](permalink):
+///   ```quote
+///   …
+///   ```
+@MainActor
+func messageQuoteBlock(_ message: Message, raw: String, store: PerAccountStore) -> String {
+    let link = ConversationKey.permalink(to: message, in: store)
+    return """
+        @_**\(message.senderFullName)|\(message.senderId)** [said](\(link)):
+        ```quote
+        \(raw)
+        ```
+
+        """
+}

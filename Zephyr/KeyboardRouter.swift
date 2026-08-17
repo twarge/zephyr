@@ -1,6 +1,7 @@
 import SwiftUI
 import TipKit
 import ZulipAPI
+import ZulipContent
 import ZulipModel
 #if canImport(AppKit)
 import AppKit
@@ -17,9 +18,16 @@ import AppKit
 ///
 /// The keymap (matching the web/desktop app where the concept exists):
 ///   j / ↓, k / ↑     next / previous message
+///   ⇧↓ / ⇧↑          extend the selection as a range from its anchor
+///                    (⇧-click ranges to the clicked message, ⌘-click
+///                    toggles membership; single-message actions target
+///                    the anchor, copy/share/export take the whole set)
 ///   → / ←            next / previous attachment of the selected message
 ///                    (← at the first attachment returns to the message;
 ///                    at message level it focuses the sidebar)
+///   ⇧→ / ⇧←          extend the attachment selection as a list range
+///                    (⌘-click toggles, ⇧-click ranges; within one
+///                    message only — Space/share/export take the set)
 ///   Space            Quick Look the selected attachment, or all of the
 ///                    selected message's attachments
 ///   r / Return       reply (focus compose; cross-channel feeds jump first)
@@ -36,7 +44,116 @@ import AppKit
 final class KeyboardRouter {
     weak var store: PerAccountStore?
     weak var activeFeed: MessageListModel?
-    var selectedMessageId: Int?
+
+    /// Anchor of the message selection — the target of every single-message
+    /// action (reply, edit, react, attachment traversal). Writes through
+    /// here collapse any extended selection back to just this message,
+    /// which is exactly what plain clicks, j/k moves, and clears mean.
+    var selectedMessageId: Int? {
+        get { anchorMessageId }
+        set {
+            anchorMessageId = newValue
+            selectedMessageIds = newValue.map { [$0] } ?? []
+            extensionTip = nil
+        }
+    }
+
+    private var anchorMessageId: Int?
+    /// The full selection (⌘-click toggles, ⇧-click/⇧↓/⇧↑ ranges); always
+    /// contains the anchor when non-empty. Batch actions (copy, share,
+    /// export) consume this; everything else targets the anchor.
+    private(set) var selectedMessageIds: Set<Int> = []
+    /// The moving end of a ⇧ range extension (the feed reveals it on
+    /// change, the way it reveals the anchor).
+    private(set) var extensionTip: Int?
+
+    /// ⌘-click: toggle membership; the toggled message becomes the anchor
+    /// (removing the anchor promotes its nearest remaining neighbor).
+    func toggleMessageSelection(_ id: Int) {
+        clearMediaSelection()
+        extensionTip = nil
+        if selectedMessageIds.contains(id) {
+            selectedMessageIds.remove(id)
+            if selectedMessageIds.isEmpty {
+                anchorMessageId = nil
+            } else if anchorMessageId == id {
+                // Message ids are chronological — nearest id, nearest row.
+                anchorMessageId = selectedMessageIds.min {
+                    abs($0 - id) < abs($1 - id)
+                }
+            }
+        } else {
+            selectedMessageIds.insert(id)
+            anchorMessageId = id
+        }
+    }
+
+    /// ⇧-click: the selection becomes the transcript range from the anchor
+    /// to the clicked message (replacing any scattered ⌘ picks, like list
+    /// views do). Without an anchor it's a plain selection.
+    func extendMessageSelection(to id: Int) {
+        clearMediaSelection()
+        guard let anchor = anchorMessageId,
+              let ids = activeFeed?.messages.map(\.id),
+              let anchorIndex = ids.firstIndex(of: anchor),
+              let targetIndex = ids.firstIndex(of: id)
+        else {
+            selectedMessageId = id
+            return
+        }
+        selectedMessageIds = Set(
+            anchorIndex <= targetIndex
+                ? ids[anchorIndex...targetIndex] : ids[targetIndex...anchorIndex])
+        extensionTip = id
+    }
+
+    /// ⇧↓/⇧↑: steps the range's tip; the selection is always the
+    /// anchor-to-tip transcript range (stepping back across the anchor
+    /// shrinks, then grows the other side).
+    private func extendSelection(_ delta: Int) -> Bool {
+        guard let feed = activeFeed, !feed.messages.isEmpty else { return false }
+        let ids = feed.messages.map(\.id)
+        guard let anchor = anchorMessageId,
+              let anchorIndex = ids.firstIndex(of: anchor)
+        else { return moveSelection(delta) }
+        clearMediaSelection()
+        let tipIndex = extensionTip.flatMap { ids.firstIndex(of: $0) } ?? anchorIndex
+        let newIndex = min(max(tipIndex + delta, 0), ids.count - 1)
+        extensionTip = ids[newIndex]
+        selectedMessageIds = Set(
+            anchorIndex <= newIndex
+                ? ids[anchorIndex...newIndex] : ids[newIndex...anchorIndex])
+        if newIndex == 0 && delta < 0 {
+            Task { await feed.fetchOlder() }
+        }
+        return true
+    }
+
+    /// Drops extended members (e.g. ones that left the feed window),
+    /// keeping the anchor selected.
+    func collapseSelectionToAnchor() {
+        selectedMessageId = anchorMessageId
+    }
+
+    /// The selection in transcript order — what batch copy/share/export
+    /// iterate. Falls back to ascending id order (chronological in Zulip)
+    /// for members outside the active feed's window.
+    func orderedSelection() -> [Int] {
+        guard !selectedMessageIds.isEmpty else {
+            return anchorMessageId.map { [$0] } ?? []
+        }
+        if let ids = activeFeed?.messages.map(\.id) {
+            let ordered = ids.filter(selectedMessageIds.contains)
+            if ordered.count == selectedMessageIds.count { return ordered }
+        }
+        return selectedMessageIds.sorted()
+    }
+
+    func selectedMessages() -> [Message] {
+        orderedSelection().compactMap { id in
+            store?.messages[id] ?? activeFeed?.messages.first { $0.id == id }
+        }
+    }
     #if canImport(AppKit)
     /// The window this router serves — with multiple main windows open,
     /// each router handles keys only while its own window is key.
@@ -74,7 +191,25 @@ final class KeyboardRouter {
     /// (message selection lands a beat after the click); plain state
     /// survives. Space routes through the key monitor (macOS) or the detail
     /// pane's key handler (iOS) to the registered Quick Look action.
-    var selectedMediaId: String?
+    ///
+    /// Anchor of the attachment selection; writes collapse any extended
+    /// attachment selection, mirroring `selectedMessageId`.
+    var selectedMediaId: String? {
+        get { anchorMediaId }
+        set {
+            anchorMediaId = newValue
+            selectedMediaIds = newValue.map { [$0] } ?? []
+            mediaExtensionTip = nil
+            selectedMediaQuickLook = nil
+        }
+    }
+
+    private var anchorMediaId: String?
+    /// The full attachment selection (⌘-click toggles, ⇧-click/⇧→/⇧←
+    /// range) — scoped to the anchor message's attachments, never across
+    /// messages. Space, share, and export consume it.
+    private(set) var selectedMediaIds: Set<String> = []
+    private var mediaExtensionTip: String?
     @ObservationIgnored private var selectedMediaQuickLook: (() -> Void)?
 
     /// Registered by the visible feed: a message's attachments in render
@@ -96,6 +231,17 @@ final class KeyboardRouter {
     @ObservationIgnored private(set) var mediaTapInFlight = false
 
     func selectMedia(_ id: String, quickLook: @escaping () -> Void) {
+        #if canImport(AppKit)
+        // ⌘/⇧-clicks are multi-select gestures, arbitrated against the
+        // row's simultaneous tap — never a plain attachment selection.
+        if let flags = NSApp.currentEvent?.modifierFlags {
+            let mods = flags.intersection([.command, .shift])
+            if !mods.isEmpty {
+                reportModifierClick(media: id, command: mods.contains(.command))
+                return
+            }
+        }
+        #endif
         selectedMediaId = id
         selectedMediaQuickLook = quickLook
         mediaTapInFlight = true
@@ -106,15 +252,138 @@ final class KeyboardRouter {
     }
 
     /// Keyboard-side selection: no view-registered action — Space routes
-    /// through `presentAttachments` instead.
+    /// through `presentAttachments` instead (the setter drops any stale
+    /// click-registered one).
     private func selectAttachment(_ attachment: MessageAttachment) {
         selectedMediaId = attachment.mediaId
-        selectedMediaQuickLook = nil
     }
 
     func clearMediaSelection() {
         selectedMediaId = nil
+    }
+
+    // MARK: Modifier-click arbitration
+
+    /// A ⌘/⇧-click on an attachment fires the row's simultaneous tap too,
+    /// in unspecified order — and unlike plain clicks, toggles aren't
+    /// order-independent. Both handlers report what they saw; a single
+    /// resolver scheduled after the event acts once, with complete
+    /// information: attachment reports win over their row's.
+    @ObservationIgnored private var pendingRowClick: (id: Int, command: Bool)?
+    @ObservationIgnored private var pendingMediaClick: (id: String, command: Bool)?
+    @ObservationIgnored private var modifierClickScheduled = false
+
+    func reportModifierClick(message id: Int, command: Bool) {
+        pendingRowClick = (id, command)
+        scheduleModifierClickResolution()
+    }
+
+    func reportModifierClick(media id: String, command: Bool) {
+        pendingMediaClick = (id, command)
+        scheduleModifierClickResolution()
+    }
+
+    private func scheduleModifierClickResolution() {
+        guard !modifierClickScheduled else { return }
+        modifierClickScheduled = true
+        Task { resolveModifierClick() }
+    }
+
+    private func resolveModifierClick() {
+        modifierClickScheduled = false
+        let media = pendingMediaClick
+        let row = pendingRowClick
+        pendingMediaClick = nil
+        pendingRowClick = nil
+        if let media {
+            // Attachment multi-select lives within one message: a click
+            // in a different message restarts the selection there (the
+            // old message's attachment picks must not merge in).
+            if let messageId = row?.id, selectedMessageId != messageId {
+                selectedMessageId = messageId
+                clearMediaSelection()
+            }
+            if media.command {
+                toggleAttachmentSelection(media.id)
+            } else {
+                extendAttachmentSelection(to: media.id)
+            }
+        } else if let row {
+            if row.command {
+                toggleMessageSelection(row.id)
+            } else {
+                extendMessageSelection(to: row.id)
+            }
+        }
+    }
+
+    // MARK: Attachment multi-selection
+
+    /// ⌘-click: toggle membership; the toggled attachment anchors
+    /// (removing the anchor promotes its nearest list neighbor).
+    private func toggleAttachmentSelection(_ id: String) {
+        mediaExtensionTip = nil
         selectedMediaQuickLook = nil
+        if selectedMediaIds.contains(id) {
+            selectedMediaIds.remove(id)
+            if selectedMediaIds.isEmpty {
+                anchorMediaId = nil
+            } else if anchorMediaId == id {
+                let list = selectedMessageId.flatMap { attachmentList?($0) } ?? []
+                let removed = list.firstIndex { $0.mediaId == id }
+                anchorMediaId = selectedMediaIds.min { a, b in
+                    guard let removed,
+                          let ai = list.firstIndex(where: { $0.mediaId == a }),
+                          let bi = list.firstIndex(where: { $0.mediaId == b })
+                    else { return a < b }
+                    return abs(ai - removed) < abs(bi - removed)
+                }
+            }
+        } else {
+            selectedMediaIds.insert(id)
+            anchorMediaId = id
+        }
+    }
+
+    /// ⇧-click: the attachment selection becomes the list range from the
+    /// anchor to the clicked attachment; without an anchor, a plain
+    /// selection.
+    private func extendAttachmentSelection(to id: String) {
+        guard let anchor = anchorMediaId,
+              let messageId = selectedMessageId,
+              let list = attachmentList?(messageId),
+              let anchorIndex = list.firstIndex(where: { $0.mediaId == anchor }),
+              let targetIndex = list.firstIndex(where: { $0.mediaId == id })
+        else {
+            selectedMediaId = id
+            return
+        }
+        let range = anchorIndex <= targetIndex
+            ? anchorIndex...targetIndex : targetIndex...anchorIndex
+        selectedMediaIds = Set(range.map { list[$0].mediaId })
+        mediaExtensionTip = id
+        selectedMediaQuickLook = nil
+    }
+
+    /// ⇧→/⇧←: steps the attachment range's tip within the anchor
+    /// message's list (entering plain selection when nothing is selected).
+    private func extendAttachmentSelection(_ delta: Int) -> Bool {
+        guard let messageId = selectedMessageId,
+              let list = attachmentList?(messageId), !list.isEmpty
+        else { return false }
+        guard let anchor = anchorMediaId,
+              let anchorIndex = list.firstIndex(where: { $0.mediaId == anchor })
+        else { return moveAttachmentSelection(delta) }
+        let tipIndex = mediaExtensionTip.flatMap { tip in
+            list.firstIndex { $0.mediaId == tip }
+        } ?? anchorIndex
+        let newIndex = min(max(tipIndex + delta, 0), list.count - 1)
+        mediaExtensionTip = list[newIndex].mediaId
+        let range = anchorIndex <= newIndex
+            ? anchorIndex...newIndex : newIndex...anchorIndex
+        selectedMediaIds = Set(range.map { list[$0].mediaId })
+        selectedMediaQuickLook = nil
+        return true
     }
 
     @ObservationIgnored var currentDestination: Destination?
@@ -163,10 +432,21 @@ final class KeyboardRouter {
     /// Format-menu actions (⌘B/⌘I/⌘K) applied by the visible compose bar.
     @ObservationIgnored var applyFormat: ((ComposeFormat) -> Void)?
 
-    private var selectedMessage: Message? {
+    /// The selected message (also the share target on iOS).
+    var selectedMessage: Message? {
         guard let selectedMessageId else { return nil }
         return store?.messages[selectedMessageId]
             ?? activeFeed?.messages.first { $0.id == selectedMessageId }
+    }
+
+    /// The selected attachments in list order, resolved through the feed's
+    /// registered list (empty when none are selected or no feed is
+    /// registered) — the share/export set.
+    func selectedAttachments() -> [MessageAttachment] {
+        guard !selectedMediaIds.isEmpty, let messageId = selectedMessageId,
+              let list = attachmentList?(messageId)
+        else { return [] }
+        return list.filter { selectedMediaIds.contains($0.mediaId) }
     }
 
     // MARK: Keymap
@@ -249,23 +529,27 @@ final class KeyboardRouter {
     }
 
     func handleSpace() -> Bool {
-        // Click-registered action first: a clicked image keeps its
-        // transcript-wide session, chips their view-local preview.
-        if selectedMediaId != nil, let selectedMediaQuickLook {
+        // Click-registered action first (single selections only): a
+        // clicked image keeps its transcript-wide session, chips their
+        // view-local preview.
+        if selectedMediaIds.count <= 1, selectedMediaId != nil,
+           let selectedMediaQuickLook {
             selectedMediaQuickLook()
             return true
         }
-        // Keyboard-selected attachment, or the message itself: one Quick
-        // Look session over the message's attachments, focused on the
-        // selection (or the first).
+        // Keyboard-selected attachment(s), or the message itself: one
+        // Quick Look session — over the multi-selection when there is
+        // one, else the whole message — focused on the anchor.
         guard let messageId = selectedMessageId,
               let list = attachmentList?(messageId), !list.isEmpty,
               let presentAttachments
         else { return false }
+        let scope = selectedMediaIds.count > 1
+            ? list.filter { selectedMediaIds.contains($0.mediaId) } : list
         let focus = selectedMediaId.flatMap { id in
-            list.firstIndex { $0.mediaId == id }
+            scope.firstIndex { $0.mediaId == id }
         } ?? 0
-        presentAttachments(list, focus)
+        presentAttachments(scope, focus)
         return true
     }
 
@@ -423,20 +707,84 @@ final class KeyboardRouter {
                 .intersection([.command, .option, .control])
             let keyCode = event.keyCode
             let character = event.charactersIgnoringModifiers?.first
-            // ⌘V with media on the pasteboard uploads into the compose bar;
-            // plain-text pastes stay native.
+            // ⌘V with a copied message pastes its quote block into
+            // compose; with media on the pasteboard it uploads into the
+            // compose bar; plain-text pastes stay native.
             if modifiers == .command, character == "v" {
                 let consumed = MainActor.assumeIsolated {
-                    router.handlePasteMedia()
+                    router.handlePasteQuote() || router.handlePasteMedia()
+                }
+                return consumed ? nil : event
+            }
+            // ⌘C with a message selected copies it dual-faced (quote block
+            // for compose, sender-and-text for everything else); native
+            // copy wins for any live text selection.
+            if modifiers == .command, character == "c" {
+                let consumed = MainActor.assumeIsolated {
+                    router.handleCopyMessage()
                 }
                 return consumed ? nil : event
             }
             guard modifiers.isEmpty else { return event }
+            let shift = event.modifierFlags.contains(.shift)
             let consumed = MainActor.assumeIsolated {
-                router.handleMonitorKey(keyCode: keyCode, character: character)
+                router.handleMonitorKey(
+                    keyCode: keyCode, character: character, shift: shift)
             }
             return consumed ? nil : event
         }
+    }
+
+    /// ⌘C with messages selected: writes the pasteboard dual-faced — the
+    /// Zulip quote blocks (chained, transcript order) for in-app compose
+    /// pastes, stacked sender-and-text lines for every other target.
+    /// Native copy wins while a text input is focused or message text is
+    /// drag-selected.
+    private func handleCopyMessage() -> Bool {
+        guard let keyWindow = NSApp.keyWindow, keyWindow == hostWindow
+        else { return false }
+        if let responder = keyWindow.firstResponder,
+           responder is NSTextView || responder is NSTextField {
+            return false
+        }
+        guard let store else { return false }
+        let messages = selectedMessages()
+        guard !messages.isEmpty else { return false }
+        if Platform.currentTextSelection() != nil { return false }
+        Task {
+            var quotes: [String] = []
+            var plains: [String] = []
+            for message in messages {
+                let raw = await store.fetchRawContent(message.id)
+                    ?? ContentParser.parse(html: message.content).plainText
+                quotes.append(messageQuoteBlock(message, raw: raw, store: store))
+                plains.append(messageCopyText(message))
+            }
+            // Each quote block ends in a blank line, so plain
+            // concatenation reads as separate quotes in compose.
+            Platform.copyMessage(
+                quote: quotes.joined(),
+                plainText: plains.joined(separator: "\n"))
+        }
+        return true
+    }
+
+    /// A copied message pastes into the compose draft as its quote block;
+    /// any other focused text input (search, message editor) keeps the
+    /// native paste, which lands the plain-text face.
+    private func handlePasteQuote() -> Bool {
+        guard let keyWindow = NSApp.keyWindow, keyWindow == hostWindow,
+              let quote = Platform.pasteboardMessageQuote(),
+              let insertIntoCompose
+        else { return false }
+        if let responder = keyWindow.firstResponder,
+           responder is NSTextView || responder is NSTextField,
+           !composeInputFocused {
+            return false
+        }
+        insertIntoCompose(quote)
+        focusCompose?()
+        return true
     }
 
     /// Pasted files upload directly; pasted image *data* (screenshots,
@@ -460,7 +808,9 @@ final class KeyboardRouter {
         return true
     }
 
-    private func handleMonitorKey(keyCode: UInt16, character: Character?) -> Bool {
+    private func handleMonitorKey(
+        keyCode: UInt16, character: Character?, shift: Bool = false
+    ) -> Bool {
         // Only for this router's own window (not other main windows,
         // Settings, sheets, or popovers).
         guard let keyWindow = NSApp.keyWindow, keyWindow == hostWindow
@@ -486,11 +836,11 @@ final class KeyboardRouter {
         switch keyCode {
         case 123:
             // ← steps back through attachments, or hands focus to the
-            // sidebar from message level.
-            return handleLeftArrow()
-        case 124: return handleRightArrow()
-        case 126: return handleUpArrow()
-        case 125: return handleDownArrow()
+            // sidebar from message level; ⇧← extends the attachment range.
+            return shift ? extendAttachmentSelection(-1) : handleLeftArrow()
+        case 124: return shift ? extendAttachmentSelection(1) : handleRightArrow()
+        case 126: return shift ? extendSelection(-1) : handleUpArrow()
+        case 125: return shift ? extendSelection(1) : handleDownArrow()
         case 36, 76: return handleReturn()
         case 53: return handleEscape()
         case 49: return handleSpace()
@@ -547,6 +897,7 @@ struct ShortcutsHelpView: View {
         ("Navigation", [
             ("j  or  ↓", "Next message"),
             ("k  or  ↑", "Previous message"),
+            ("⇧↓ / ⇧↑", "Extend message selection"),
             ("n", "Next unread topic"),
             ("p", "Next unread direct message"),
             ("a", "Combined feed"),
@@ -555,6 +906,7 @@ struct ShortcutsHelpView: View {
             ("⇧S", "Go to channel of selected message"),
             ("→", "Next attachment of selected message"),
             ("←", "Previous attachment (or focus sidebar)"),
+            ("⇧→ / ⇧←", "Extend attachment selection"),
             ("/", "Search"),
             ("Esc", "Clear selection"),
         ]),
@@ -570,6 +922,7 @@ struct ShortcutsHelpView: View {
             ("+", "React 👍 to selected message"),
             ("*", "Star / unstar selected message"),
             ("Space", "Quick Look selected message's attachments"),
+            ("⌘C", "Copy selection (pastes into compose as quotes)"),
             ("⌘1…⌘9", "Switch server"),
         ]),
     ]

@@ -359,6 +359,14 @@ struct MessageFeedList: View {
                             else { return }
                             revealSelection(newId, previous: old, proxy: proxy)
                         }
+                        // ⇧↓/⇧↑ range extension moves the tip, not the
+                        // anchor — follow it into view the same way.
+                        .onChange(of: keys.extensionTip) { old, newTip in
+                            guard let newTip,
+                                  model.messages.contains(where: { $0.id == newTip })
+                            else { return }
+                            revealSelection(newTip, previous: old, proxy: proxy)
+                        }
                         .overlay(alignment: .bottomTrailing) {
                             if !nearBottom || !model.haveNewest {
                                 Button {
@@ -413,6 +421,12 @@ struct MessageFeedList: View {
                !model.messages.contains(where: { $0.id == selected }) {
                 keys.selectedMessageId = nil
                 keys.clearMediaSelection()
+            } else if !keys.selectedMessageIds.allSatisfy({ id in
+                model.messages.contains { $0.id == id }
+            }) {
+                // Extended members that aren't in this feed collapse the
+                // selection back to its anchor.
+                keys.collapseSelectionToAnchor()
             }
             quickLook.orderedNodes = { orderedImageNodes() }
             keys.attachmentList = { messageId in
@@ -478,6 +492,7 @@ struct MessageFeedList: View {
                 showHeader: showHeader, cache: cache,
                 useMatchHighlights: useMatchHighlights,
                 isKeySelected: keys.selectedMessageId == message.id,
+                isMultiSelected: keys.selectedMessageIds.contains(message.id),
                 isLinkTarget: keys.highlightMessageId == message.id,
                 showsConversationJump: showsConversationJump)
                 // Actual viewport visibility, not lazy-stack realization
@@ -632,7 +647,10 @@ struct MessageFeedList: View {
             var lastAssert = clock.now
             while clock.now < deadline {
                 try? await Task.sleep(for: .milliseconds(10))
-                guard keys.selectedMessageId == id else { return }
+                // Anchor reveals abandon when the anchor moves on; tip
+                // reveals (⇧ extension) when the tip does.
+                guard keys.selectedMessageId == id || keys.extensionTip == id
+                else { return }
                 if revealSettled(id, movingUp: movingUp) {
                     revealLog("settled", id: id)
                     return
@@ -1194,6 +1212,8 @@ struct MessageRow: View {
     let cache: MessageContentCache
     var useMatchHighlights = false
     var isKeySelected = false
+    /// Extended-selection member (lighter ring than the anchor's).
+    var isMultiSelected = false
     /// A followed message link flashes its target.
     var isLinkTarget = false
     /// Set in cross-conversation feeds: the control row swaps quoted
@@ -1210,6 +1230,10 @@ struct MessageRow: View {
     @State private var showReadReceipts = false
     @State private var showForward = false
     @State private var showRemindPicker = false
+    #if !os(macOS)
+    /// Context-menu Share…: the message as text, staged for the sheet.
+    @State private var sharePayload: SharePayload?
+    #endif
     #if os(iOS)
     /// Live horizontal swipe translation (right = mark unread, left =
     /// toggle star); springs back after release.
@@ -1327,14 +1351,21 @@ struct MessageRow: View {
         .background(
             isLinkTarget ? Color.yellow.opacity(0.22) : .clear,
             in: RoundedRectangle(cornerRadius: 6))
-        // Selection reads as a system-highlight outline, not a fill.
+        // Selection reads as a system-highlight outline, not a fill; the
+        // anchor gets the full ring, extended members a lighter one.
         // While an attachment inside the message is selected, only its
         // accent ring shows — the message stays the keyboard context
         // (reply/star/j/k) without reading as a second selection.
         .overlay {
-            if isKeySelected && keys.selectedMediaId == nil {
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(Self.selectionColor, lineWidth: 2)
+            if keys.selectedMediaId == nil {
+                if isKeySelected {
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Self.selectionColor, lineWidth: 2)
+                } else if isMultiSelected {
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(
+                            Self.selectionColor.opacity(0.45), lineWidth: 2)
+                }
             }
         }
         // The whole row rect is clickable/right-clickable even where it's
@@ -1379,15 +1410,31 @@ struct MessageRow: View {
                 .animation(.easeOut(duration: 0.6), value: isUnread)
         }
         // Click/tap selects (like the web app); simultaneous so links and
-        // buttons inside the row keep working.
+        // buttons inside the row keep working. macOS: ⌘-click toggles
+        // multi-selection membership, ⇧-click ranges from the anchor.
         .simultaneousGesture(TapGesture().onEnded {
+            #if os(macOS)
+            let flags = NSApp.currentEvent?.modifierFlags ?? []
+            if flags.contains(.command) || flags.contains(.shift) {
+                // Deferred: an attachment under the same click reports
+                // too, and its report wins (the router arbitrates).
+                keys.reportModifierClick(
+                    message: message.id, command: flags.contains(.command))
+            } else {
+                keys.selectedMessageId = message.id
+                // A tap on an attachment also lands here (simultaneous,
+                // in unspecified order); that tap's media selection must
+                // survive — any other row tap drops a stale one.
+                if !keys.mediaTapInFlight {
+                    keys.clearMediaSelection()
+                }
+            }
+            #else
             keys.selectedMessageId = message.id
-            // A tap on an attachment also lands here (simultaneous, in
-            // unspecified order); that tap's media selection must
-            // survive — any other row tap drops a stale one.
             if !keys.mediaTapInFlight {
                 keys.clearMediaSelection()
             }
+            #endif
             // Clicking a message reclaims arrow keys from the sidebar.
             keys.focusMessages?()
         })
@@ -1584,6 +1631,12 @@ struct MessageRow: View {
                 remind(at: date)
             }
         }
+        #if !os(macOS)
+        .sheet(item: $sharePayload) { payload in
+            ShareActivityView(items: payload.items) { sharePayload = nil }
+                .presentationDetents([.medium, .large])
+        }
+        #endif
     }
 
     static func reminderTimeText(_ reminder: Reminder) -> String {
@@ -1699,6 +1752,14 @@ struct MessageRow: View {
             Button("Mark as Unread from Here", systemImage: "message.badge") {
                 markUnreadFromHere()
             }
+            #if !os(macOS)
+            // Out-of-app share (AirDrop, Messages, save, print) — distinct
+            // from Forward, which stays inside Zulip.
+            Button("Share…", systemImage: "square.and.arrow.up") {
+                sharePayload = SharePayload(
+                    items: [messageShareText(message, content: content)])
+            }
+            #endif
             Button("Copy Text", systemImage: "doc.on.doc") {
                 Platform.copyToPasteboard(content.plainText)
             }
@@ -1745,23 +1806,6 @@ struct MessageRow: View {
         
     }
 
-    /// Zulip's quote-and-reply block, from the raw markdown:
-    ///   @_**Name|id** [said](permalink):
-    ///   ```quote
-    ///   …
-    ///   ```
-    /// The quoted block shared by quote-and-reply and forwarding.
-    private func quoteBlock(_ raw: String) -> String {
-        let link = ConversationKey.permalink(to: message, in: store)
-        return """
-            @_**\(message.senderFullName)|\(message.senderId)** [said](\(link)):
-            ```quote
-            \(raw)
-            ```
-
-            """
-    }
-
     /// The web app's "Mark as unread from here", with visibility-based read
     /// marking paused so the on-screen rows don't immediately re-mark.
     private func markUnreadFromHere() {
@@ -1783,7 +1827,7 @@ struct MessageRow: View {
     private func forwardMessage(to destination: Destination) {
         Task {
             let raw = await store.fetchRawContent(message.id) ?? content.plainText
-            let quote = quoteBlock(raw)
+            let quote = messageQuoteBlock(message, raw: raw, store: store)
             keys.navigate?(destination)
             try? await Task.sleep(for: .milliseconds(300))
             keys.insertIntoCompose?(quote)
@@ -1811,7 +1855,7 @@ struct MessageRow: View {
             } else {
                 raw = await store.fetchRawContent(message.id) ?? content.plainText
             }
-            let quote = quoteBlock(raw)
+            let quote = messageQuoteBlock(message, raw: raw, store: store)
             // Cross-conversation feeds have no compose: jump to the
             // message's conversation first, then insert.
             if keys.insertIntoCompose == nil,
