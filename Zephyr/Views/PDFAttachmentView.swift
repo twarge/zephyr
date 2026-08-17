@@ -35,13 +35,12 @@ struct PDFAttachmentView: View {
     @State private var pageCount = 0
     @State private var localFileURL: URL?
     @State private var quickLookURL: URL?
-    @FocusState private var isSelected: Bool
 
     private var filename: String {
         (href as NSString).lastPathComponent.removingPercentEncoding ?? "PDF"
     }
 
-    private var mediaId: String { "pdf:\(href)" }
+    private var mediaId: String { MessageAttachment.pdf(href: href).mediaId }
 
     /// The card takes the first page's real aspect ratio (the rendered
     /// thumbnail preserves it), fit within bounds; portrait-ish placeholder
@@ -56,11 +55,7 @@ struct PDFAttachmentView: View {
     }
 
     private var showsSelection: Bool {
-        #if os(macOS)
         keys?.selectedMediaId == mediaId
-        #else
-        isSelected
-        #endif
     }
 
     var body: some View {
@@ -103,24 +98,10 @@ struct PDFAttachmentView: View {
         }
         .onTapGesture(count: 2) { openInDefaultViewer() }
         .simultaneousGesture(TapGesture().onEnded {
-            #if os(macOS)
             keys?.selectMedia(mediaId) {
                 Task { quickLookURL = await download() }
             }
-            #else
-            isSelected = true
-            #endif
         })
-        #if os(iOS)
-        .focusable()
-        .focused($isSelected)
-        .focusEffectDisabled()
-        .onKeyPress(.space) {
-            guard isSelected else { return .ignored }
-            Task { quickLookURL = await download() }
-            return .handled
-        }
-        #endif
         .quickLookPreview($quickLookURL)
         .task(id: href) { await loadThumbnail() }
         .accessibilityLabel("PDF attachment: \(filename)")

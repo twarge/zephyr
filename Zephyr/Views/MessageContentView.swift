@@ -436,20 +436,15 @@ private struct MediaAttachmentChip: View {
     @Environment(KeyboardRouter.self) private var keys: KeyboardRouter?
     @State private var localFileURL: URL?
     @State private var quickLookURL: URL?
-    @FocusState private var isSelected: Bool
 
     private var filename: String {
         (path as NSString).lastPathComponent.removingPercentEncoding ?? kind
     }
 
-    private var mediaId: String { "chip:\(path)" }
+    private var mediaId: String { MessageAttachment.chip(path: path).mediaId }
 
     private var showsSelection: Bool {
-        #if os(macOS)
         keys?.selectedMediaId == mediaId
-        #else
-        isSelected
-        #endif
     }
 
     var body: some View {
@@ -480,24 +475,10 @@ private struct MediaAttachmentChip: View {
             }
         }
         .simultaneousGesture(TapGesture().onEnded {
-            #if os(macOS)
             keys?.selectMedia(mediaId) {
                 Task { quickLookURL = await download() }
             }
-            #else
-            isSelected = true
-            #endif
         })
-        #if os(iOS)
-        .focusable()
-        .focused($isSelected)
-        .focusEffectDisabled()
-        .onKeyPress(.space) {
-            guard isSelected else { return .ignored }
-            Task { quickLookURL = await download() }
-            return .handled
-        }
-        #endif
         .quickLookPreview($quickLookURL)
         // Drag out: the receiver gets the file, real name intact.
         .onDrag { mediaDragProvider(path: path, connection: connection) }
@@ -510,6 +491,65 @@ private struct MediaAttachmentChip: View {
         let url = await downloadMediaFile(path: path, connection: connection)
         localFileURL = url
         return url
+    }
+}
+
+/// One selectable/previewable attachment of a message. The id builders are
+/// the single source of truth shared by the rendering views (which draw the
+/// selection ring for a matching `KeyboardRouter.selectedMediaId`) and the
+/// keyboard-traversal list below.
+struct MessageAttachment: Equatable {
+    let mediaId: String
+    /// Server path of the previewable file (the original for images).
+    let path: String
+
+    static func image(_ node: ImageNode) -> MessageAttachment {
+        MessageAttachment(
+            mediaId: "img:\(node.src)|\(node.originalSrc ?? "")",
+            path: node.originalSrc ?? node.src)
+    }
+
+    static func pdf(href: String) -> MessageAttachment {
+        MessageAttachment(mediaId: "pdf:\(href)", path: href)
+    }
+
+    static func chip(path: String) -> MessageAttachment {
+        MessageAttachment(mediaId: "chip:\(path)", path: path)
+    }
+
+    /// A message's attachments in render order — the ←/→ traversal and
+    /// whole-message Quick Look set. Mirrors BlockNodeView's cases.
+    /// Spoiler/collapsible content stays out: it's hidden until revealed,
+    /// and neither traversal nor preview should leak it.
+    static func list(in content: MessageContent) -> [MessageAttachment] {
+        list(in: content.blocks)
+    }
+
+    private static func list(in blocks: [BlockNode]) -> [MessageAttachment] {
+        var out: [MessageAttachment] = []
+        for block in blocks {
+            switch block {
+            case .paragraph(let inlines):
+                out.append(contentsOf: pdfAttachmentLinks(inlines).map { .pdf(href: $0.href) })
+            case .image(let node):
+                out.append(.image(node))
+            case .imageGallery(let images):
+                out.append(contentsOf: images.map { .image($0) })
+            case .video(let node) where !node.isEmbed:
+                out.append(.chip(path: node.href))
+            case .audio(let src):
+                out.append(.chip(path: src))
+            case .blockquote(let nested):
+                out.append(contentsOf: list(in: nested))
+            case .unorderedList(let items), .orderedList(_, let items):
+                for item in items {
+                    out.append(contentsOf: list(in: item))
+                }
+            default:
+                break
+            }
+        }
+        return out
     }
 }
 
@@ -611,6 +651,13 @@ final class FeedQuickLook {
             window = [node]
         }
         let paths = window.map { $0.originalSrc ?? $0.src }
+        let focusPathIndex = paths.firstIndex(of: node.originalSrc ?? node.src) ?? 0
+        await present(paths: paths, focusIndex: focusPathIndex, connection: connection)
+    }
+
+    /// Downloads and presents an explicit attachment set (one message's),
+    /// panel focused at `focusIndex`.
+    func present(paths: [String], focusIndex: Int, connection: ApiConnection) async {
         var downloaded: [Int: URL] = [:]
         await withTaskGroup(of: (Int, URL?).self) { group in
             for (index, path) in paths.enumerated() {
@@ -624,9 +671,8 @@ final class FeedQuickLook {
         }
         let ordered = paths.indices.compactMap { downloaded[$0] }
         guard !ordered.isEmpty else { return }
-        let focusPath = node.originalSrc ?? node.src
         items = ordered
-        selection = paths.firstIndex(of: focusPath).flatMap { downloaded[$0] } ?? ordered.first
+        selection = downloaded[focusIndex] ?? ordered.first
     }
 }
 
@@ -787,18 +833,13 @@ private struct MessageImageView: View {
     @State private var animation: AnimatedFrames?
     @State private var localFileURL: URL?
     @State private var quickLookURL: URL?
-    @FocusState private var isSelected: Bool
 
-    private var mediaId: String { "img:\(node.src)|\(node.originalSrc ?? "")" }
+    private var mediaId: String { MessageAttachment.image(node).mediaId }
 
-    /// macOS selection lives in the router (survives row re-renders, which
-    /// were killing FocusState a beat after each click); iOS keeps focus.
+    /// Selection lives in the router on both platforms (it survives row
+    /// re-renders, which were killing FocusState a beat after each click).
     private var showsSelection: Bool {
-        #if os(macOS)
         keys?.selectedMediaId == mediaId
-        #else
-        isSelected
-        #endif
     }
 
     private var displaySize: CGSize {
@@ -840,22 +881,8 @@ private struct MessageImageView: View {
         // Simultaneous: fires on the first click immediately — a plain tap
         // gesture would wait out the double-click window.
         .simultaneousGesture(TapGesture().onEnded {
-            #if os(macOS)
             keys?.selectMedia(mediaId) { quickLook() }
-            #else
-            isSelected = true
-            #endif
         })
-        #if os(iOS)
-        .focusable()
-        .focused($isSelected)
-        .focusEffectDisabled()
-        .onKeyPress(.space) {
-            guard isSelected else { return .ignored }
-            quickLook()
-            return .handled
-        }
-        #endif
         .quickLookPreview($quickLookURL)
         .task(id: node.src) { await load() }
         .accessibilityLabel(node.alt ?? "Image")

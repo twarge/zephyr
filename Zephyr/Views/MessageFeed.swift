@@ -412,13 +412,30 @@ struct MessageFeedList: View {
             if let selected = keys.selectedMessageId,
                !model.messages.contains(where: { $0.id == selected }) {
                 keys.selectedMessageId = nil
+                keys.clearMediaSelection()
             }
             quickLook.orderedNodes = { orderedImageNodes() }
+            keys.attachmentList = { messageId in
+                guard let message = model.messages.first(where: { $0.id == messageId }),
+                      MessageWidget.parse(message) == nil
+                else { return [] }
+                return MessageAttachment.list(in: cache.content(for: message))
+            }
+            keys.presentAttachments = { attachments, focusIndex in
+                Task {
+                    await quickLook.present(
+                        paths: attachments.map(\.path), focusIndex: focusIndex,
+                        connection: store.connection)
+                }
+            }
         }
         .onDisappear {
             if keys.activeFeed === model {
                 keys.activeFeed = nil
                 keys.selectedMessageId = nil
+                keys.clearMediaSelection()
+                keys.attachmentList = nil
+                keys.presentAttachments = nil
             }
         }
     }
@@ -897,8 +914,9 @@ struct MessageFeedList: View {
         // the selection, like Escape — rows and interactive content
         // consume their own taps first, so only misses land here.
         .onTapGesture {
-            guard keys.selectedMessageId != nil else { return }
+            guard keys.selectedMessageId != nil || keys.selectedMediaId != nil else { return }
             keys.selectedMessageId = nil
+            keys.clearMediaSelection()
         }
         .defaultScrollAnchor(.bottom)
         .scrollPosition(id: $anchorId, anchor: .bottom)
@@ -1310,8 +1328,11 @@ struct MessageRow: View {
             isLinkTarget ? Color.yellow.opacity(0.22) : .clear,
             in: RoundedRectangle(cornerRadius: 6))
         // Selection reads as a system-highlight outline, not a fill.
+        // While an attachment inside the message is selected, only its
+        // accent ring shows — the message stays the keyboard context
+        // (reply/star/j/k) without reading as a second selection.
         .overlay {
-            if isKeySelected {
+            if isKeySelected && keys.selectedMediaId == nil {
                 RoundedRectangle(cornerRadius: 6)
                     .strokeBorder(Self.selectionColor, lineWidth: 2)
             }
@@ -1361,6 +1382,12 @@ struct MessageRow: View {
         // buttons inside the row keep working.
         .simultaneousGesture(TapGesture().onEnded {
             keys.selectedMessageId = message.id
+            // A tap on an attachment also lands here (simultaneous, in
+            // unspecified order); that tap's media selection must
+            // survive — any other row tap drops a stale one.
+            if !keys.mediaTapInFlight {
+                keys.clearMediaSelection()
+            }
             // Clicking a message reclaims arrow keys from the sidebar.
             keys.focusMessages?()
         })

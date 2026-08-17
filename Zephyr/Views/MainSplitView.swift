@@ -957,10 +957,12 @@ struct MainSplitView: View {
         case .return: return keys.handleReturn()
         case .escape: return keys.handleEscape()
         case .leftArrow:
-            // ← hands focus to the sidebar; its native navigation takes
+            // ← steps back through attachments; from message level it
+            // hands focus to the sidebar, whose native navigation takes
             // over until → (or a message tap) returns.
-            keys.focusSidebar?()
-            return true
+            return keys.handleLeftArrow()
+        case .rightArrow: return keys.handleRightArrow()
+        case .space: return keys.handleSpace()
         default:
             guard let character = press.characters.first else { return false }
             return keys.handleCharacter(character)

@@ -17,6 +17,11 @@ import AppKit
 ///
 /// The keymap (matching the web/desktop app where the concept exists):
 ///   j / ↓, k / ↑     next / previous message
+///   → / ←            next / previous attachment of the selected message
+///                    (← at the first attachment returns to the message;
+///                    at message level it focuses the sidebar)
+///   Space            Quick Look the selected attachment, or all of the
+///                    selected message's attachments
 ///   r / Return       reply (focus compose; cross-channel feeds jump first)
 ///   e                edit selected message (own messages)
 ///   +                react 👍            *   star / unstar
@@ -64,24 +69,47 @@ final class KeyboardRouter {
     var highlightMessageId: Int?
     var showHelp = false
 
-    /// Selected media (image/PDF) in the transcript. Router state rather than
-    /// FocusState: focus dies when the row re-renders (message selection
-    /// lands a beat after the click); plain state survives. Space routes
-    /// through the key monitor to the registered Quick Look action.
+    /// Selected media (image/PDF) in the transcript, both platforms. Router
+    /// state rather than FocusState: focus dies when the row re-renders
+    /// (message selection lands a beat after the click); plain state
+    /// survives. Space routes through the key monitor (macOS) or the detail
+    /// pane's key handler (iOS) to the registered Quick Look action.
     var selectedMediaId: String?
     @ObservationIgnored private var selectedMediaQuickLook: (() -> Void)?
+
+    /// Registered by the visible feed: a message's attachments in render
+    /// order (←/→ traversal), and a Quick Look session over a set of them.
+    @ObservationIgnored var attachmentList: ((Int) -> [MessageAttachment])?
+    @ObservationIgnored var presentAttachments: (([MessageAttachment], Int) -> Void)?
 
     /// Registered by the compose bar and sidebar: selecting media blurs text
     /// inputs, so Space reaches the monitor instead of typing a space.
     @ObservationIgnored var blurCompose: (() -> Void)?
     @ObservationIgnored var blurSearch: (() -> Void)?
 
+    /// True while the tap that selected media is still dispatching. A tap
+    /// on an attachment fires the row's simultaneous tap too, and the
+    /// callback order is unspecified — the row checks this to leave the
+    /// same tap's media selection alone (any other row tap clears a stale
+    /// one). Both callbacks run synchronously within the event's delivery,
+    /// so a reset enqueued on the main actor lands after them.
+    @ObservationIgnored private(set) var mediaTapInFlight = false
+
     func selectMedia(_ id: String, quickLook: @escaping () -> Void) {
         selectedMediaId = id
         selectedMediaQuickLook = quickLook
+        mediaTapInFlight = true
+        Task { mediaTapInFlight = false }
         QuickLookNavigationTip.imageSelected.sendDonation()
         blurCompose?()
         blurSearch?()
+    }
+
+    /// Keyboard-side selection: no view-registered action — Space routes
+    /// through `presentAttachments` instead.
+    private func selectAttachment(_ attachment: MessageAttachment) {
+        selectedMediaId = attachment.mediaId
+        selectedMediaQuickLook = nil
     }
 
     func clearMediaSelection() {
@@ -185,6 +213,25 @@ final class KeyboardRouter {
     func handleDownArrow() -> Bool { moveSelection(1) }
     func handleReturn() -> Bool { reply() }
 
+    /// → enters/advances the selected message's attachments.
+    func handleRightArrow() -> Bool {
+        guard selectedMessageId != nil else { return false }
+        return moveAttachmentSelection(1)
+    }
+
+    /// ← steps back through attachments (first attachment → back to the
+    /// message); with none selected it keeps its pane-handoff meaning.
+    func handleLeftArrow() -> Bool {
+        if selectedMediaId != nil {
+            if !moveAttachmentSelection(-1) {
+                clearMediaSelection()
+            }
+            return true
+        }
+        focusSidebar?()
+        return true
+    }
+
     func handleEscape() -> Bool {
         if showHelp {
             showHelp = false
@@ -202,8 +249,23 @@ final class KeyboardRouter {
     }
 
     func handleSpace() -> Bool {
-        guard let selectedMediaQuickLook else { return false }
-        selectedMediaQuickLook()
+        // Click-registered action first: a clicked image keeps its
+        // transcript-wide session, chips their view-local preview.
+        if selectedMediaId != nil, let selectedMediaQuickLook {
+            selectedMediaQuickLook()
+            return true
+        }
+        // Keyboard-selected attachment, or the message itself: one Quick
+        // Look session over the message's attachments, focused on the
+        // selection (or the first).
+        guard let messageId = selectedMessageId,
+              let list = attachmentList?(messageId), !list.isEmpty,
+              let presentAttachments
+        else { return false }
+        let focus = selectedMediaId.flatMap { id in
+            list.firstIndex { $0.mediaId == id }
+        } ?? 0
+        presentAttachments(list, focus)
         return true
     }
 
@@ -222,6 +284,29 @@ final class KeyboardRouter {
         clearMediaSelection()
         if index == 0 && delta < 0 {
             Task { await feed.fetchOlder() }
+        }
+        return true
+    }
+
+    /// Steps the attachment selection within the selected message: +1 from
+    /// message level enters at the first attachment, −1 past the first
+    /// returns to message level; the far end clamps (the key is consumed).
+    private func moveAttachmentSelection(_ delta: Int) -> Bool {
+        guard let messageId = selectedMessageId,
+              let list = attachmentList?(messageId), !list.isEmpty
+        else { return false }
+        guard let current = selectedMediaId.flatMap({ id in
+            list.firstIndex { $0.mediaId == id }
+        }) else {
+            guard delta > 0 else { return false }
+            selectAttachment(list[0])
+            return true
+        }
+        let target = current + delta
+        if target < 0 {
+            clearMediaSelection()
+        } else if target < list.count {
+            selectAttachment(list[target])
         }
         return true
     }
@@ -400,9 +485,10 @@ final class KeyboardRouter {
         }
         switch keyCode {
         case 123:
-            // ← from messages hands focus to the sidebar.
-            focusSidebar?()
-            return true
+            // ← steps back through attachments, or hands focus to the
+            // sidebar from message level.
+            return handleLeftArrow()
+        case 124: return handleRightArrow()
         case 126: return handleUpArrow()
         case 125: return handleDownArrow()
         case 36, 76: return handleReturn()
@@ -467,6 +553,8 @@ struct ShortcutsHelpView: View {
             ("t", "Recent conversations"),
             ("s", "Go to topic of selected message"),
             ("⇧S", "Go to channel of selected message"),
+            ("→", "Next attachment of selected message"),
+            ("←", "Previous attachment (or focus sidebar)"),
             ("/", "Search"),
             ("Esc", "Clear selection"),
         ]),
@@ -481,7 +569,7 @@ struct ShortcutsHelpView: View {
         ("Actions", [
             ("+", "React 👍 to selected message"),
             ("*", "Star / unstar selected message"),
-            ("Space", "Quick Look selected image"),
+            ("Space", "Quick Look selected message's attachments"),
             ("⌘1…⌘9", "Switch server"),
         ]),
     ]
