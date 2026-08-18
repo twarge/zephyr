@@ -44,6 +44,18 @@ struct ZephyrApp: App {
             }
         }
         .defaultSize(width: 720, height: 640)
+        // Double-clicked messages open standalone — sized for keeping a
+        // poll or todo list in the corner of an eye.
+        WindowGroup(for: MessageWindow.self) { $window in
+            if let window {
+                MessageWindowRootView(window: window)
+                    .environment(model)
+                    #if !os(macOS)
+                    .focusEffectDisabled()
+                    #endif
+            }
+        }
+        .defaultSize(width: 460, height: 420)
         #if os(macOS)
         Settings {
             SettingsView()

@@ -53,6 +53,7 @@
 		8F49328DDC70D304E6FE4130 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4093541134383EBC6243F280 /* ShareViewController.swift */; };
 		90244AA61E53F58A6D9AA222 /* OpenQuicklyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149499DA07B92E143F965C6C /* OpenQuicklyView.swift */; };
 		9511713F095ADB5FAF8E1593 /* MessageWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */; };
+		7F8A9B0C1D2E3F4A5B6C7D8E /* MessageWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D5E6F7A8B9C0D1E2F3A4B5C /* MessageWindowView.swift */; };
 		9890C37B9865F39B29EDF88D /* DraftSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4611B74F89FA03A6C524C9 /* DraftSync.swift */; };
 		9C2971F9C1F755CB722B43E8 /* MainSplitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B2CA9D7CF1C06AA7B0A1D52 /* MainSplitView.swift */; };
 		A2B018739699F9B2B4505207 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C17B1B985702AAFC4C30468A /* SidebarView.swift */; };
@@ -136,6 +137,7 @@
 		4D9C40C777893FC7275F955B /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
 		52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadSummary.swift; sourceTree = "<group>"; };
 		68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWidgetView.swift; sourceTree = "<group>"; };
+		4D5E6F7A8B9C0D1E2F3A4B5C /* MessageWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWindowView.swift; sourceTree = "<group>"; };
 		6948BF0E49980622700ED102 /* OutboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxView.swift; sourceTree = "<group>"; };
 		7106DB9D273F41FC9FE36ABF /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		726EF7F3ABF31AB4CF23C545 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -224,6 +226,7 @@
 				067FC7012EB2D00C26EF2527 /* MessageContentView.swift */,
 				3BD4EE59C8A33FC99AA510C3 /* MessageFeed.swift */,
 				68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */,
+				4D5E6F7A8B9C0D1E2F3A4B5C /* MessageWindowView.swift */,
 				E7EBB59257B9154EAF76D934 /* NarrowFeedView.swift */,
 				B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */,
 				149499DA07B92E143F965C6C /* OpenQuicklyView.swift */,
@@ -525,6 +528,7 @@
 				685FD431FA29FEA255D3FBC1 /* MessageContentView.swift in Sources */,
 				BB931F8230B45BC90B104176 /* MessageFeed.swift in Sources */,
 				9511713F095ADB5FAF8E1593 /* MessageWidgetView.swift in Sources */,
+				7F8A9B0C1D2E3F4A5B6C7D8E /* MessageWindowView.swift in Sources */,
 				5F0FCA79F46D92DA6EF1091E /* NarrowFeedView.swift in Sources */,
 				7520AD45B999226B180174C7 /* NewConversationSheet.swift in Sources */,
 				0BC179CD59C27B54EA265364 /* NotificationManager.swift in Sources */,

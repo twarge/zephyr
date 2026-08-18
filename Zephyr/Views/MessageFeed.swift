@@ -1221,6 +1221,8 @@ struct MessageRow: View {
     var showsConversationJump = false
 
     @Environment(KeyboardRouter.self) private var keys
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
     @State private var hovering = false
     @State private var showReactionPicker = false
     @State private var editing = false
@@ -1327,6 +1329,13 @@ struct MessageRow: View {
                     }
                 } else if let widget = MessageWidget.parse(message) {
                     MessageWidgetView(widget: widget, store: store, messageId: message.id)
+                        // Polls/todos are what the message window is for;
+                        // surface its tip on one.
+                        .popoverTip(MessageWindowTip())
+                        .onAppear {
+                            MessageWindowTip.supportsMultipleWindows =
+                                supportsMultipleWindows
+                        }
                 } else {
                     MessageContentView(
                         content: content, connection: store.connection)
@@ -1438,6 +1447,18 @@ struct MessageRow: View {
             // Clicking a message reclaims arrow keys from the sidebar.
             keys.focusMessages?()
         })
+        // Double-click pops the message into its own window (the message
+        // sibling of the sidebar's detach) — handy for monitoring a poll
+        // or todo list. Plain .gesture, not simultaneous: interactive
+        // children (links, vote buttons, attachments with their own
+        // double-click) win where they hit-test.
+        .gesture(
+            TapGesture(count: 2).onEnded {
+                MessageWindowTip().invalidate(reason: .actionPerformed)
+                openWindow(value: MessageWindow(
+                    accountId: store.accountId, messageId: message.id))
+            },
+            isEnabled: supportsMultipleWindows)
         .onChange(of: editing) {
             // The inline editor's TextField must also silence single-key
             // navigation (it shares the detail focus scope).

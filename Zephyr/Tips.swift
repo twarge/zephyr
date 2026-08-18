@@ -61,6 +61,25 @@ struct DetachWindowTip: Tip {
     var image: Image? { Image(systemName: "rectangle.split.2x1") }
 }
 
+/// Anchored to the first poll or todo widget on screen: messages detach
+/// into their own windows too — made for monitoring exactly these.
+struct MessageWindowTip: Tip {
+    /// iPhone can't host extra scenes: the double-click gesture is
+    /// disabled there, so the tip must stay hidden with it.
+    @Parameter
+    static var supportsMultipleWindows: Bool = false
+
+    var rules: [Rule] {
+        #Rule(Self.$supportsMultipleWindows) { $0 == true }
+    }
+
+    var title: Text { Text("Messages in Their Own Windows") }
+    var message: Text? {
+        Text("Double-click a message to open it in a separate window — handy for keeping a poll or to-do list in view.")
+    }
+    var image: Image? { Image(systemName: "macwindow.on.rectangle") }
+}
+
 /// After the first image selection: Space + arrows drive Quick Look.
 struct QuickLookNavigationTip: Tip {
     static let imageSelected = Tips.Event(id: "imageSelected")
