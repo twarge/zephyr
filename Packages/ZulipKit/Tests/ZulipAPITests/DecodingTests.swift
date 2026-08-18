@@ -140,6 +140,18 @@ struct RouteRequestTests {
         #expect(request.formValue("idle_queue_timeout") == nil)
     }
 
+    @Test func absoluteMediaRequestAuthScopedToRealm() {
+        let connection = ApiConnection(
+            realmURL: URL(string: "https://Chat.Example.com")!,
+            email: "self@example.com", apiKey: "key")
+        let own = connection.authorizedURLRequest(
+            url: URL(string: "https://chat.example.com/user_uploads/2/ab/x.pdf")!)
+        #expect(own.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Basic ") == true)
+        let foreign = connection.authorizedURLRequest(
+            url: URL(string: "https://files.example.com/x.pdf")!)
+        #expect(foreign.value(forHTTPHeaderField: "Authorization") == nil)
+    }
+
     @Test func idleQueueTimeoutGatedByFeatureLevel() async throws {
         let transport = FakeTransport(script: [.json(Fixtures.registerJSON(queueId: "q1"))])
         let connection = ApiConnection(

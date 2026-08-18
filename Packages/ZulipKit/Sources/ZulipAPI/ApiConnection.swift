@@ -318,6 +318,20 @@ public final class ApiConnection: Sendable {
         try makeURLRequest(ApiRequest(method: .get, path: path, timeout: timeout))
     }
 
+    /// The variant for media links that arrive fully resolved: auth is
+    /// attached only when the URL is on this connection's realm — a foreign
+    /// host gets a plain request.
+    public func authorizedURLRequest(url: URL, timeout: Double = 60) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = timeout
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        if let authHeader,
+           url.host()?.lowercased() == realmURL.host()?.lowercased() {
+            request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        }
+        return request
+    }
+
     /// Session for media fetches: follows redirects but strips the
     /// Authorization header when redirected — Zulip Cloud redirects
     /// `/user_uploads/…` and `/avatar/…` to S3-backed CDNs, which reject

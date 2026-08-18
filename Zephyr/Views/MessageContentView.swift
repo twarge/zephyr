@@ -561,11 +561,13 @@ struct MessageAttachment: Equatable {
 }
 
 /// Fetches a media path (realm-relative with auth, or absolute) via the
-/// redirect-stripping media session.
+/// redirect-stripping media session. Absolute URLs on the connection's own
+/// realm are authenticated too — attachment links arrive fully resolved,
+/// and their downloads need auth just like relative paths do.
 func fetchMedia(path: String, connection: ApiConnection) async -> (Data, URLResponse)? {
     let request: URLRequest?
     if path.hasPrefix("http") {
-        request = URL(string: path).map { URLRequest(url: $0) }
+        request = URL(string: path).map { connection.authorizedURLRequest(url: $0) }
     } else {
         request = try? connection.authorizedURLRequest(path: path)
     }

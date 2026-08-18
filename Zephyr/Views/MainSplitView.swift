@@ -344,7 +344,27 @@ struct MainSplitView: View {
                         break  // The realm's, but nothing we handle → browser.
                     }
                 }
-                return .systemAction
+                // A link straight to a file (archive, doc, data…): the
+                // browser would only save it — download in-app instead.
+                // Unknown extensions ask the server which it is; pages and
+                // browser-rendered media still open in the browser.
+                switch FileLink.classify(url) {
+                case .download:
+                    downloadAttachment(url: url, connection: store.connection)
+                    return .handled
+                case .ambiguous:
+                    let connection = store.connection
+                    Task {
+                        if await Self.sniffIsFile(url) {
+                            downloadAttachment(url: url, connection: connection)
+                        } else {
+                            Platform.openExternalURL(url)
+                        }
+                    }
+                    return .handled
+                case .page:
+                    return .systemAction
+                }
             })
         .quickLookPreview($downloadPreviewURL)
     }
@@ -810,8 +830,18 @@ struct MainSplitView: View {
     /// (whose share sheet covers "Save to Files").
     private func downloadAttachment(url: URL, connection: ApiConnection) {
         Task {
+            // A failed fetch, or an HTML answer to a file link (the login
+            // wall of a realm we're not signed into), isn't the file —
+            // hand those to the browser, which can sign in.
             guard let (data, response) = await fetchMedia(
-                path: url.absoluteString, connection: connection) else { return }
+                path: url.absoluteString, connection: connection),
+                (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? true,
+                response.mimeType != "text/html"
+                    || url.pathExtension.lowercased().hasPrefix("htm")
+            else {
+                Platform.openExternalURL(url)
+                return
+            }
             let filename = response.suggestedFilename
                 ?? url.lastPathComponent.removingPercentEncoding
                 ?? "attachment"
@@ -839,6 +869,20 @@ struct MainSplitView: View {
             downloadPreviewURL = temp
             #endif
         }
+    }
+
+    /// Only the server can classify an unknown extension: a quick HEAD —
+    /// HTML (or nothing) means a page for the browser, anything else is a
+    /// file worth downloading.
+    private static func sniffIsFile(_ url: URL) async -> Bool {
+        var request = URLRequest(url: url, timeoutInterval: 10)
+        request.httpMethod = "HEAD"
+        guard let (_, response) = try? await ApiConnection.mediaSession.data(for: request),
+              let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode),
+              let mime = response.mimeType?.lowercased()
+        else { return false }
+        return mime != "text/html" && mime != "application/xhtml+xml"
     }
 
     /// Routes a parsed narrow link: directly when it's this window's
