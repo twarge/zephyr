@@ -90,6 +90,9 @@ struct MainSplitView: View {
     /// A downloaded attachment presented via Quick Look (iOS; macOS saves
     /// to Downloads instead).
     @State private var downloadPreviewURL: URL?
+    /// In-flight attachment downloads: drives the toolbar progress ring,
+    /// and repeat clicks on a URL already downloading are ignored.
+    @State private var downloads: [AttachmentDownload] = []
     #if os(iOS)
     @FocusState private var detailFocused: Bool
     #endif
@@ -765,6 +768,13 @@ struct MainSplitView: View {
                 }
             }
             #endif
+            // Slow attachment downloads earn a progress ring (quick ones
+            // finish before `revealed` flips and never appear).
+            if downloads.contains(where: \.revealed) {
+                ToolbarItem(placement: .automatic) {
+                    DownloadProgressButton(downloads: downloads)
+                }
+            }
             if store.isRecoveringEventStream {
                 #if os(visionOS)
                 ToolbarItem(placement: .automatic) {
@@ -827,48 +837,78 @@ struct MainSplitView: View {
 
     /// Downloads an attachment through the account's authenticated session:
     /// macOS saves into Downloads and reveals it; iOS presents Quick Look
-    /// (whose share sheet covers "Save to Files").
+    /// (whose share sheet covers "Save to Files"). The body streams to disk
+    /// with the toolbar ring tracking it (and cancelling it).
     private func downloadAttachment(url: URL, connection: ApiConnection) {
-        Task {
-            // A failed fetch, or an HTML answer to a file link (the login
-            // wall of a realm we're not signed into), isn't the file —
-            // hand those to the browser, which can sign in.
-            guard let (data, response) = await fetchMedia(
-                path: url.absoluteString, connection: connection),
-                (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? true,
-                response.mimeType != "text/html"
-                    || url.pathExtension.lowercased().hasPrefix("htm")
-            else {
-                Platform.openExternalURL(url)
-                return
-            }
-            let filename = response.suggestedFilename
-                ?? url.lastPathComponent.removingPercentEncoding
-                ?? "attachment"
-            #if os(macOS)
-            guard let downloads = FileManager.default.urls(
-                for: .downloadsDirectory, in: .userDomainMask).first else { return }
-            var destination = downloads.appendingPathComponent(filename)
-            if FileManager.default.fileExists(atPath: destination.path) {
-                let base = (filename as NSString).deletingPathExtension
-                let ext = (filename as NSString).pathExtension
-                destination = downloads.appendingPathComponent(
-                    "\(base)-\(Int(Date.now.timeIntervalSince1970))"
-                        + (ext.isEmpty ? "" : ".\(ext)"))
-            }
+        guard !downloads.contains(where: { $0.url == url }) else { return }
+        let download = AttachmentDownload(url: url)
+        downloads.append(download)
+        download.task = Task {
+            defer { downloads.removeAll { $0 === download } }
             do {
-                try data.write(to: destination)
-                NSWorkspace.shared.activateFileViewerSelecting([destination])
+                let outcome = try await connection.downloadFile(at: url) { received, total in
+                    Task { @MainActor in
+                        download.received = received
+                        download.total = total
+                    }
+                }
+                // A failed fetch, or an HTML answer to a file link (the
+                // login wall of a realm we're not signed into), isn't the
+                // file — hand those to the browser, which can sign in.
+                guard case .file(let temporary, let filename) = outcome else {
+                    Platform.openExternalURL(url)
+                    return
+                }
+                placeDownloadedFile(temporary, filename: filename)
             } catch {
-                // Sandbox without the Downloads entitlement, disk full…
+                // The ring's cancel already cleaned up its partial file;
+                // real failures get the browser fallback.
+                if !(error is CancellationError),
+                   (error as? URLError)?.code != .cancelled {
+                    Platform.openExternalURL(url)
+                }
             }
-            #else
-            let temp = FileManager.default.temporaryDirectory
-                .appendingPathComponent(filename)
-            try? data.write(to: temp)
-            downloadPreviewURL = temp
-            #endif
         }
+        // The ring appears only for downloads still running after a beat —
+        // the common small attachment comes and goes without toolbar churn.
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            download.revealed = true
+        }
+    }
+
+    /// Puts a finished download where the platform wants it: Downloads plus
+    /// a Finder reveal on macOS, Quick Look's temp directory on iOS.
+    private func placeDownloadedFile(_ temporary: URL, filename: String) {
+        #if os(macOS)
+        guard let downloadsDir = FileManager.default.urls(
+            for: .downloadsDirectory, in: .userDomainMask).first else { return }
+        var destination = downloadsDir.appendingPathComponent(filename)
+        if FileManager.default.fileExists(atPath: destination.path) {
+            let base = (filename as NSString).deletingPathExtension
+            let ext = (filename as NSString).pathExtension
+            destination = downloadsDir.appendingPathComponent(
+                "\(base)-\(Int(Date.now.timeIntervalSince1970))"
+                    + (ext.isEmpty ? "" : ".\(ext)"))
+        }
+        do {
+            try FileManager.default.moveItem(at: temporary, to: destination)
+            NSWorkspace.shared.activateFileViewerSelecting([destination])
+        } catch {
+            // Sandbox without the Downloads entitlement, disk full…
+            try? FileManager.default.removeItem(at: temporary)
+        }
+        #else
+        let preview = FileManager.default.temporaryDirectory
+            .appendingPathComponent(filename)
+        try? FileManager.default.removeItem(at: preview)
+        do {
+            try FileManager.default.moveItem(at: temporary, to: preview)
+            downloadPreviewURL = preview
+        } catch {
+            try? FileManager.default.removeItem(at: temporary)
+        }
+        #endif
     }
 
     /// Only the server can classify an unknown extension: a quick HEAD —

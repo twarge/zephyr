@@ -22,6 +22,7 @@
 		24004A382336BF5AF3BA2749 /* OutboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6948BF0E49980622700ED102 /* OutboxView.swift */; };
 		24DEDBB195B9F821E1B69A87 /* ZulipModel in Frameworks */ = {isa = PBXBuildFile; productRef = 3F931C6D5BB1265C8E2B261B /* ZulipModel */; };
 		25FE3BFD9203521A1B8E2231 /* DraftsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BABEF92E892ACE3DBCEF0E5 /* DraftsView.swift */; };
+		299A23FEDA899300B4B4BECF /* AttachmentDownloadProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CD0F4E9EE27675541C64AB3 /* AttachmentDownloadProgress.swift */; };
 		33A594A0E80E868623E9F348 /* ZephyrTVApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EC76EB5F5AC4DBFA4F47ED0 /* ZephyrTVApp.swift */; };
 		3D07A493DA42E4D98B0DA530 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9C40C777893FC7275F955B /* Platform.swift */; };
 		3F863C40AC99B169668E1DD0 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7106DB9D273F41FC9FE36ABF /* AppModel.swift */; };
@@ -131,6 +132,7 @@
 		43C09E2CE84013DBCE92521D /* KeyboardRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardRouter.swift; sourceTree = "<group>"; };
 		475341E1FDF45E220243460A /* RecentConversationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentConversationsView.swift; sourceTree = "<group>"; };
 		48877EEA1FAFF61902860BD0 /* ComposeBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeBar.swift; sourceTree = "<group>"; };
+		4CD0F4E9EE27675541C64AB3 /* AttachmentDownloadProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentDownloadProgress.swift; sourceTree = "<group>"; };
 		4D9C40C777893FC7275F955B /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
 		52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadSummary.swift; sourceTree = "<group>"; };
 		68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWidgetView.swift; sourceTree = "<group>"; };
@@ -206,6 +208,7 @@
 			children = (
 				28D32E783B00DD974C9E8971 /* AccountWindowView.swift */,
 				C5C28BE5A0DA537D6EB9C97A /* AllChannelsView.swift */,
+				4CD0F4E9EE27675541C64AB3 /* AttachmentDownloadProgress.swift */,
 				1758438236E9536CC8336895 /* ChannelFeedView.swift */,
 				FB37E72A9961DF2EB9503B4D /* ChannelTopicsView.swift */,
 				48877EEA1FAFF61902860BD0 /* ComposeBar.swift */,
@@ -503,6 +506,7 @@
 				F6C17F7A2914098D59DE30AB /* AllChannelsView.swift in Sources */,
 				3F863C40AC99B169668E1DD0 /* AppModel.swift in Sources */,
 				70E8661B18208CE08B86BFFA /* AppStateStore.swift in Sources */,
+				299A23FEDA899300B4B4BECF /* AttachmentDownloadProgress.swift in Sources */,
 				C2C81E0729324AE820EB8883 /* ChannelFeedView.swift in Sources */,
 				A395FC333148C3BE66791CC5 /* ChannelTopicsView.swift in Sources */,
 				BCBA356FC8FA69612CEAE5DA /* ComposeBar.swift in Sources */,
