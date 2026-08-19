@@ -275,6 +275,95 @@ struct StoreEventTests {
         #expect(narrow.contains(#""operand":10"#))
     }
 
+    @Test func markChannelAllReadSweepsChannelNarrowAccumulatingCount() async throws {
+        let transport = FakeTransport(
+            script: [
+                // First batch stops short; the second reaches the newest.
+                .json(#"""
+                    {"result": "success", "msg": "", "processed_count": 5000,
+                     "updated_count": 4800, "first_processed_id": 1,
+                     "last_processed_id": 5000, "found_oldest": true, "found_newest": false}
+                    """#),
+                .json(#"""
+                    {"result": "success", "msg": "", "processed_count": 240,
+                     "updated_count": 240, "first_processed_id": 5001,
+                     "last_processed_id": 5240, "found_oldest": false, "found_newest": true}
+                    """#),
+            ], defaultResponse: .hang)
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        store.markChannelAllRead(10)
+        #expect(store.markReadSweep == .running(markedCount: 0))
+        try await eventually("both batches sent") { transport.requests.count == 2 }
+
+        let first = transport.requests[0]
+        #expect(first.path.hasSuffix("/messages/flags/narrow"))
+        #expect(first.formValue("op") == "add")
+        #expect(first.formValue("flag") == "read")
+        #expect(first.formValue("anchor") == "oldest")
+        #expect(first.formValue("include_anchor") == "true")
+        #expect(first.formValue("num_before") == "0")
+        let narrow = try #require(first.formValue("narrow"))
+        #expect(narrow.contains(#""operator":"channel""#))
+        #expect(narrow.contains(#""operand":10"#))
+
+        let second = transport.requests[1]
+        #expect(second.formValue("anchor") == "5000")
+        #expect(second.formValue("include_anchor") == "false")
+        try await eventually("sweep finished with the summed count") {
+            store.markReadSweep == .finished(markedCount: 5040)
+        }
+    }
+
+    @Test func markAllReadSweepsEmptyNarrow() async throws {
+        let transport = FakeTransport(
+            defaultResponse: .json(#"""
+                {"result": "success", "msg": "", "processed_count": 7,
+                 "updated_count": 7, "first_processed_id": 1,
+                 "last_processed_id": 7, "found_oldest": true, "found_newest": true}
+                """#))
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        store.markAllRead()
+        try await eventually("flags sent") { transport.requests.count == 1 }
+        let request = transport.requests[0]
+        #expect(request.path.hasSuffix("/messages/flags/narrow"))
+        #expect(request.formValue("op") == "add")
+        #expect(request.formValue("narrow") == "[]")
+        try await eventually("sweep finished") {
+            store.markReadSweep == .finished(markedCount: 7)
+        }
+    }
+
+    @Test func markAllReadFailureSurfacesInSweepState() async throws {
+        let transport = FakeTransport(defaultResponse: .networkError)
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        store.markAllRead()
+        try await eventually("sweep failed") { store.markReadSweep == .failed }
+    }
+
     @Test func setChannelColorSendsStringPropertyAndAppliesOptimistically() async throws {
         let transport = FakeTransport(
             defaultResponse: .json(#"{"result": "success", "msg": ""}"#))

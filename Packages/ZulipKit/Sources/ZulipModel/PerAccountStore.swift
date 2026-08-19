@@ -116,6 +116,19 @@ public final class PerAccountStore {
     /// "connecting" banner.
     public var isRecoveringEventStream = false
 
+    /// A bulk "mark all messages as read" sweep: non-nil while one runs,
+    /// or while its outcome lingers for the sidebar's status footer.
+    public enum MarkReadSweep: Equatable, Sendable {
+        /// Batches are still processing; the count is messages marked so far.
+        case running(markedCount: Int)
+        /// The sweep reached the newest message; lingers briefly, then clears.
+        case finished(markedCount: Int)
+        /// A batch failed (usually offline); lingers briefly, then clears.
+        case failed
+    }
+    public private(set) var markReadSweep: MarkReadSweep?
+    @ObservationIgnored private var markReadSweepGeneration = 0
+
     private let logger = Logger(subsystem: "com.twarge.zephyr", category: "store")
 
     public init(
@@ -345,6 +358,67 @@ public final class PerAccountStore {
     public func markChannelUnread(_ streamId: Int) {
         removeReadFlag(
             narrow: [NarrowElement("channel", .int(streamId))], startingAt: .oldest)
+    }
+
+    /// The web app's "Mark all messages as read" for a channel: adds the
+    /// read flag across the channel's full server-side history. (Unlike
+    /// `markChannelRead`, which clears only locally-known unreads, this
+    /// sweep also reaches history the register snapshot never carried.)
+    public func markChannelAllRead(_ streamId: Int) {
+        addReadFlag(narrow: [NarrowElement("channel", .int(streamId))])
+    }
+
+    /// "Mark all messages as read" account-wide (the Combined and Recent
+    /// sidebar views): an empty narrow spans every message.
+    public func markAllRead() {
+        addReadFlag(narrow: [])
+    }
+
+    /// Adds the read flag over a narrow's full server-side history, oldest
+    /// first — the web app's batched mark-all-as-read loop. Local unreads
+    /// clear as each batch's update_message_flags event arrives;
+    /// `markReadSweep` publishes the running count for the sidebar's
+    /// status footer. One sweep runs at a time.
+    private func addReadFlag(narrow: [NarrowElement]) {
+        if case .running = markReadSweep { return }
+        markReadSweepGeneration += 1
+        let generation = markReadSweepGeneration
+        markReadSweep = .running(markedCount: 0)
+        let connection = connection
+        Task {
+            var anchor = MessageAnchor.oldest
+            var includeAnchor = true
+            var marked = 0
+            // Unbounded in principle (a first sweep can cover years of
+            // history); the cap is runaway protection only.
+            for _ in 0..<1000 {
+                do {
+                    let result = try await connection.updateMessageFlagsForNarrow(
+                        anchor: anchor, includeAnchor: includeAnchor,
+                        numBefore: 0, numAfter: 5000,
+                        narrow: narrow, op: .add, flag: "read")
+                    marked += result.updatedCount
+                    guard !result.foundNewest, let last = result.lastProcessedId else { break }
+                    markReadSweep = .running(markedCount: marked)
+                    anchor = .id(last)
+                    includeAnchor = false
+                } catch {
+                    markReadSweep = .failed
+                    await clearMarkReadSweep(after: generation)
+                    return
+                }
+            }
+            markReadSweep = .finished(markedCount: marked)
+            await clearMarkReadSweep(after: generation)
+        }
+    }
+
+    /// Clears the lingering sweep outcome unless a newer sweep replaced it.
+    private func clearMarkReadSweep(after generation: Int) async {
+        try? await Task.sleep(for: .seconds(4))
+        if markReadSweepGeneration == generation {
+            markReadSweep = nil
+        }
     }
 
     /// Clears the read flag from the anchor to the narrow's newest message,

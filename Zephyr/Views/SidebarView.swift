@@ -339,9 +339,19 @@ struct SidebarView: View {
                         "Recent", icon: "clock", tag: .recentConversations,
                         badge: 0)
                         .popoverTip(DetachWindowTip())
+                        .contextMenu {
+                            Button("Mark All Messages as Read") {
+                                store.markAllRead()
+                            }
+                        }
                     viewRow(
                         "Combined", icon: "line.3.horizontal", tag: .combinedFeed,
                         badge: store.unreads.totalCount)
+                        .contextMenu {
+                            Button("Mark All Messages as Read") {
+                                store.markAllRead()
+                            }
+                        }
                     viewRow(
                         "Mentions", icon: "at", tag: .mentions,
                         badge: store.unreads.mentionIds.count)
@@ -415,6 +425,13 @@ struct SidebarView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             SearchReturnCapture(search: search, searchFocused: searchFocused) {
                 runSearch(recordInRecents: true)
+            }
+        }
+        // Mail-style activity footer: a bulk mark-as-read sweep shows its
+        // running count here, then the outcome lingers briefly.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let sweep = store.markReadSweep {
+                MarkReadStatusFooter(sweep: sweep)
             }
         }
         .listStyle(.sidebar)
@@ -658,6 +675,9 @@ struct SidebarView: View {
                             Button("Copy Link to Channel") {
                                 Platform.copyToPasteboard(
                                     ConversationKey.channelLink(streamId: streamId, in: store))
+                            }
+                            Button("Mark All Messages as Read") {
+                                store.markChannelAllRead(streamId)
                             }
                             Button("Mark All Messages as Unread") {
                                 keys.readMarkingPaused = true
@@ -922,6 +942,55 @@ private struct DraftRow: View {
             Spacer(minLength: 0)
         }
         .sidebarRowPadding()
+    }
+}
+
+/// The sidebar's activity footer while a "mark all messages as read"
+/// sweep runs (Mail-style): spinner and running count batch by batch,
+/// then the total — or a failure — lingering briefly.
+private struct MarkReadStatusFooter: View {
+    let sweep: PerAccountStore.MarkReadSweep
+
+    var body: some View {
+        HStack(spacing: 6) {
+            switch sweep {
+            case .running:
+                ProgressView()
+                    .controlSize(.mini)
+            case .finished:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .dimsWhenWindowInactive()
+            case .failed:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.yellow)
+                    .dimsWhenWindowInactive()
+            }
+            Text(label)
+                .monospacedDigit()
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.bar)
+    }
+
+    private var label: String {
+        switch sweep {
+        case .running(let count):
+            count > 0
+                ? "Marking messages as read… \(count.formatted())"
+                : "Marking messages as read…"
+        case .finished(let count):
+            count == 1
+                ? "Marked 1 message as read"
+                : "Marked \(count.formatted()) messages as read"
+        case .failed:
+            "Couldn't mark messages as read"
+        }
     }
 }
 
