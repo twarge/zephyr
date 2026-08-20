@@ -59,7 +59,9 @@ public final class MessageListModel: Identifiable {
     /// reads must not overwrite its answer (even an empty one).
     private var serverDidRespond = false
     /// The first unread message at open time — the "NEW" marker's position.
-    /// Set once by the initial fetch and left stable as reading proceeds.
+    /// Set by the initial fetch and left stable as reading proceeds; a warm
+    /// reopen re-aims it at the first unread that arrived while the model
+    /// was parked (`reaimUnreadMarker`).
     public private(set) var firstUnreadMarkerId: Int?
 
     /// A first-unread window whose newest fetched message is older than
@@ -94,6 +96,26 @@ public final class MessageListModel: Identifiable {
     /// is stale exactly when this turns false.
     public func isBound(to store: PerAccountStore) -> Bool {
         self.store === store
+    }
+
+    /// The oldest unread newer than `newestId` (nil accepts any unread) —
+    /// the logical resume point when a feed parked at the bottom reopens
+    /// after messages arrived. Pure: callable from view init.
+    public func firstUnreadId(after newestId: Int?) -> Int? {
+        messages.first { message in
+            guard !(message.flags ?? []).contains("read") else { return false }
+            guard let newestId else { return true }
+            return message.id > newestId
+        }?.id
+    }
+
+    /// Re-aims the NEW marker at a warm reopen (the id from
+    /// `firstUnreadId(after:)`). Separate from the query so views can
+    /// decide in init — pure, re-run on every parent re-evaluation — and
+    /// mutate once on appear.
+    public func reaimUnreadMarker(to id: Int) {
+        guard messages.contains(where: { $0.id == id }) else { return }
+        firstUnreadMarkerId = id
     }
 
     // MARK: Fetching

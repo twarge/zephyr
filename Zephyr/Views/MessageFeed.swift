@@ -53,6 +53,10 @@ struct MessageFeedList: View {
     /// The mid-history restore ran (one-shot): re-appears of the same view
     /// (sheet dismissals) neither re-restore nor marker-nudge.
     @State private var didRestore = false
+    /// A warm reopen found unreads that arrived while the feed was parked
+    /// at the bottom: the NEW marker re-aims here on first appear
+    /// (consumed one-shot — init must stay side-effect free).
+    @State private var pendingMarkerReaim: Int?
     @State private var nearBottom = true
     @State private var quickLook = FeedQuickLook()
     @State private var pendingReadIds: Set<Int> = []
@@ -88,6 +92,19 @@ struct MessageFeedList: View {
         {
             restored = nil
         }
+        // A feed parked at the bottom reopens at the first unread that
+        // arrived while it was away — the logical resume point — not the
+        // physical bottom; without fresh arrivals the bottom restore
+        // stands. Decision only (this init re-runs on every parent
+        // re-evaluation); onAppear re-aims the marker once.
+        var reaimId: Int?
+        if case .bottom(let newestId) = restored,
+           let unreadId = model.firstUnreadId(after: newestId)
+        {
+            reaimId = unreadId
+            restored = nil
+        }
+        _pendingMarkerReaim = State(initialValue: reaimId)
         _restoredPosition = State(initialValue: restored)
         // The scroll target must be known BEFORE the first layout pass:
         // an onAppear write lands after it, re-targeting the lazy stack
@@ -100,7 +117,11 @@ struct MessageFeedList: View {
             case .bottom: Self.bottomAnchorId
             case .row(let id, _): "msg-\(id)"
             case nil:
-                model.firstUnreadMarkerId != nil ? "unread-marker" : Self.bottomAnchorId
+                // The re-aim targets the message row itself: the marker
+                // item doesn't exist until onAppear places it.
+                if let reaimId { "msg-\(reaimId)" }
+                else if model.firstUnreadMarkerId != nil { "unread-marker" }
+                else { Self.bottomAnchorId }
             }
         _anchorId = State(initialValue: initialAnchor)
     }
@@ -275,6 +296,14 @@ struct MessageFeedList: View {
                 ScrollViewReader { proxy in
                     feedScrollView
                         .onAppear {
+                            // Warm-reopen marker re-aim, deferred out of
+                            // init: place the NEW marker at the first
+                            // unread that arrived while parked, so the
+                            // settle pass below targets it.
+                            if let reaimId = pendingMarkerReaim {
+                                pendingMarkerReaim = nil
+                                model.reaimUnreadMarker(to: reaimId)
+                            }
                             // The binding (inner onAppear) has already put
                             // the target at the viewport bottom; once layout
                             // settles, nudge it up to the upper quarter.
@@ -994,7 +1023,7 @@ struct MessageFeedList: View {
             // onDisappear read unreliable.
             if let scrollMemory, new.containerHeight > 0 {
                 if nearBottom {
-                    scrollMemory.position = .bottom
+                    scrollMemory.position = .bottom(newestId: model.messages.last?.id)
                 } else if let (id, frame) = rowFrames.frames
                     .filter({ $0.value.maxY > 0 && $0.value.maxY <= new.containerHeight })
                     .max(by: { $0.value.maxY < $1.value.maxY })

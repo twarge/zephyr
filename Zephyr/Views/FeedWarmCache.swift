@@ -4,8 +4,11 @@ import ZulipModel
 /// Where a parked feed's viewport sat when the user navigated away.
 enum FeedScrollPosition {
     /// Sticky bottom: restore shows the newest messages, exactly as a
-    /// live feed at the bottom would.
-    case bottom
+    /// live feed at the bottom would. `newestId` is the window's newest
+    /// message at park time — a reopen compares it against the unreads
+    /// to tell whether anything arrived while parked (and, if so, opens
+    /// at the first arrival instead of the physical bottom).
+    case bottom(newestId: Int?)
     /// Mid-history: the bottom-most visible row and the viewport-height
     /// fraction its bottom edge sat at — enough to reproduce the exact
     /// offset via the row's edge sentinel, independent of lazy-layout

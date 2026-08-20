@@ -44,6 +44,42 @@ struct MessageListModelTests {
         #expect(list.messages.map(\.id) == [100, 101, 102])
     }
 
+    @Test func warmReopenReaimsMarkerAtArrivalsWhileParked() async throws {
+        let (store, _) = try makeStoreWithTransport(script: [
+            .json(Fixtures.getMessagesJSON([
+                Fixtures.channelMessageJSON(id: 100, flags: ["read"]),
+                Fixtures.channelMessageJSON(id: 101, flags: ["read"]),
+            ]))
+        ])
+        let list = MessageListModel(store: store, narrow: .topic(streamId: 10, topic: "greetings"))
+        await list.fetchInitial()
+        #expect(list.firstUnreadMarkerId == nil)
+
+        // Two messages arrive while the model is parked; the viewport was
+        // last at the bottom with 101 newest.
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 102), flags: [])))
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 2, message: Fixtures.channelMessageJSON(id: 103), flags: [])))
+
+        // The reopen's resume point is the first while-parked arrival.
+        #expect(list.firstUnreadId(after: 101) == 102)
+        // Nothing arrived past the live bottom: the restore stands.
+        #expect(list.firstUnreadId(after: 103) == nil)
+        // No park-time id recorded (empty window): any unread counts.
+        #expect(list.firstUnreadId(after: nil) == 102)
+
+        list.reaimUnreadMarker(to: 102)
+        #expect(list.firstUnreadMarkerId == 102)
+        // An id no longer in the window is ignored.
+        list.reaimUnreadMarker(to: 999)
+        #expect(list.firstUnreadMarkerId == 102)
+    }
+
     @Test func fetchOlderPrependsWithoutDuplicatingAnchor() async throws {
         let (store, transport) = try makeStoreWithTransport(script: [
             .json(Fixtures.getMessagesJSON([
