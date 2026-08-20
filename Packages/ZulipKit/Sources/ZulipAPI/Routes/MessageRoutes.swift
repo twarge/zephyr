@@ -173,18 +173,22 @@ extension ApiConnection {
                 params: [Param("content", content)]))
     }
 
-    /// PATCH /messages/{id} — move to another topic (propagateMode:
-    /// change_one | change_later | change_all).
+    /// PATCH /messages/{id} — move to another topic, and optionally
+    /// another channel (propagateMode: change_one | change_later |
+    /// change_all).
     public func moveMessage(
-        messageId: Int, newTopic: String, propagateMode: String
+        messageId: Int, newTopic: String, newStreamId: Int? = nil, propagateMode: String
     ) async throws {
+        var params = [
+            Param("topic", newTopic),
+            Param("propagate_mode", propagateMode),
+        ]
+        if let newStreamId {
+            params.append(Param("stream_id", String(newStreamId)))
+        }
         _ = try await send(
             ApiRequest(
-                method: .patch, path: "/api/v1/messages/\(messageId)",
-                params: [
-                    Param("topic", newTopic),
-                    Param("propagate_mode", propagateMode),
-                ]))
+                method: .patch, path: "/api/v1/messages/\(messageId)", params: params))
     }
 
     /// GET /messages/{id}/read_receipts — user ids who read the message

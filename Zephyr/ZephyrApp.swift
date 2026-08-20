@@ -275,7 +275,7 @@ extension ZephyrApp {
             Button("Copy Message Reference") { model.pendingCommand = .copyReference }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
             Button("Translate") { model.pendingCommand = .translate }
-            Button("Move to Topic…") { model.pendingCommand = .moveToTopic }
+            Button("Move Message…") { model.pendingCommand = .moveToTopic }
             Button("Forward Message…") { model.pendingCommand = .forward }
             Divider()
             Button("Mark Conversation as Read") { model.pendingCommand = .markConversationRead }

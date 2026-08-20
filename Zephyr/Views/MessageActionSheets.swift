@@ -3,52 +3,143 @@ import ZulipAPI
 import ZulipContent
 import ZulipModel
 
-/// Move a message (and optionally its neighbors) to another topic.
+/// Move a message (and optionally its neighbors) — or a whole topic —
+/// to another topic, in this or any other channel. Moving onto a topic
+/// that already exists merges into it.
 struct MoveTopicSheet: View {
+    /// What moves: one message (with a propagate picker), or a whole
+    /// topic (anchored at its newest message, always change_all).
+    enum Subject {
+        case message(Message)
+        case topic(streamId: Int, name: String, maxId: Int)
+    }
+
     let store: PerAccountStore
-    let message: Message
+    let subject: Subject
+    /// Runs after the move is requested (e.g. refresh the sidebar's
+    /// cached topic list).
+    var onMoved: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
-    @State private var topic = ""
+    @State private var topic: String
+    @State private var streamId: Int
     @State private var propagateMode = "change_all"
+
+    init(store: PerAccountStore, subject: Subject, onMoved: (() -> Void)? = nil) {
+        self.store = store
+        self.subject = subject
+        self.onMoved = onMoved
+        switch subject {
+        case .message(let message):
+            // Only channel messages can move (the menu gates on .stream),
+            // so streamId is always present here.
+            _streamId = State(initialValue: message.streamId ?? -1)
+            _topic = State(initialValue: TopicName.displayName(message.topic))
+        case .topic(let streamId, let name, _):
+            _streamId = State(initialValue: streamId)
+            // The raw name (✔ included, web-style): an unchanged move
+            // keeps the topic resolved, and accepted suggestions insert
+            // the destination's raw name — what's typed is what moves.
+            _topic = State(initialValue: name)
+        }
+    }
+
+    private var sourceStreamId: Int {
+        switch subject {
+        case .message(let message): message.streamId ?? -1
+        case .topic(let streamId, _, _): streamId
+        }
+    }
+
+    /// Subscribed channels by name; the source channel joins even when
+    /// unsubscribed (a public channel opened via search) so the picker
+    /// always has a valid selection.
+    private var channelChoices: [(id: Int, name: String)] {
+        var choices = store.subscriptions.values.map { (id: $0.streamId, name: $0.name) }
+        if !choices.contains(where: { $0.id == sourceStreamId }) {
+            choices.append((
+                id: sourceStreamId,
+                name: store.channels[sourceStreamId]?.name ?? "current channel"))
+        }
+        return choices.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
+    private var canMove: Bool {
+        let trimmed = topic.trimmingCharacters(in: .whitespaces)
+        switch subject {
+        case .message:
+            return !trimmed.isEmpty
+        case .topic(_, let name, _):
+            // A channel change alone is a valid move (the empty name is
+            // "general chat"); otherwise the name must actually change.
+            return streamId != sourceStreamId || (!trimmed.isEmpty && trimmed != name)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Move to Topic")
-                .font(.headline)
-            Picker("Apply to:", selection: $propagateMode) {
-                Text("This message only").tag("change_one")
-                Text("This and later messages").tag("change_later")
-                Text("The entire topic").tag("change_all")
+            switch subject {
+            case .message:
+                Text("Move Message")
+                    .font(.headline)
+                Picker("Apply to:", selection: $propagateMode) {
+                    Text("This message only").tag("change_one")
+                    Text("This and later messages").tag("change_later")
+                    Text("The entire topic").tag("change_all")
+                }
+                .pickerStyle(.inline)
+            case .topic:
+                Text("Move Topic")
+                    .font(.headline)
             }
-            .pickerStyle(.inline)
+            Picker("Channel:", selection: $streamId) {
+                ForEach(channelChoices, id: \.id) { choice in
+                    Text("#\(choice.name)").tag(choice.id)
+                }
+            }
             // The compose bar's popover behavior: the field sits low and
             // the measured card floats up over the picker, so the sheet's
             // bounds never clip the suggestions.
             TopicAutocompleteField(
-                store: store, streamId: message.streamId, topic: $topic, dropUp: true)
+                store: store, streamId: streamId, topic: $topic, dropUp: true)
                 .zIndex(1)
+            if case .topic = subject {
+                Text("Every message in the topic moves; moving to an existing topic merges them.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Move") {
-                    let trimmed = topic.trimmingCharacters(in: .whitespaces)
-                    if !trimmed.isEmpty {
-                        store.moveMessage(
-                            message.id, toTopic: trimmed, propagateMode: propagateMode)
-                    }
+                    move()
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(topic.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(!canMove)
             }
         }
         .padding(16)
         .frame(width: 360)
-        .onAppear {
-            topic = TopicName.displayName(message.topic)
+    }
+
+    private func move() {
+        let trimmed = topic.trimmingCharacters(in: .whitespaces)
+        let destination = streamId == sourceStreamId ? nil : streamId
+        switch subject {
+        case .message(let message):
+            store.moveMessage(
+                message.id, toTopic: trimmed, toChannel: destination,
+                propagateMode: propagateMode)
+        case .topic(_, _, let maxId):
+            store.moveMessage(
+                maxId, toTopic: trimmed, toChannel: destination,
+                propagateMode: "change_all")
         }
+        onMoved?()
     }
 }
 

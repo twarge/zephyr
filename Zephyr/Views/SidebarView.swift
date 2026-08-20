@@ -1261,6 +1261,7 @@ private struct SidebarTopicRow: View {
 
     @State private var showRename = false
     @State private var renameText = ""
+    @State private var showMove = false
 
     /// macOS's sidebar runs smaller than body; iOS keeps every row
     /// body-sized like Mail's.
@@ -1351,6 +1352,9 @@ private struct SidebarTopicRow: View {
                 renameText = TopicName.displayName(topic.name)
                 showRename = true
             }
+            Button("Move Topic…") {
+                showMove = true
+            }
         }
         .alert("Rename Topic", isPresented: $showRename) {
             TextField("Topic", text: $renameText)
@@ -1358,6 +1362,12 @@ private struct SidebarTopicRow: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Every message in the topic moves to the new name.")
+        }
+        .sheet(isPresented: $showMove) {
+            MoveTopicSheet(
+                store: store,
+                subject: .topic(streamId: streamId, name: topic.name, maxId: topic.maxId),
+                onMoved: { onRenamed?() })
         }
     }
 

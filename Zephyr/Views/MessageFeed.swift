@@ -1665,7 +1665,7 @@ struct MessageRow: View {
         // the Translation framework).
         .modifier(TranslationSheet(isPresented: $showTranslation, text: content.plainText))
         .sheet(isPresented: $showMoveSheet) {
-            MoveTopicSheet(store: store, message: message)
+            MoveTopicSheet(store: store, subject: .message(message))
         }
         .sheet(isPresented: $showReadReceipts) {
             ReadReceiptsSheet(store: store, message: message)
@@ -1835,7 +1835,7 @@ struct MessageRow: View {
                 }
             }
             if message.type == .stream {
-                Button("Move to Topic…", systemImage: "arrow.turn.up.right") {
+                Button("Move Message…", systemImage: "arrow.turn.up.right") {
                     showMoveSheet = true
                 }
             }

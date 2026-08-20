@@ -1161,11 +1161,18 @@ public final class PerAccountStore {
         try? await connection.getRawMessageContent(messageId: messageId)
     }
 
-    public func moveMessage(_ messageId: Int, toTopic topic: String, propagateMode: String) {
+    /// Moves a message (and, per `propagateMode`, its topic neighbors) to
+    /// another topic — and optionally another channel. Moving onto a topic
+    /// that already exists merges into it.
+    public func moveMessage(
+        _ messageId: Int, toTopic topic: String, toChannel newStreamId: Int? = nil,
+        propagateMode: String
+    ) {
         let connection = connection
         Task {
             try? await connection.moveMessage(
-                messageId: messageId, newTopic: topic, propagateMode: propagateMode)
+                messageId: messageId, newTopic: topic, newStreamId: newStreamId,
+                propagateMode: propagateMode)
         }
     }
 

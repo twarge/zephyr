@@ -468,6 +468,33 @@ struct StoreEventTests {
         #expect(transport.requests.count == 1)
     }
 
+    @Test func moveMessageAcrossChannelsSendsStreamId() async throws {
+        let transport = FakeTransport(
+            defaultResponse: .json(#"{"result": "success", "msg": ""}"#))
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+
+        store.moveMessage(100, toTopic: "planning", toChannel: 20, propagateMode: "change_all")
+        try await eventually("move sent") { transport.requests.count == 1 }
+        let request = transport.requests[0]
+        #expect(request.method == "PATCH")
+        #expect(request.path.hasSuffix("/messages/100"))
+        #expect(request.formValue("topic") == "planning")
+        #expect(request.formValue("stream_id") == "20")
+        #expect(request.formValue("propagate_mode") == "change_all")
+
+        // A same-channel move omits stream_id entirely.
+        store.moveMessage(101, toTopic: "planning", propagateMode: "change_one")
+        try await eventually("second move sent") { transport.requests.count == 2 }
+        #expect(transport.requests[1].formValue("stream_id") == nil)
+    }
+
     @Test func markMessageUnreadFlipsFlagAndRefiles() throws {
         let store = try makeStore()
         try store.handleEvent(
