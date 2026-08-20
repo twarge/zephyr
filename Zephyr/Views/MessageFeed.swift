@@ -524,13 +524,6 @@ struct MessageFeedList: View {
                 isMultiSelected: keys.selectedMessageIds.contains(message.id),
                 isLinkTarget: keys.highlightMessageId == message.id,
                 showsConversationJump: showsConversationJump)
-                // Actual viewport visibility, not lazy-stack realization
-                // (which includes off-screen rows). The low threshold lets
-                // rows taller than the window still count once a fifth is
-                // shown.
-                .onScrollVisibilityChange(threshold: 0.2) { visible in
-                    if visible { noteSeen(message) }
-                }
                 .onGeometryChange(for: CGRect.self) { proxy in
                     proxy.frame(in: .scrollView)
                 } action: { frame in
@@ -838,9 +831,22 @@ struct MessageFeedList: View {
 
     /// Seen-in-view read marking, batched so a scroll doesn't spam the
     /// flags endpoint.
+    private func noteSeen(_ identifiers: [String]) {
+        guard marksReadOnView else { return }
+        for identifier in identifiers {
+            guard identifier.hasPrefix("msg-"),
+                  let id = Int(identifier.dropFirst(4)),
+                  let message = model.messages.first(where: { $0.id == id })
+            else { continue }
+            noteSeen(message)
+        }
+    }
+
     private func noteSeen(_ message: Message) {
         guard marksReadOnView, !keys.readMarkingPaused,
-              !(message.flags ?? []).contains("read") else { return }
+              !(message.flags ?? []).contains("read"),
+              !pendingReadIds.contains(message.id)
+        else { return }
         pendingReadIds.insert(message.id)
         readFlushTask?.cancel()
         readFlushTask = Task { @MainActor in
@@ -967,6 +973,14 @@ struct MessageFeedList: View {
         }
         .defaultScrollAnchor(.bottom)
         .scrollPosition(id: $anchorId, anchor: .bottom)
+        // Read-marking feeds need actual viewport visibility, not lazy-
+        // stack realization. Observe the scroll target IDs once at the
+        // container instead of installing a visibility observer on every
+        // message row. Transcripts that mark the whole conversation read
+        // install no visibility tracking at all.
+        .modifier(VisibleMessageTargets(enabled: marksReadOnView) { identifiers in
+            noteSeen(identifiers)
+        })
         .onScrollPhaseChange { _, newPhase in
             idleDebounce.task?.cancel()
             if newPhase.isScrolling {
@@ -1056,6 +1070,24 @@ struct MessageFeedList: View {
             if newLastId != nil, nearBottom {
                 anchorId = Self.bottomAnchorId
             }
+        }
+    }
+}
+
+/// Conditionally installs the feed-wide visible-target observer. Keeping
+/// the disabled branch genuinely modifier-free matters for ordinary topic
+/// and DM transcripts, which do not mark individual rows as they pass by.
+private struct VisibleMessageTargets: ViewModifier {
+    let enabled: Bool
+    let action: ([String]) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if enabled {
+            content.onScrollTargetVisibilityChange(
+                idType: String.self, threshold: 0.2, action)
+        } else {
+            content
         }
     }
 }
@@ -1252,26 +1284,32 @@ struct MessageRow: View {
     @Environment(KeyboardRouter.self) private var keys
     @Environment(\.openWindow) private var openWindow
     @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
-    @State private var hovering = false
-    @State private var showReactionPicker = false
-    @State private var editing = false
-    @State private var editText = ""
-    @State private var showMoveSheet = false
-    @State private var showTranslation = false
-    @State private var showReadReceipts = false
-    @State private var showForward = false
-    @State private var showRemindPicker = false
-    #if !os(macOS)
-    /// Context-menu Share…: the message as text, staged for the sheet.
-    @State private var sharePayload: SharePayload?
-    #endif
-    #if os(iOS)
-    /// Live horizontal swipe translation (right = mark unread, left =
-    /// toggle star); springs back after release.
-    @State private var swipeOffset: CGFloat = 0
-    @State private var swipeTriggerCount = 0
-    #endif
-    @State private var showEditHistory = false
+    /// One state box per realized row instead of a box for every control.
+    /// All of these values invalidate the same row body, so splitting them
+    /// only multiplies AttributeGraph setup and teardown while scrolling.
+    private struct InteractionState {
+        var hovering = false
+        var showReactionPicker = false
+        var editing = false
+        var editText = ""
+        var showMoveSheet = false
+        var showTranslation = false
+        var showReadReceipts = false
+        var showForward = false
+        var showRemindPicker = false
+        var showEditHistory = false
+        #if !os(macOS)
+        /// Context-menu Share…: the message as text, staged for the sheet.
+        var sharePayload: SharePayload?
+        #endif
+        #if os(iOS)
+        /// Live horizontal swipe translation (right = mark unread, left =
+        /// toggle star); springs back after release.
+        var swipeOffset: CGFloat = 0
+        var swipeTriggerCount = 0
+        #endif
+    }
+    @State private var interaction = InteractionState()
 
     private var content: MessageContent {
         if useMatchHighlights, let match = message.matchContent {
@@ -1280,7 +1318,6 @@ struct MessageRow: View {
         }
         return cache.content(for: message)
     }
-
     private var isStarred: Bool {
         (message.flags ?? []).contains("starred")
     }
@@ -1316,7 +1353,7 @@ struct MessageRow: View {
                             .font(.body.weight(.semibold))
                         if message.lastEditTimestamp != nil {
                             Button {
-                                showEditHistory = true
+                                interaction.showEditHistory = true
                             } label: {
                                 Text("Edited")
                                     .font(.caption2)
@@ -1325,16 +1362,16 @@ struct MessageRow: View {
                             }
                             .buttonStyle(.plain)
                             .help("Show edit history")
-                            .popover(isPresented: $showEditHistory) {
+                            .popover(isPresented: $interaction.showEditHistory) {
                                 EditHistoryView(store: store, message: message)
                             }
                         }
                     }
                     .padding(.top, 10)
                 }
-                if editing {
+                if interaction.editing {
                     VStack(alignment: .leading, spacing: 6) {
-                        TextField("Message", text: $editText, axis: .vertical)
+                        TextField("Message", text: $interaction.editText, axis: .vertical)
                             .textFieldStyle(.plain)
                             .lineLimit(1...12)
                             .padding(6)
@@ -1342,15 +1379,15 @@ struct MessageRow: View {
                                 .quaternary.opacity(0.4),
                                 in: RoundedRectangle(cornerRadius: 8))
                         HStack {
-                            Button("Cancel") { editing = false }
+                            Button("Cancel") { interaction.editing = false }
                                 .keyboardShortcut(.cancelAction)
                             Button("Save") {
-                                let content = editText.trimmingCharacters(
+                                let content = interaction.editText.trimmingCharacters(
                                     in: .whitespacesAndNewlines)
                                 if !content.isEmpty {
                                     store.editMessage(message.id, content: content)
                                 }
-                                editing = false
+                                interaction.editing = false
                             }
                             .keyboardShortcut(.defaultAction)
                         }
@@ -1414,27 +1451,27 @@ struct MessageRow: View {
         #if os(iOS)
         // Swipe: right marks unread, left toggles star. The hint icons sit
         // behind the row and fade in as the swipe approaches its trigger.
-        .offset(x: swipeOffset)
+        .offset(x: interaction.swipeOffset)
         .background(alignment: .leading) {
-            if swipeOffset > 8 {
+            if interaction.swipeOffset > 8 {
                 Image(systemName: "message.badge.filled.fill")
                     .font(.title3)
                     .foregroundStyle(.tint)
-                    .opacity(min(swipeOffset / Self.swipeTrigger, 1))
+                    .opacity(min(interaction.swipeOffset / Self.swipeTrigger, 1))
                     .padding(.leading, 10)
             }
         }
         .background(alignment: .trailing) {
-            if swipeOffset < -8 {
+            if interaction.swipeOffset < -8 {
                 Image(systemName: isStarred ? "star.slash.fill" : "star.fill")
                     .font(.title3)
                     .foregroundStyle(.yellow)
-                    .opacity(min(-swipeOffset / Self.swipeTrigger, 1))
+                    .opacity(min(-interaction.swipeOffset / Self.swipeTrigger, 1))
                     .padding(.trailing, 10)
             }
         }
         .gesture(messageSwipe, isEnabled: Self.swipeEnabled)
-        .sensoryFeedback(.impact(weight: .medium), trigger: swipeTriggerCount)
+        .sensoryFeedback(.impact(weight: .medium), trigger: interaction.swipeTriggerCount)
         #endif
         // Web-style unread marker: an accent line on the left that melts
         // away when the message is marked read. Always present (at zero
@@ -1488,13 +1525,13 @@ struct MessageRow: View {
                     accountId: store.accountId, messageId: message.id))
             },
             isEnabled: supportsMultipleWindows)
-        .onChange(of: editing) {
+        .onChange(of: interaction.editing) {
             // The inline editor's TextField must also silence single-key
             // navigation (it shares the detail focus scope).
-            keys.editingMessage = editing
+            keys.editingMessage = interaction.editing
         }
         .onDisappear {
-            if editing {
+            if interaction.editing {
                 keys.editingMessage = false
             }
         }
@@ -1502,9 +1539,9 @@ struct MessageRow: View {
             guard requested == message.id else { return }
             keys.editRequestId = nil
             Task {
-                editText = await store.fetchRawContent(message.id) ?? ""
-                if !editText.isEmpty {
-                    editing = true
+                interaction.editText = await store.fetchRawContent(message.id) ?? ""
+                if !interaction.editText.isEmpty {
+                    interaction.editing = true
                 }
             }
         }
@@ -1518,13 +1555,13 @@ struct MessageRow: View {
             case .copyReference:
                 Platform.copyToPasteboard(ConversationKey.permalink(to: message, in: store))
             case .translate:
-                showTranslation = true
+                interaction.showTranslation = true
             case .moveToTopic:
                 if message.type == .stream {
-                    showMoveSheet = true
+                    interaction.showMoveSheet = true
                 }
             case .forward:
-                showForward = true
+                interaction.showForward = true
             case .markUnreadFromHere:
                 markUnreadFromHere()
             }
@@ -1534,9 +1571,9 @@ struct MessageRow: View {
             // in exactly the same spot as control and as starred indicator.
             // macOS reveals on hover; touch reveals on tap (selection).
             #if os(macOS)
-            let controlsActive = hovering || showReactionPicker
+            let controlsActive = interaction.hovering || interaction.showReactionPicker
             #else
-            let controlsActive = isKeySelected || showReactionPicker
+            let controlsActive = isKeySelected || interaction.showReactionPicker
             #endif
             // Top-aligned: the buttons' padding would otherwise center the
             // time a few points below its message's first line.
@@ -1573,7 +1610,7 @@ struct MessageRow: View {
                     .allowsHitTesting(controlsActive)
                 }
                 Button {
-                    showReactionPicker = true
+                    interaction.showReactionPicker = true
                 } label: {
                     Image(systemName: "face.smiling")
                         .font(controlFont)
@@ -1583,7 +1620,7 @@ struct MessageRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Add reaction")
-                .popover(isPresented: $showReactionPicker) {
+                .popover(isPresented: $interaction.showReactionPicker) {
                     EmojiPickerView(store: store) { entry in
                         store.toggleReaction(
                             message: message, emojiName: entry.name,
@@ -1657,33 +1694,34 @@ struct MessageRow: View {
         // After the overlay: the hover region must include the reaction
         // button itself, or entering the button drops row-hover and the
         // button vanishes under the pointer (flicker + missed clicks).
-        .onHover { hovering = $0 }
+        .onHover { interaction.hovering = $0 }
         .contextMenu {
             messageMenu()
         }
         // System translation UI, on-device (absent on platforms without
         // the Translation framework).
-        .modifier(TranslationSheet(isPresented: $showTranslation, text: content.plainText))
-        .sheet(isPresented: $showMoveSheet) {
+        .modifier(TranslationSheet(
+            isPresented: $interaction.showTranslation, text: content.plainText))
+        .sheet(isPresented: $interaction.showMoveSheet) {
             MoveTopicSheet(store: store, subject: .message(message))
         }
-        .sheet(isPresented: $showReadReceipts) {
+        .sheet(isPresented: $interaction.showReadReceipts) {
             ReadReceiptsSheet(store: store, message: message)
         }
-        .sheet(isPresented: $showForward) {
+        .sheet(isPresented: $interaction.showForward) {
             ForwardMessageSheet(store: store) { destination in
-                showForward = false
+                interaction.showForward = false
                 forwardMessage(to: destination)
             }
         }
-        .sheet(isPresented: $showRemindPicker) {
+        .sheet(isPresented: $interaction.showRemindPicker) {
             RemindTimeSheet { date in
                 remind(at: date)
             }
         }
         #if !os(macOS)
-        .sheet(item: $sharePayload) { payload in
-            ShareActivityView(items: payload.items) { sharePayload = nil }
+        .sheet(item: $interaction.sharePayload) { payload in
+            ShareActivityView(items: payload.items) { interaction.sharePayload = nil }
                 .presentationDetents([.medium, .large])
         }
         #endif
@@ -1711,22 +1749,22 @@ struct MessageRow: View {
                 // Rubber-band past the trigger distance.
                 let banded = min(magnitude, Self.swipeTrigger)
                     + max(magnitude - Self.swipeTrigger, 0) * 0.2
-                swipeOffset = translation < 0 ? -banded : banded
+                interaction.swipeOffset = translation < 0 ? -banded : banded
             }
             .onEnded { value in
                 defer {
-                    withAnimation(.snappy) { swipeOffset = 0 }
+                    withAnimation(.snappy) { interaction.swipeOffset = 0 }
                 }
                 guard abs(value.translation.width)
                     > abs(value.translation.height) * 1.5 else { return }
                 if value.translation.width > Self.swipeTrigger {
-                    swipeTriggerCount += 1
+                    interaction.swipeTriggerCount += 1
                     // Same pause as Mark as Unread from Here: the on-screen
                     // row must not immediately re-mark itself read.
                     keys.readMarkingPaused = true
                     store.markMessageUnread(message.id)
                 } else if value.translation.width < -Self.swipeTrigger {
-                    swipeTriggerCount += 1
+                    interaction.swipeTriggerCount += 1
                     store.setStarred(!isStarred, messageId: message.id)
                 }
             }
@@ -1765,7 +1803,7 @@ struct MessageRow: View {
             Button("Tomorrow at 9 AM") { remind(at: nextMorning(daysAhead: 1)) }
             Button("Next Week at 9 AM") { remind(at: nextMorning(daysAhead: 7)) }
             Divider()
-            Button("At a Custom Time…") { showRemindPicker = true }
+            Button("At a Custom Time…") { interaction.showRemindPicker = true }
         }
     }
 
@@ -1784,7 +1822,7 @@ struct MessageRow: View {
                 quoteAndReply()
             }
             Button("Forward Message…", systemImage: "arrowshape.turn.up.right") {
-                showForward = true
+                interaction.showForward = true
             }
             if message.senderId != store.selfUserId {
                 Button(
@@ -1806,7 +1844,7 @@ struct MessageRow: View {
             // Out-of-app share (AirDrop, Messages, save, print) — distinct
             // from Forward, which stays inside Zulip.
             Button("Share…", systemImage: "square.and.arrow.up") {
-                sharePayload = SharePayload(
+                interaction.sharePayload = SharePayload(
                     items: [messageShareText(message, content: content)])
             }
             #endif
@@ -1819,11 +1857,11 @@ struct MessageRow: View {
             }
             #if canImport(Translation) && !os(visionOS)
             Button("Translate", systemImage: "translate") {
-                showTranslation = true
+                interaction.showTranslation = true
             }
             #endif
             Button("Seen By…", systemImage: "eye") {
-                showReadReceipts = true
+                interaction.showReadReceipts = true
             }
             if store.supportsReminders {
                 if store.reminderForMessage(message.id) != nil {
@@ -1836,16 +1874,16 @@ struct MessageRow: View {
             }
             if message.type == .stream {
                 Button("Move Message…", systemImage: "arrow.turn.up.right") {
-                    showMoveSheet = true
+                    interaction.showMoveSheet = true
                 }
             }
             if message.senderId == store.selfUserId {
                 Divider()
                 Button("Edit Message", systemImage: "pencil") {
                     Task {
-                        editText = await store.fetchRawContent(message.id) ?? ""
-                        if !editText.isEmpty {
-                            editing = true
+                        interaction.editText = await store.fetchRawContent(message.id) ?? ""
+                        if !interaction.editText.isEmpty {
+                            interaction.editing = true
                         }
                     }
                 }
