@@ -149,7 +149,10 @@ struct SidebarView: View {
                     .simultaneousGesture(
                         detachGesture(.conversation(conversation.key)))
             }
-            ForEach(directory.visible) { user in
+            // Namespaced ids: a bare userId that numerically matches a
+            // channel row's streamId would alias the two rows in the
+            // List's flat selection registry (see TopicRowEntry).
+            ForEach(directory.visible, id: \.directoryRowId) { user in
                 let key = Unreads.dmKey(
                     participantIds: [user.userId], selfUserId: store.selfUserId)
                 UserDirectMessageRow(store: store, user: user)
@@ -711,17 +714,17 @@ struct SidebarView: View {
                         // Same rail as the unfiltered list; dotted when the
                         // 8-row cap hides further matches ("more below").
                         let matches = Array(topicMatches.prefix(8))
-                        ForEach(Array(matches.enumerated()), id: \.element.name) { index, topic in
+                        ForEach(topicRowEntries(matches, streamId: streamId)) { entry in
                             SidebarTopicRow(
-                                store: store, streamId: streamId, topic: topic,
-                                rail: index < matches.count - 1 ? .through
+                                store: store, streamId: streamId, topic: entry.topic,
+                                rail: entry.index < matches.count - 1 ? .through
                                     : topicMatches.count > matches.count ? .dotted : .cap,
                                 onRenamed: { refreshTopicsSoon(streamId) })
                                 .tag(Destination.conversation(
-                                    .topic(streamId: streamId, topic: topic.name)))
+                                    .topic(streamId: streamId, topic: entry.topic.name)))
                                 .simultaneousGesture(
                                     detachGesture(.conversation(
-                                        .topic(streamId: streamId, topic: topic.name))))
+                                        .topic(streamId: streamId, topic: entry.topic.name))))
                         }
                     } else if expandedChannels.contains(streamId) {
                         topicRows(for: streamId)
@@ -749,22 +752,41 @@ struct SidebarView: View {
         }
     }
 
+    /// A topic row enumerated under a List-unique identity: topic names
+    /// repeat across channels, and rows sharing an id anywhere in one
+    /// List alias in its selection machinery — selecting one highlighted
+    /// every namesake, with the last-registered row's tag winning the
+    /// view.
+    private struct TopicRowEntry: Identifiable {
+        let id: String
+        let index: Int
+        let topic: ChannelTopic
+    }
+
+    private func topicRowEntries(
+        _ topics: [ChannelTopic], streamId: Int
+    ) -> [TopicRowEntry] {
+        topics.enumerated().map { index, topic in
+            TopicRowEntry(id: "\(streamId)/\(topic.name)", index: index, topic: topic)
+        }
+    }
+
     @ViewBuilder
     private func topicRows(for streamId: Int) -> some View {
         if let topics = search.channelTopics[streamId] {
             let showAll = expandedAllTopics.contains(streamId)
             let shown = showAll ? topics : Array(topics.prefix(Self.maxInlineTopics))
             let hasMore = topics.count > Self.maxInlineTopics
-            ForEach(Array(shown.enumerated()), id: \.element.name) { index, topic in
+            ForEach(topicRowEntries(shown, streamId: streamId)) { entry in
                 SidebarTopicRow(
-                    store: store, streamId: streamId, topic: topic,
-                    rail: index == shown.count - 1 && !hasMore ? .cap : .through,
+                    store: store, streamId: streamId, topic: entry.topic,
+                    rail: entry.index == shown.count - 1 && !hasMore ? .cap : .through,
                     onRenamed: { refreshTopicsSoon(streamId) })
                     .tag(Destination.conversation(
-                        .topic(streamId: streamId, topic: topic.name)))
+                        .topic(streamId: streamId, topic: entry.topic.name)))
                     .simultaneousGesture(
                         detachGesture(.conversation(
-                            .topic(streamId: streamId, topic: topic.name))))
+                            .topic(streamId: streamId, topic: entry.topic.name))))
             }
             if hasMore {
                 // Expands in place; the rail's dotted end says "more
@@ -1349,6 +1371,12 @@ private struct SidebarTopicRow: View {
         store.moveMessage(topic.maxId, toTopic: newName, propagateMode: "change_all")
         onRenamed?()
     }
+}
+
+private extension User {
+    /// The directory row's List-unique id: bare user ids share the Int
+    /// namespace with channel rows' stream ids.
+    var directoryRowId: String { "user-\(userId)" }
 }
 
 private extension View {
