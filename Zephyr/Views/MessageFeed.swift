@@ -1922,6 +1922,32 @@ struct MessageRow: View {
     }
 }
 
+/// Hugs its content's ideal width up to `maxWidth`, wrapping beyond it.
+/// Overlays propose the base view's size, which defeats the usual
+/// frame(maxWidth:)/fixedSize combinations — a hover card anchored to a
+/// small pill needs its own sizing.
+private struct CappedWidthLayout: Layout {
+    var maxWidth: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) -> CGSize {
+        guard let subview = subviews.first else { return .zero }
+        let ideal = subview.sizeThatFits(.unspecified)
+        if ideal.width <= maxWidth { return ideal }
+        return subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
+    }
+
+    func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        guard let subview = subviews.first else { return }
+        subview.place(
+            at: bounds.origin, anchor: .topLeading,
+            proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
+    }
+}
+
 struct ReactionsRow: View {
     let store: PerAccountStore
     let message: Message
@@ -1955,7 +1981,8 @@ struct ReactionsRow: View {
         return order.compactMap { byEmoji[$0] }.sorted { $0.count > $1.count }
     }
 
-    /// "Steven Nguyen, You" — the hover tooltip; self listed last as "You".
+    /// "Steven Nguyen, You" — the hover card; self listed last as "You",
+    /// long lists capped ("…, 14 others").
     private func reactorNames(_ group: Group) -> String {
         var names = group.userIds
             .filter { $0 != store.selfUserId }
@@ -1963,8 +1990,17 @@ struct ReactionsRow: View {
         if group.reactedBySelf {
             names.append("You")
         }
+        if names.count > 12 {
+            let extra = names.count - 11
+            names = Array(names.prefix(11)) + ["\(extra) others"]
+        }
         return names.joined(separator: ", ")
     }
+
+    /// The pill whose reactor card is showing (pointer rested on it for a
+    /// beat; macOS and iPad-trackpad hover).
+    @State private var hoverCardGroupId: String?
+    @State private var hoverTask: Task<Void, Never>?
 
     var body: some View {
         HStack(spacing: 4) {
@@ -1993,12 +2029,55 @@ struct ReactionsRow: View {
                     .contentShape(.capsule)
                 }
                 .buttonStyle(.plain)
-                .help("\(reactorNames(group)) reacted with :\(group.sample.emojiName):")
+                .accessibilityLabel(
+                    "\(reactorNames(group)) reacted with \(group.sample.emojiName)")
+                // Immediate who-reacted card (the system tooltip's 1.5s
+                // delay made it feel absent): a real popover after a short
+                // rest — window-backed, so the message view can't clip it,
+                // and the system flips it below when there's no room above.
+                .popover(
+                    isPresented: Binding(
+                        get: { hoverCardGroupId == group.id },
+                        set: { if !$0 { hoverCardGroupId = nil } }),
+                    arrowEdge: .top
+                ) {
+                    reactorCard(group)
+                        .presentationCompactAdaptation(.popover)
+                }
+                .onHover { inside in
+                    hoverTask?.cancel()
+                    if inside {
+                        hoverTask = Task {
+                            try? await Task.sleep(for: .milliseconds(300))
+                            guard !Task.isCancelled else { return }
+                            hoverCardGroupId = group.id
+                        }
+                    } else if hoverCardGroupId == group.id {
+                        hoverCardGroupId = nil
+                    }
+                }
             }
             // No trailing "+" pill: adding lives in the hover controls
             // (and the context menu), keeping the row to actual reactions.
         }
         .padding(.top, 1)
+    }
+
+    private func reactorCard(_ group: Group) -> some View {
+        // The popover supplies its own chrome; the layout caps the width
+        // (popovers propose ideal size, which would put a long reactor
+        // list on one very wide line).
+        CappedWidthLayout(maxWidth: 240) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(reactorNames(group))
+                    .font(.caption.weight(.medium))
+                Text(":\(group.sample.emojiName):")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
     }
 
     @ViewBuilder
