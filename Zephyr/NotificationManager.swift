@@ -106,7 +106,8 @@ final class NotificationManager: NSObject {
         }
         content.body = String(ContentParser.parse(html: message.content).plainText.prefix(300))
         content.sound = .default
-        content.userInfo = Self.userInfo(accountId: accountId, key: key)
+        content.userInfo = Self.userInfo(
+            accountId: accountId, key: key, messageId: message.id)
 
         // Communication notification: donating the receive intent lets the
         // system style the banner like Messages (sender-first) and lets
@@ -139,8 +140,10 @@ final class NotificationManager: NSObject {
 
     // MARK: Round-tripping the conversation through userInfo
 
-    private static func userInfo(accountId: Account.ID, key: ConversationKey) -> [String: Any] {
-        var info: [String: Any] = ["account": accountId.uuidString]
+    private static func userInfo(
+        accountId: Account.ID, key: ConversationKey, messageId: Int
+    ) -> [String: Any] {
+        var info: [String: Any] = ["account": accountId.uuidString, "message": messageId]
         switch key {
         case .topic(let streamId, let topic):
             info["stream"] = streamId
@@ -182,11 +185,13 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
               let key = Self.conversationKey(from: info)
         else { return }
         await handleResponse(
-            accountId: accountId, key: key, actionId: actionId, replyText: replyText)
+            accountId: accountId, key: key, actionId: actionId, replyText: replyText,
+            near: info["message"] as? Int)
     }
 
     private func handleResponse(
-        accountId: Account.ID, key: ConversationKey, actionId: String, replyText: String?
+        accountId: Account.ID, key: ConversationKey, actionId: String, replyText: String?,
+        near: Int?
     ) async {
         guard let appModel else { return }
         // iOS grants a short grace period for handling; hold it explicitly.
@@ -206,9 +211,10 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
                 store.markConversationRead(key)
             }
         default:
-            // Clicking the banner opens the conversation.
+            // Clicking the banner opens the conversation, landing on (and
+            // flashing) the notified message — the message-link flow.
             appModel.pendingDestination = PendingDestination(
-                account: accountId, destination: .conversation(key))
+                account: accountId, destination: .conversation(key), near: near)
             Platform.activate()
         }
     }

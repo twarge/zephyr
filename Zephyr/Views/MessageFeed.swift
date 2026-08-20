@@ -1928,8 +1928,6 @@ struct ReactionsRow: View {
 
     private var reactions: [Reaction] { message.reactions }
 
-    @State private var showPicker = false
-
     private struct Group: Identifiable {
         var id: String
         var sample: Reaction
@@ -1997,26 +1995,8 @@ struct ReactionsRow: View {
                 .buttonStyle(.plain)
                 .help("\(reactorNames(group)) reacted with :\(group.sample.emojiName):")
             }
-            Button {
-                showPicker = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(.quaternary, in: .capsule)
-                    .contentShape(.capsule)
-            }
-            .buttonStyle(.plain)
-            .help("Add reaction")
-            .popover(isPresented: $showPicker) {
-                EmojiPickerView(store: store) { entry in
-                    store.toggleReaction(
-                        message: message, emojiName: entry.name,
-                        emojiCode: entry.code, reactionType: entry.reactionType)
-                }
-            }
+            // No trailing "+" pill: adding lives in the hover controls
+            // (and the context menu), keeping the row to actual reactions.
         }
         .padding(.top, 1)
     }
