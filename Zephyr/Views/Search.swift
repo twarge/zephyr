@@ -271,20 +271,34 @@ struct SearchReturnCapture: View {
     #if os(macOS)
     /// nonisolated so the AppKit handler closure infers nonisolated (the
     /// monitor fires on the main thread; assumeIsolated hops back safely).
+    ///
+    /// The Return is never consumed here: it may be choosing a highlighted
+    /// suggestion, whose token commit only happens if the field receives
+    /// the event (consuming it turned "Messages from …" picks into literal
+    /// text searches). The event is delivered first; a beat later, if it
+    /// neither committed a token nor submitted (the token field's dropped-
+    /// Return case this monitor exists for), the search runs as a fallback.
     private nonisolated static func makeReturnMonitor(search: SidebarSearchModel) -> Any? {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let isReturn = event.keyCode == 36 || event.keyCode == 76
             let plain = event.modifierFlags
                 .intersection([.command, .option, .control]).isEmpty
             guard isReturn, plain else { return event }
-            let consumed = MainActor.assumeIsolated { () -> Bool in
-                let hasQuery = !search.filterText.trimmingCharacters(in: .whitespaces).isEmpty
-                    || !search.tokens.isEmpty
-                guard hasQuery, let submit = search.onSubmit else { return false }
-                submit()
-                return true
+            MainActor.assumeIsolated {
+                let textBefore = search.filterText
+                let tokensBefore = search.tokens
+                let hasQuery = !textBefore.trimmingCharacters(in: .whitespaces).isEmpty
+                    || !tokensBefore.isEmpty
+                guard hasQuery else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(150))
+                    guard search.filterText == textBefore,
+                          search.tokens == tokensBefore,
+                          let submit = search.onSubmit else { return }
+                    submit()
+                }
             }
-            return consumed ? nil : event
+            return event
         }
     }
     #endif
@@ -358,18 +372,10 @@ nonisolated struct SearchQuery: Hashable, Codable {
         if !trimmed.isEmpty {
             elements.append(NarrowElement("search", .string(trimmed)))
         }
-        // Narrows lacking a channel operator search only the user's personal
-        // message history (API docs) — nearly empty for new accounts. Scope
-        // unscoped queries to all public channels, like the web app.
-        let hasScope = tokens.contains { token in
-            switch token {
-            case .channel, .dm, .starred, .mentioned: true
-            case .topic, .sender: false
-            }
-        }
-        if !hasScope {
-            elements.append(NarrowElement("channels", .string("public")))
-        }
+        // Narrows lacking a channel/dm operator search the user's personal
+        // message history — subscribed channels (private included) plus DMs.
+        // That matches the web app; appending `channels:public` here would
+        // silently exclude private channels and DMs from every search.
         return elements
     }
 
