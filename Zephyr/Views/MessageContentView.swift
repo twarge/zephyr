@@ -40,10 +40,10 @@ struct BlockNodeView: View {
         case .paragraph(let inlines):
             let pdfs = pdfAttachmentLinks(inlines)
             if pdfs.isEmpty {
-                inlineText(inlines)
+                wrappingText(inlines)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
-                    inlineText(inlines)
+                    wrappingText(inlines)
                     ForEach(pdfs, id: \.href) { link in
                         PDFAttachmentView(href: link.href, connection: connection)
                     }
@@ -52,6 +52,7 @@ struct BlockNodeView: View {
         case .heading(let level, let inlines):
             inlineText(inlines)
                 .font(.system(size: CGFloat(20 - min(level, 4) * 2), weight: .bold))
+                .fixedSize(horizontal: false, vertical: true)
         case .codeBlock(let language, let spans):
             CodeBlockView(label: language, spans: spans)
         case .blockquote(let blocks):
@@ -109,6 +110,16 @@ struct BlockNodeView: View {
 
     private func inlineText(_ inlines: [InlineNode]) -> Text {
         InlineRenderer.text(inlines, connection: connection, colorScheme: colorScheme)
+    }
+
+    /// Multiline body text must insist on its ideal height: in the feed's
+    /// nested-stack layout, macOS sometimes proposes wrapped Text one line
+    /// less than it needs, and the shortfall renders as a spurious trailing
+    /// "…" mid-paragraph (long list items and quoted paragraphs were the
+    /// visible casualties).
+    private func wrappingText(_ inlines: [InlineNode]) -> some View {
+        inlineText(inlines)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
