@@ -148,8 +148,18 @@ struct RealmLogoView: View {
     var maxWidth: CGFloat?
 
     @Environment(\.colorScheme) private var colorScheme
-    @State private var logo: PlatformImage?
+    // Both variants stay loaded and body picks by appearance. iOS renders
+    // backgrounded apps in BOTH appearances for app-switcher snapshots, so
+    // state written by an appearance-keyed task holds whichever variant the
+    // last (possibly off-screen) pass requested — the night logo then
+    // shows in light mode until something re-runs the task.
+    @State private var dayLogo: PlatformImage?
+    @State private var nightLogo: PlatformImage?
     @State private var icon: PlatformImage?
+
+    private var logo: PlatformImage? {
+        colorScheme == .dark ? nightLogo : dayLogo
+    }
 
     /// The wide logo only when it fits the measured room at full size.
     private var fittedLogo: PlatformImage? {
@@ -189,12 +199,13 @@ struct RealmLogoView: View {
             }
         }
         .help(store.realmName ?? store.connection.realmURL.host() ?? "")
-        .task(id: "\(store.accountId)|\(colorScheme == .dark)") {
-            logo = await AvatarLoader.shared.realmLogo(
-                store: store, dark: colorScheme == .dark)
+        .task(id: store.accountId) {
+            async let day = AvatarLoader.shared.realmLogo(store: store, dark: false)
+            async let night = AvatarLoader.shared.realmLogo(store: store, dark: true)
             // The icon loads regardless (cached): it's the live fallback
             // whenever a resize squeezes the wide logo out.
-            icon = await AvatarLoader.shared.realmIcon(store: store)
+            async let square = AvatarLoader.shared.realmIcon(store: store)
+            (dayLogo, nightLogo, icon) = await (day, night, square)
         }
     }
 }

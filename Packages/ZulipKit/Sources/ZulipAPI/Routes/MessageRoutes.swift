@@ -318,6 +318,12 @@ extension ApiConnection {
             Param("anchor", anchor.apiValue),
             Param("num_before", String(numBefore)),
             Param("num_after", String(numAfter)),
+            // Empty topic names arrive as "" — matching the event stream's
+            // `empty_topic_name` capability. Without this, fetched copies
+            // of the same messages read "(no topic)", and the mixed forms
+            // break client-side narrow membership. Servers without
+            // empty-topic support ignore the unknown parameter.
+            Param("allow_empty_topic_name", "true"),
         ]
         if !narrow.isEmpty {
             params.append(Param("narrow", try ZulipJSON.encodeString(narrow)))

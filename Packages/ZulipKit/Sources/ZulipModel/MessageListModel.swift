@@ -14,7 +14,7 @@ extension Narrow {
             return message.streamId == streamId
         case .topic(let streamId, let topic):
             return message.streamId == streamId
-                && message.subject.caseInsensitiveCompare(topic) == .orderedSame
+                && TopicName.matches(message.subject, topic)
         case .dm(let userIds):
             guard message.type == .private,
                   case .users(let recipients) = message.displayRecipient else { return false }
@@ -74,6 +74,14 @@ public final class MessageListModel: Identifiable {
 
     private weak var store: PerAccountStore?
     private var generation = 0
+    /// Live arrivals for this narrow that couldn't append because the
+    /// window didn't reach the newest message (mid-history anchor, deep
+    /// scrollback, or a jump-to-newest fetch still in flight). Merged in
+    /// once a fetch re-establishes `haveNewest`. Dropping them instead
+    /// would lose the message until an unrelated refetch — worst for our
+    /// own sends, whose one echo event also clears their outbox row.
+    private var pendingNewest: [Message] = []
+    private static let maxPendingNewest = 200
     /// A specific message to open at (message links); overrides the
     /// first-unread anchor.
     private let initialAnchorMessageId: Int?
@@ -167,9 +175,16 @@ public final class MessageListModel: Identifiable {
                 suppressUnreadMarker = true
             }
             store.reconcileFetchedMessages(result.messages)
-            messages = result.messages
+            let fetched = result.messages
                 .sorted { $0.id < $1.id }
                 .map { store.messages[$0.id] ?? $0 }
+            // A wholesale replace must not wipe live arrivals newer than
+            // the fetched window — its server snapshot can predate events
+            // applied while it was in flight (a just-sent echo especially).
+            if haveNewest {
+                stashPendingNewest(messages.filter { $0.id > (fetched.last?.id ?? -1) })
+            }
+            messages = fetched
             haveNewest = result.foundNewest ?? !anchoredMidHistory
             haveOldest = result.foundOldest ?? false
             // The marker is the oldest fetched message still unread.
@@ -180,6 +195,7 @@ public final class MessageListModel: Identifiable {
             didInitialFetch = true
             isOfflineFallback = false
             serverDidRespond = true
+            mergePendingNewest()
         } catch is CancellationError {
         } catch {
             guard generation == gen else { return }
@@ -208,6 +224,7 @@ public final class MessageListModel: Identifiable {
                 .map { store.messages[$0.id] ?? $0 }
             messages.append(contentsOf: newer)
             haveNewest = result.foundNewest ?? false
+            mergePendingNewest()
             trimWindowKeepingNewest()
         } catch is CancellationError {
         } catch {
@@ -229,13 +246,19 @@ public final class MessageListModel: Identifiable {
                 anchor: .newest, numBefore: count, numAfter: 0, narrow: narrow.apiElements)
             guard generation == gen else { return }
             store.reconcileFetchedMessages(result.messages)
-            messages = result.messages
+            let fetched = result.messages
                 .sorted { $0.id < $1.id }
                 .map { store.messages[$0.id] ?? $0 }
+            // See fetchInitial: don't let the replace wipe live arrivals.
+            if haveNewest {
+                stashPendingNewest(messages.filter { $0.id > (fetched.last?.id ?? -1) })
+            }
+            messages = fetched
             haveNewest = result.foundNewest ?? true
             haveOldest = result.foundOldest ?? false
             fetchError = nil
             serverDidRespond = true
+            mergePendingNewest()
         } catch is CancellationError {
         } catch {
             guard generation == gen else { return }
@@ -391,7 +414,11 @@ public final class MessageListModel: Identifiable {
     // MARK: Event fan-in (called by PerAccountStore)
 
     func handleNewMessage(_ message: Message, selfUserId: Int) {
-        guard haveNewest, narrow.containsMessage(message, selfUserId: selfUserId) else { return }
+        guard narrow.containsMessage(message, selfUserId: selfUserId) else { return }
+        guard haveNewest else {
+            stashPendingNewest([message])
+            return
+        }
         guard (messages.last?.id ?? -1) < message.id else { return }
         messages.append(message)
         trimWindowKeepingNewest()
@@ -420,5 +447,36 @@ public final class MessageListModel: Identifiable {
     func handleDeletedMessages(ids: [Int]) {
         let deleted = Set(ids)
         messages.removeAll { deleted.contains($0.id) }
+        pendingNewest.removeAll { deleted.contains($0.id) }
+    }
+
+    private func stashPendingNewest(_ arrivals: [Message]) {
+        for message in arrivals
+        where !pendingNewest.contains(where: { $0.id == message.id }) {
+            pendingNewest.append(message)
+        }
+        if pendingNewest.count > Self.maxPendingNewest {
+            pendingNewest.removeFirst(pendingNewest.count - Self.maxPendingNewest)
+        }
+    }
+
+    /// Appends buffered live arrivals newer than the fetched window (the
+    /// store's copy, so edits/reactions that landed while buffered are
+    /// kept; a move out of the narrow while buffered drops it). Call after
+    /// any fetch that leaves `haveNewest` true.
+    private func mergePendingNewest() {
+        guard haveNewest, !pendingNewest.isEmpty, let store else { return }
+        let lastId = messages.last?.id ?? -1
+        let merged = pendingNewest
+            .compactMap { store.messages[$0.id] }
+            .filter {
+                $0.id > lastId
+                    && narrow.containsMessage($0, selfUserId: store.selfUserId)
+            }
+            .sorted { $0.id < $1.id }
+        pendingNewest = []
+        guard !merged.isEmpty else { return }
+        messages.append(contentsOf: merged)
+        trimWindowKeepingNewest()
     }
 }

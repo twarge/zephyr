@@ -11,7 +11,7 @@ public enum SendDestination: Hashable, Sendable, Codable {
         switch (self, narrow) {
         case (.topic(let streamId, let topic), .topic(let narrowStream, let narrowTopic)):
             return streamId == narrowStream
-                && topic.caseInsensitiveCompare(narrowTopic) == .orderedSame
+                && TopicName.matches(topic, narrowTopic)
         case (.topic(let streamId, _), .channel(let narrowStream)):
             return streamId == narrowStream
         case (.dm(let userIds), .dm(let narrowIds)):

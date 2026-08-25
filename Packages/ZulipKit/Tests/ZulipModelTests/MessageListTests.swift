@@ -193,6 +193,109 @@ struct MessageListModelTests {
             .containsMessage(channelMessage, selfUserId: 1))
         #expect(!Narrow.channel(streamId: 11).containsMessage(channelMessage, selfUserId: 1))
     }
+
+    /// "" and "(no topic)" are the same thread server-side (responses use
+    /// one or the other depending on allow_empty_topic_name), so membership
+    /// checks must treat them as equal in either direction.
+    @Test func emptyTopicAliasMembership() throws {
+        let legacy = try ZulipJSON.decoder.decode(
+            Message.self, from: Data(Fixtures.channelMessageJSON(id: 6, topic: "(no topic)").utf8))
+        let modern = try ZulipJSON.decoder.decode(
+            Message.self, from: Data(Fixtures.channelMessageJSON(id: 7, topic: "").utf8))
+        #expect(Narrow.topic(streamId: 10, topic: "").containsMessage(legacy, selfUserId: 1))
+        #expect(Narrow.topic(streamId: 10, topic: "(no topic)")
+            .containsMessage(modern, selfUserId: 1))
+        #expect(!Narrow.topic(streamId: 10, topic: "real topic")
+            .containsMessage(modern, selfUserId: 1))
+
+        #expect(SendDestination.topic(streamId: 10, topic: "")
+            .matches(narrow: .topic(streamId: 10, topic: "(no topic)"), selfUserId: 1))
+        #expect(SendDestination.topic(streamId: 10, topic: "(no topic)")
+            .matches(narrow: .topic(streamId: 10, topic: ""), selfUserId: 1))
+    }
+
+    /// Regression: a message whose stored subject is the event-stream form
+    /// ("") of the empty topic must survive change events (a reaction, a
+    /// flag flip) in a list opened under the fetch form ("(no topic)") —
+    /// it used to be evicted by the literal membership re-check.
+    @Test func emptyTopicAliasSurvivesChangeEvents() async throws {
+        let (store, _) = try makeStoreWithTransport(script: [
+            .json(Fixtures.getMessagesJSON([
+                Fixtures.channelMessageJSON(id: 100, topic: "(no topic)", flags: ["read"])
+            ]))
+        ])
+        let list = MessageListModel(store: store, narrow: .topic(streamId: 10, topic: "(no topic)"))
+        await list.fetchInitial()
+        #expect(list.messages.map(\.id) == [100])
+
+        // A live arrival carries the capability form of the same thread.
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 101, topic: ""), flags: [])))
+        #expect(list.messages.map(\.id) == [100, 101])
+
+        // A change event re-evaluates membership; both forms stay.
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.flagsEventJSON(eventId: 2, op: "add", flag: "read", messages: [100, 101])))
+        #expect(list.messages.map(\.id) == [100, 101])
+    }
+
+    /// Regression: a live arrival while the window doesn't reach the newest
+    /// message (mid-history anchor) is held and merged once a jump fetch
+    /// re-establishes haveNewest — even when that fetch's server snapshot
+    /// predates the message. It used to be dropped, which lost just-sent
+    /// replies outright (their one echo event also clears the outbox row).
+    @Test func liveArrivalMidHistoryMergesAfterJump() async throws {
+        let now = Int(Date.now.timeIntervalSince1970)
+        let (store, _) = try makeStoreWithTransport(script: [
+            .json(Fixtures.getMessagesJSON(
+                [Fixtures.channelMessageJSON(id: 100, timestamp: now)], foundNewest: false)),
+            // The jump's snapshot doesn't include the echo yet.
+            .json(Fixtures.getMessagesJSON([
+                Fixtures.channelMessageJSON(id: 400, timestamp: now, flags: ["read"]),
+                Fixtures.channelMessageJSON(id: 401, timestamp: now, flags: ["read"]),
+            ])),
+        ])
+        let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
+        await list.fetchInitial()
+        #expect(!list.haveNewest)
+
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 500), flags: [])))
+        // Not appended mid-history — held for the jump below.
+        #expect(list.messages.map(\.id) == [100])
+
+        await list.jumpToNewest()
+        #expect(list.messages.map(\.id) == [400, 401, 500])
+        #expect(list.haveNewest)
+    }
+
+    /// Regression: a jump's wholesale replace must not wipe messages that
+    /// were live-appended while its fetch was in flight.
+    @Test func jumpReplaceKeepsLiveTail() async throws {
+        let now = Int(Date.now.timeIntervalSince1970)
+        let (store, _) = try makeStoreWithTransport(script: [
+            .json(Fixtures.getMessagesJSON(
+                [Fixtures.channelMessageJSON(id: 100, timestamp: now, flags: ["read"])])),
+            // The re-fetch's snapshot predates the appended arrival.
+            .json(Fixtures.getMessagesJSON(
+                [Fixtures.channelMessageJSON(id: 100, timestamp: now, flags: ["read"])])),
+        ])
+        let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
+        await list.fetchInitial()
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 101), flags: [])))
+        #expect(list.messages.map(\.id) == [100, 101])
+
+        await list.jumpToNewest()
+        #expect(list.messages.map(\.id) == [100, 101])
+    }
 }
 
 @MainActor

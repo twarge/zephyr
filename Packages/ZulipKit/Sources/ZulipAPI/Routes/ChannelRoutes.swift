@@ -18,7 +18,11 @@ extension ApiConnection {
             var topics: [ChannelTopic]
         }
         let result: GetTopicsResult = try await request(
-            ApiRequest(method: .get, path: "/api/v1/users/me/\(streamId)/topics"))
+            ApiRequest(
+                method: .get, path: "/api/v1/users/me/\(streamId)/topics",
+                // "" for the empty topic, matching the event stream (see
+                // getMessages); ignored by servers without empty topics.
+                params: [Param("allow_empty_topic_name", "true")]))
         return result.topics
     }
 

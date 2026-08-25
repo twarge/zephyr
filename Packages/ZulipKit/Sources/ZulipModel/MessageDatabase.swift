@@ -180,7 +180,14 @@ public final class MessageDatabase: Sendable {
             case .channel(let streamId):
                 ("stream_id = ?", [streamId])
             case .topic(let streamId, let topic):
-                ("stream_id = ? AND topic = ? COLLATE NOCASE", [streamId, topic])
+                // Rows cached before allow_empty_topic_name may carry the
+                // legacy "(no topic)" form of the empty topic — match both.
+                if TopicName.canonical(topic).isEmpty {
+                    ("stream_id = ? AND topic IN ('', ?)",
+                     [streamId, TopicName.legacyEmptyName])
+                } else {
+                    ("stream_id = ? AND topic = ? COLLATE NOCASE", [streamId, topic])
+                }
             case .dm(let key):
                 ("dm_key = ?", [key])
             }

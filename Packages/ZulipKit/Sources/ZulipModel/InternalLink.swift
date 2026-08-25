@@ -119,6 +119,25 @@ public enum InternalLink: Equatable, Sendable {
 public enum TopicName {
     public static let resolvedPrefix = "✔ "
 
+    /// The stand-in servers substitute for an empty topic name in responses
+    /// that don't opt into `allow_empty_topic_name` (also the literal name
+    /// of no-topic messages on servers predating empty topics). The server
+    /// treats it and "" as the same thread, so client-side comparisons
+    /// must too — the same message can arrive under either form.
+    public static let legacyEmptyName = "(no topic)"
+
+    /// The form to compare topic names in: collapses the legacy stand-in
+    /// into the empty string.
+    public static func canonical(_ topic: String) -> String {
+        topic == legacyEmptyName ? "" : topic
+    }
+
+    /// Same-thread test for topic names from any source (messages, narrows,
+    /// links): case-insensitive, empty-name aliases collapsed.
+    public static func matches(_ lhs: String, _ rhs: String) -> Bool {
+        canonical(lhs).caseInsensitiveCompare(canonical(rhs)) == .orderedSame
+    }
+
     public static func isResolved(_ topic: String) -> Bool {
         topic.hasPrefix(resolvedPrefix)
     }
