@@ -112,6 +112,7 @@ private struct GeneralSettings: View {
         }
         .task { await refreshNotificationIssue() }
         .onChange(of: badgePolicy) {
+            UnreadMirror.shared.refresh()
             Task { await refreshNotificationIssue() }
         }
         // Re-check on return from System Settings.

@@ -68,7 +68,7 @@
 		BD6ED142E9B10E20B22453B7 /* UnreadSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */; };
 		C2C81E0729324AE820EB8883 /* ChannelFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1758438236E9536CC8336895 /* ChannelFeedView.swift */; };
 		CAFDE08EBB3B372F2C6AA2B1 /* DetachedWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */; };
-		D3781CBA4A886F9D8F4A553A /* WidgetSummaryWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9AF8AD4ED790447AC128257 /* WidgetSummaryWriter.swift */; };
+		D3781CBA4A886F9D8F4A553A /* UnreadMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9AF8AD4ED790447AC128257 /* UnreadMirror.swift */; };
 		D98ABC4211B58928C55BB7B0 /* MediaDropTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFE3DF32C25009CB60756EAD /* MediaDropTarget.swift */; };
 		E100D2C195474421ED98A3B1 /* WebAuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5410F479FB8AE6E80F4866 /* WebAuthSession.swift */; };
 		F33ED1EE8D08E1F58540F09B /* Tips.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AB37CBF3789C6E2854F3632 /* Tips.swift */; };
@@ -150,7 +150,7 @@
 		A38B120E431BE62466F5CB98 /* ZephyrTV.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ZephyrTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInbox.swift; sourceTree = "<group>"; };
 		A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiPickerView.swift; sourceTree = "<group>"; };
-		A9AF8AD4ED790447AC128257 /* WidgetSummaryWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSummaryWriter.swift; sourceTree = "<group>"; };
+		A9AF8AD4ED790447AC128257 /* UnreadMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadMirror.swift; sourceTree = "<group>"; };
 		AD6E84868E4713FC5F20FD6B /* Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Support.swift; sourceTree = "<group>"; };
 		B107C9FA821BCB2E527459E9 /* FeedWarmCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedWarmCache.swift; sourceTree = "<group>"; };
 		B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewConversationSheet.swift; sourceTree = "<group>"; };
@@ -298,7 +298,7 @@
 				4D9C40C777893FC7275F955B /* Platform.swift */,
 				2AB37CBF3789C6E2854F3632 /* Tips.swift */,
 				FC5410F479FB8AE6E80F4866 /* WebAuthSession.swift */,
-				A9AF8AD4ED790447AC128257 /* WidgetSummaryWriter.swift */,
+				A9AF8AD4ED790447AC128257 /* UnreadMirror.swift */,
 				08D61FEDB2BCFA89017740EF /* Zephyr.entitlements */,
 				066FAF47CC310A2445AAB0A9 /* ZephyrApp.swift */,
 				14B376B2915109D9F3810E20 /* ZephyrIntents.swift */,
@@ -550,7 +550,7 @@
 				75DE44DBC8650067EEAA958D /* TranscriptView.swift in Sources */,
 				5E2EA17274897B42F4A65347 /* UnreadSummary.swift in Sources */,
 				E100D2C195474421ED98A3B1 /* WebAuthSession.swift in Sources */,
-				D3781CBA4A886F9D8F4A553A /* WidgetSummaryWriter.swift in Sources */,
+				D3781CBA4A886F9D8F4A553A /* UnreadMirror.swift in Sources */,
 				B8CB761D6FE61F47C1E0FCBC /* ZephyrApp.swift in Sources */,
 				B25F5C4B54A1AD406C201ECB /* ZephyrIntents.swift in Sources */,
 			);

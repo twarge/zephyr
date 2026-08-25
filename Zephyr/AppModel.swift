@@ -146,6 +146,7 @@ final class AppModel {
 
     func start() async {
         guard case .launching = phase else { return }
+        UnreadMirror.shared.activate(global: global)
         DetachWindowTip.appOpened.sendDonation()
         connectivity = ConnectivityMonitor { [weak self] in
             self?.networkRestored()

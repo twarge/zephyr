@@ -510,10 +510,6 @@ struct MainSplitView: View {
         .onChange(of: model.pendingDestination) {
             consumePendingDestination()
         }
-        .onChange(of: badgeCount, initial: true) {
-            Platform.setAppBadge(badgeCount)
-            WidgetSummaryWriter.update(global: model.global)
-        }
         // Handoff: the current conversation continues on another device.
         .userActivity("com.twarge.zephyr.conversation", isActive: selection != nil) { activity in
             configureHandoff(activity)
@@ -793,23 +789,6 @@ struct MainSplitView: View {
                 }
                 #endif
             }
-    }
-
-    @AppStorage("badgePolicy") private var badgePolicy = BadgePolicy.dmsAndMentions.rawValue
-
-    /// Badge aggregates across every connected server, not just the front one.
-    private var badgeCount: Int {
-        let policy = BadgePolicy(rawValue: badgePolicy) ?? .dmsAndMentions
-        return model.global.stores.values.reduce(0) { total, store in
-            switch policy {
-            case .dmsAndMentions:
-                total + store.unreads.dmAndMentionCount
-            case .allUnreads:
-                total + store.unreads.totalCount
-            case .none:
-                total
-            }
-        }
     }
 
     private func navigateHistory(_ step: Int) {

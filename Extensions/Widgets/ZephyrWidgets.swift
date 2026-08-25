@@ -3,8 +3,8 @@ import WidgetKit
 
 // The unreads widget: renders the summary the app writes into the App
 // Group container (Shared/UnreadSummary.swift). The app reloads the
-// timeline whenever the badge count changes; the schedule below is only
-// a fallback.
+// timeline whenever unread state changes (UnreadMirror); the schedule
+// below is only a fallback.
 
 struct UnreadsEntry: TimelineEntry {
     let date: Date
