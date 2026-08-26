@@ -64,6 +64,12 @@ struct MessageFeedList: View {
     /// Bumped when the viewport is detected outside the content bounds;
     /// the reader responds with an imperative rescue scroll.
     @State private var recoverNonce = 0
+    /// A send from this feed is awaiting its echo: the echo's reveal must
+    /// not depend on `nearBottom` (which can read stale-false right after
+    /// an append) or on the anchor binding (re-setting an unchanged value
+    /// doesn't scroll). Cleared when the last outbox row for this narrow
+    /// resolves.
+    @State private var ownSendRevealPending = false
 
     init(
         store: PerAccountStore, model: MessageListModel, cache: MessageContentCache,
@@ -420,13 +426,47 @@ struct MessageFeedList: View {
                             }
                         }
                         .onChange(of: outboxMessages.count) { old, new in
-                            // Sending while viewing history jumps to the
-                            // newest messages so the send is visible.
-                            guard new > old, !model.haveNewest else { return }
-                            Task {
-                                await model.jumpToNewest()
+                            // A send targeting this narrow always reveals
+                            // itself — regardless of `nearBottom`, which
+                            // only gates arrivals from others.
+                            guard new > old else { return }
+                            ownSendRevealPending = true
+                            guard !model.haveNewest else {
                                 scrollToBottomSettled(proxy)
+                                return
                             }
+                            // Viewing history: jump to the newest messages
+                            // so the send is visible. Retried — the echo
+                            // consumes the outbox row, so a failed jump
+                            // would otherwise leave the sent message
+                            // invisible in the pending buffer with nothing
+                            // else to surface it.
+                            Task {
+                                for delay in [0, 2, 5] {
+                                    if delay > 0 {
+                                        try? await Task.sleep(for: .seconds(delay))
+                                    }
+                                    if !model.haveNewest {
+                                        await model.jumpToNewest()
+                                    }
+                                    if model.haveNewest {
+                                        scrollToBottomSettled(proxy)
+                                        return
+                                    }
+                                }
+                            }
+                        }
+                        .onChange(of: model.messages.last?.id) { _, newLastId in
+                            // The echo of a send from this feed: reveal it
+                            // even when `nearBottom` reads stale-false, via
+                            // the imperative settle (the anchor binding
+                            // alone is a no-op when already at the bottom
+                            // sentinel).
+                            guard newLastId != nil, ownSendRevealPending,
+                                  model.messages.last?.senderId == store.selfUserId
+                            else { return }
+                            ownSendRevealPending = !outboxMessages.isEmpty
+                            scrollToBottomSettled(proxy)
                         }
                         .task {
                             await runAutoScrollIfRequested(proxy)
@@ -931,11 +971,12 @@ struct MessageFeedList: View {
                             Task { await model.fetchNewer() }
                         }
                 }
-                if model.haveNewest {
-                    ForEach(outboxMessages) { outboxMessage in
-                        OutboxRow(store: store, message: outboxMessage)
-                            .id("out-\(outboxMessage.id)")
-                    }
+                // Unconditionally — a pending send must never be invisible.
+                // Mid-history the rows sit below the paging spinner until
+                // the send-triggered jump lands the real window.
+                ForEach(outboxMessages) { outboxMessage in
+                    OutboxRow(store: store, message: outboxMessage)
+                        .id("out-\(outboxMessage.id)")
                 }
                 if let names = typistNames, !names.isEmpty {
                     HStack(spacing: 6) {
@@ -1066,11 +1107,8 @@ struct MessageFeedList: View {
             }
             onNewMessages?()
         }
-        .onChange(of: outboxMessages.last?.id) { _, newLastId in
-            if newLastId != nil, nearBottom {
-                anchorId = Self.bottomAnchorId
-            }
-        }
+        // (Outbox appends reveal via the reader-scoped send hook, which
+        // isn't gated on nearBottom — a send always shows itself.)
     }
 }
 

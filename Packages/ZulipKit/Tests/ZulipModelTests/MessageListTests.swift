@@ -296,6 +296,66 @@ struct MessageListModelTests {
         await list.jumpToNewest()
         #expect(list.messages.map(\.id) == [100, 101])
     }
+
+    /// Regression: an own-send echo buffered by a mid-history window (its
+    /// send-time jump failed) is surfaced by the reconnect recovery hook —
+    /// the echo consumed the outbox row, so nothing else represents it.
+    @Test func buriedOwnSendRecoversViaJump() async throws {
+        let now = Int(Date.now.timeIntervalSince1970)
+        let (store, transport) = try makeStoreWithTransport(script: [
+            .json(Fixtures.getMessagesJSON(
+                [Fixtures.channelMessageJSON(id: 100, timestamp: now)], foundNewest: false)),
+            .networkError,  // The send-time jump fails.
+            .json(Fixtures.getMessagesJSON([
+                Fixtures.channelMessageJSON(id: 400, timestamp: now, flags: ["read"]),
+                Fixtures.channelMessageJSON(id: 500, senderId: 1, timestamp: now),
+            ])),
+        ])
+        let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
+        await list.fetchInitial()
+        #expect(!list.haveNewest)
+
+        // Our own send's echo arrives mid-history and is buffered.
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1,
+                    message: Fixtures.channelMessageJSON(id: 500, senderId: 1, timestamp: now),
+                    flags: [])))
+        #expect(list.messages.map(\.id) == [100])
+
+        await list.jumpToNewest()  // The send-time jump: fails.
+        #expect(!list.haveNewest)
+
+        list.recoverBuriedOwnSends()
+        for _ in 0..<500 where !list.haveNewest { await Task.yield() }
+        #expect(list.haveNewest)
+        #expect(list.messages.map(\.id) == [400, 500])
+        #expect(transport.requests.count == 3)
+    }
+
+    /// Buffered arrivals from others don't trigger the recovery jump — the
+    /// reader parked mid-history on purpose.
+    @Test func buriedOthersArrivalDoesNotAutoJump() async throws {
+        let now = Int(Date.now.timeIntervalSince1970)
+        let (store, transport) = try makeStoreWithTransport(script: [
+            .json(Fixtures.getMessagesJSON(
+                [Fixtures.channelMessageJSON(id: 100, timestamp: now)], foundNewest: false))
+        ])
+        let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
+        await list.fetchInitial()
+
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1,
+                    message: Fixtures.channelMessageJSON(id: 500, timestamp: now), flags: [])))
+        list.recoverBuriedOwnSends()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(!list.haveNewest)
+        #expect(list.messages.map(\.id) == [100])
+        #expect(transport.requests.count == 1)
+    }
 }
 
 @MainActor

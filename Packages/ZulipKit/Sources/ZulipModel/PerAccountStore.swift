@@ -567,6 +567,10 @@ public final class PerAccountStore {
             persistPendingActions()
             // Transcripts rendered from the offline cache may be stale.
             forEachMessageList { $0.refetchIfOfflineFallback() }
+            // A send whose echo landed in a mid-history window (its
+            // send-time jump failed) stays invisible until a fetch reaches
+            // the newest messages again — re-run that jump now.
+            forEachMessageList { $0.recoverBuriedOwnSends() }
             // The path monitor often fires before sockets are actually
             // usable; if work still failed, retry on a short ladder
             // instead of waiting out the event loop's next recovery.

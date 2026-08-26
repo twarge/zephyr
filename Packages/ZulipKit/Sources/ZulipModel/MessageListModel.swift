@@ -444,6 +444,19 @@ public final class MessageListModel: Identifiable {
         }
     }
 
+    /// A mid-history window whose pending buffer holds one of our own sends
+    /// means the send-time jump-to-newest failed: the echo consumed the
+    /// outbox row, so nothing visible represents the message until a fetch
+    /// re-establishes `haveNewest`. Called on connectivity recovery to
+    /// re-run that jump; a no-op for buffered arrivals from others (the
+    /// reader parked mid-history on purpose — don't yank them).
+    func recoverBuriedOwnSends() {
+        guard !haveNewest, !isFetching, let store,
+              pendingNewest.contains(where: { $0.senderId == store.selfUserId })
+        else { return }
+        Task { await self.jumpToNewest() }
+    }
+
     func handleDeletedMessages(ids: [Int]) {
         let deleted = Set(ids)
         messages.removeAll { deleted.contains($0.id) }
