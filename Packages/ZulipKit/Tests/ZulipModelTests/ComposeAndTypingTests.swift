@@ -41,6 +41,33 @@ struct ComposeAutocompleteTests {
         replaced.replaceSubrange(result.triggerIndex..<text.endIndex, with: "@**Tim Abbott** ")
         #expect(replaced == "hello @**Tim Abbott** ")
     }
+
+    @Test func tokenEndsAtTheCaret() throws {
+        // Editing mid-message: the token is whatever precedes the caret,
+        // and text after the caret never joins it.
+        let text = "hey @Ti and more"
+        let caret = text.index(text.startIndex, offsetBy: 7)  // after "@Ti"
+        let result = try #require(ComposeAutocomplete.token(in: text, endingAt: caret))
+        #expect(result.token == .mention("Ti"))
+        var replaced = text
+        replaced.replaceSubrange(result.triggerIndex..<caret, with: "@**Tim Abbott** ")
+        #expect(replaced == "hey @**Tim Abbott**  and more")
+
+        // The trailing "now" would have disqualified this shortcode.
+        let emoji = "hey :oct now"
+        let emojiCaret = emoji.index(emoji.startIndex, offsetBy: 8)  // after ":oct"
+        #expect(ComposeAutocomplete.token(in: emoji, endingAt: emojiCaret)?.token
+            == .emoji("oct"))
+
+        // "/po|ll lunch": the command word is judged up to the caret.
+        let command = "/po lunch"
+        let commandCaret = command.index(command.startIndex, offsetBy: 3)
+        #expect(ComposeAutocomplete.token(in: command, endingAt: commandCaret)?.token
+            == .command("po"))
+
+        // A caret before the trigger sees no token.
+        #expect(ComposeAutocomplete.token(in: "@Tim", endingAt: "@Tim".startIndex) == nil)
+    }
 }
 
 struct EmojiCatalogTests {

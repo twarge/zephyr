@@ -35,7 +35,26 @@ public struct Subscription: Decodable, Sendable, Hashable, Identifiable {
     public var inviteOnly: Bool?
     /// Per-channel "notify for all messages" (nil = realm default off).
     public var desktopNotifications: Bool?
+    /// Server-computed average messages per week, for autocomplete
+    /// ranking of channels with no locally-known activity.
+    public var streamWeeklyTraffic: Int?
 
     public var id: Int { streamId }
     public var muted: Bool { isMuted ?? false }
+
+    public init(
+        streamId: Int, name: String, description: String? = nil, color: String? = nil,
+        isMuted: Bool? = nil, pinToTop: Bool? = nil, inviteOnly: Bool? = nil,
+        desktopNotifications: Bool? = nil, streamWeeklyTraffic: Int? = nil
+    ) {
+        self.streamId = streamId
+        self.name = name
+        self.description = description
+        self.color = color
+        self.isMuted = isMuted
+        self.pinToTop = pinToTop
+        self.inviteOnly = inviteOnly
+        self.desktopNotifications = desktopNotifications
+        self.streamWeeklyTraffic = streamWeeklyTraffic
+    }
 }

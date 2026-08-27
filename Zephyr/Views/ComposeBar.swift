@@ -191,7 +191,19 @@ struct ComposeBar: View {
     @State private var topicPrefill = ""
     @State private var suggestions: [ComposeSuggestion] = []
     @State private var selectedSuggestion = 0
-    @State private var tokenTriggerIndex: String.Index?
+    /// The trigger-to-caret span the accepted completion replaces.
+    @State private var tokenRange: Range<String.Index>?
+    /// The last (text, caret) pair scanned for a token: typing fires both
+    /// the text and the selection onChange in one update, and the mention
+    /// scan sorts the whole user list — scan each state once.
+    @State private var lastTokenScan: (text: String, caret: String.Index)?
+    /// Compact-field caret (the expanded editor has `editorSelection`), so
+    /// autocomplete follows edits in the middle of the draft.
+    @State private var fieldSelection: TextSelection?
+    /// True while the current update cycle contains a text edit: only
+    /// typing may open the card — pure caret travel would otherwise pop
+    /// it over an uncompleted token and capture Return/arrows.
+    @State private var textJustEdited = false
     private struct UploadItem: Identifiable, Equatable {
         let id = UUID()
         var filename: String
@@ -232,6 +244,15 @@ struct ComposeBar: View {
             return "Message \(placeholder)"
         case .channel:
             return "Message this topic"
+        }
+    }
+
+    /// The channel being composed to, for the #channel ranking boost.
+    private var currentStreamId: Int? {
+        switch mode {
+        case .channel(let streamId): streamId
+        case .fixed(.topic(let streamId, _), _): streamId
+        case .fixed(.dm, _): nil
         }
     }
 
@@ -419,8 +440,16 @@ struct ComposeBar: View {
                     store.typingActivity(in: destination)
                 }
             }
+            textJustEdited = true
             updateSuggestions()
+            // The selection onChange for the same keystroke may run before
+            // or after this one; the flag spans the whole cycle.
+            Task { @MainActor in textJustEdited = false }
         }
+        // Caret moves re-aim the token detector at the edit point (and a
+        // range selection dismisses the card).
+        .onChange(of: editorSelection) { updateSuggestions() }
+        .onChange(of: fieldSelection) { updateSuggestions() }
     }
 
     // MARK: Messages-style bar pieces
@@ -473,7 +502,7 @@ struct ComposeBar: View {
     /// iOS keyboard labels it so), and the expanded editor keeps its
     /// arrow where Return means newline.
     private var compactField: some View {
-        TextField(placeholder, text: $text, axis: .vertical)
+        TextField(placeholder, text: $text, selection: $fieldSelection, axis: .vertical)
             .textFieldStyle(.plain)
             .autocorrectionDisabled(false)
             .lineLimit(1...10)
@@ -534,9 +563,8 @@ struct ComposeBar: View {
             #endif
     }
 
-    /// A focused field stays focused across the compact/long-form swap;
-    /// the compact field exposes no cursor position, so entering the
-    /// editor lands the insertion point at the end.
+    /// A focused field stays focused across the compact/long-form swap,
+    /// and the caret carries over.
     private func toggleEditorMode() {
         LongFormComposeTip().invalidate(reason: .actionPerformed)
         let restoreFocus = messageFocused
@@ -548,7 +576,10 @@ struct ComposeBar: View {
         let entering = expanded
         Task { @MainActor in
             if entering {
-                editorSelection = TextSelection(insertionPoint: text.endIndex)
+                editorSelection = fieldSelection
+                    ?? TextSelection(insertionPoint: text.endIndex)
+            } else {
+                fieldSelection = editorSelection
             }
             messageFocused = true
         }
@@ -742,9 +773,8 @@ struct ComposeBar: View {
         }
     }
 
-    /// ⌘B/⌘I/⌘K: wraps the long-form editor's selection in markdown, or
-    /// appends an empty pair when nothing is selected (compact field has no
-    /// selection API).
+    /// ⌘B/⌘I/⌘K: wraps the active input's selection in markdown, or
+    /// appends an empty pair when nothing is selected.
     private func applyFormat(_ format: ComposeFormat) {
         let wrappers: (String, String)
         switch format {
@@ -756,8 +786,10 @@ struct ComposeBar: View {
         case .quote: wrappers = ("```quote\n", "\n```")
         case .spoiler: wrappers = ("```spoiler\n", "\n```")
         }
-        if expanded, !showPreview, let selection = editorSelection,
-           case .selection(let range) = selection.indices, !range.isEmpty {
+        let selection = expanded
+            ? (showPreview ? nil : editorSelection) : fieldSelection
+        if let selection, case .selection(let range) = selection.indices,
+           !range.isEmpty, range.upperBound <= text.endIndex {
             let selected = String(text[range])
             text.replaceSubrange(range, with: wrappers.0 + selected + wrappers.1)
         } else {
@@ -851,23 +883,57 @@ struct ComposeBar: View {
         }
     }
 
+    /// The active input's insertion point: nil when a nonempty range is
+    /// selected (completing would eat it), end-of-text when the input has
+    /// reported no selection yet. Clamped — the selection binding can
+    /// briefly trail a programmatic text edit.
+    private var caretIndex: String.Index? {
+        guard let selection = expanded ? editorSelection : fieldSelection else {
+            return text.endIndex
+        }
+        guard case .selection(let range) = selection.indices, range.isEmpty else {
+            return nil
+        }
+        return min(range.lowerBound, text.endIndex)
+    }
+
     private func updateSuggestions() {
-        guard let (token, triggerIndex) = ComposeAutocomplete.trailingToken(in: text) else {
+        guard let caret = caretIndex else {
             suggestions = []
-            tokenTriggerIndex = nil
+            tokenRange = nil
             return
         }
-        tokenTriggerIndex = triggerIndex
+        // Typeahead is input-driven (as on the web): caret travel alone
+        // never opens a closed card, only refreshes or closes an open one.
+        // (Before the memo check: a gated pass must not swallow the text
+        // edit's own scan when the selection onChange runs first.)
+        if suggestions.isEmpty && !textJustEdited {
+            tokenRange = nil
+            return
+        }
+        if let last = lastTokenScan, last.text == text, last.caret == caret { return }
+        lastTokenScan = (text, caret)
+        guard let (token, triggerIndex) = ComposeAutocomplete.token(in: text, endingAt: caret)
+        else {
+            suggestions = []
+            tokenRange = nil
+            return
+        }
+        tokenRange = triggerIndex..<caret
         selectedSuggestion = 0
         switch token {
         case .mention(let query):
-            let users = store.users.values
-                .filter { $0.isActive != false }
-                .filter { query.isEmpty || $0.fullName.localizedCaseInsensitiveContains(query) }
-                .sorted {
-                    $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending
-                }
-                .prefix(6)
+            // Whoever spoke in the open conversation ranks first (the
+            // feed is ascending, so the last write per sender wins).
+            var spoke: [Int: Int] = [:]
+            for message in keys.activeFeed?.messages ?? [] {
+                spoke[message.senderId] = message.id
+            }
+            let users = ComposeRanking.topUsers(
+                store.users.values.lazy.filter { $0.isActive != false },
+                matching: query, limit: 6,
+                conversationRecency: spoke,
+                dmRecency: store.conversations.dmRecencyByUser)
             suggestions = users.map { .mention($0) }
         case .emoji(let query):
             store.loadEmojiCatalogIfNeeded()
@@ -880,10 +946,10 @@ struct ComposeBar: View {
             }
             suggestions = (prefixMatches + containsMatches).prefix(8).map { .emoji($0) }
         case .channel(let query):
-            let channels = store.subscriptions.values
-                .filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
-                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-                .prefix(6)
+            let channels = ComposeRanking.topChannels(
+                store.subscriptions.values, matching: query, limit: 6,
+                currentStreamId: currentStreamId,
+                recency: store.conversations.channelRecency)
             suggestions = channels.map { .channel($0) }
         case .command(let query):
             suggestions = SlashCommand.all
@@ -894,10 +960,11 @@ struct ComposeBar: View {
             let channels = store.subscriptions.values
             let channel = channels.first {
                 $0.name.caseInsensitiveCompare(channelQuery) == .orderedSame
-            } ?? channels
-                .filter { $0.name.range(of: channelQuery, options: .caseInsensitive) != nil }
-                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-                .first
+            } ?? ComposeRanking.topChannels(
+                channels, matching: channelQuery, limit: 1,
+                currentStreamId: currentStreamId,
+                recency: store.conversations.channelRecency
+            ).first
             guard let channel else {
                 suggestions = []
                 return
@@ -924,7 +991,12 @@ struct ComposeBar: View {
         let connection = store.connection
         Task {
             linkTopics[streamId] = (try? await connection.getTopics(streamId: streamId)) ?? []
+            // New data for an already-scanned state: rescan, and let the
+            // arriving topics open the (empty-while-loading) card.
+            lastTokenScan = nil
+            textJustEdited = true
             updateSuggestions()
+            textJustEdited = false
         }
     }
 
@@ -943,21 +1015,25 @@ struct ComposeBar: View {
     }
 
     private func accept(_ suggestion: ComposeSuggestion) {
-        guard let triggerIndex = tokenTriggerIndex, triggerIndex <= text.endIndex else {
+        guard let tokenRange, tokenRange.upperBound <= text.endIndex else {
             suggestions = []
             return
         }
-        text.replaceSubrange(triggerIndex..<text.endIndex, with: suggestion.completion)
-        // The long-form editor's selection binding pins the caret at its
-        // old offset through a programmatic edit; move it past the
-        // completion. (The compact field has no selection binding and
-        // advances on its own. The token is trailing, so the completion
-        // always ends at endIndex.)
+        let completion = suggestion.completion
+        let caretOffset = text.distance(from: text.startIndex, to: tokenRange.lowerBound)
+            + completion.count
+        text.replaceSubrange(tokenRange, with: completion)
+        // The selection bindings pin the caret at its old offset through a
+        // programmatic edit; move it past the completion.
+        let caret = TextSelection(
+            insertionPoint: text.index(text.startIndex, offsetBy: caretOffset))
         if expanded {
-            editorSelection = TextSelection(insertionPoint: text.endIndex)
+            editorSelection = caret
+        } else {
+            fieldSelection = caret
         }
         suggestions = []
-        tokenTriggerIndex = nil
+        self.tokenRange = nil
         messageFocused = true
     }
 

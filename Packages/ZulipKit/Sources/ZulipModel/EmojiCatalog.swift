@@ -45,10 +45,11 @@ public enum EmojiCatalog {
     }
 }
 
-/// Detects an in-progress autocomplete token at the end of compose text:
+/// Detects an in-progress autocomplete token ending at the caret:
 /// `@name`, `:shortcode`, or `#channel` (each needing a word boundary before
-/// the trigger). Returns the token and where the trigger starts, so the
-/// completion can replace the tail.
+/// the trigger). Text after the caret never joins the token, so completion
+/// works for edits anywhere in the message. Returns the token and where the
+/// trigger starts, so the completion can replace trigger..<caret.
 public enum ComposeAutocomplete {
     public enum Token: Equatable, Sendable {
         case mention(String)
@@ -62,23 +63,31 @@ public enum ComposeAutocomplete {
         case command(String)
     }
 
+    /// The token at a caret sitting at the very end of the text.
     public static func trailingToken(in text: String) -> (token: Token, triggerIndex: String.Index)? {
-        guard !text.isEmpty else { return nil }
+        token(in: text, endingAt: text.endIndex)
+    }
 
-        if text.hasPrefix("/") {
-            let query = String(text.dropFirst())
+    public static func token(
+        in text: String, endingAt caret: String.Index
+    ) -> (token: Token, triggerIndex: String.Index)? {
+        let scope = text[..<caret]
+        guard !scope.isEmpty else { return nil }
+
+        if scope.hasPrefix("/") {
+            let query = String(scope.dropFirst())
             if query.count <= 20,
                !query.contains(where: { $0.isWhitespace || $0.isNewline }) {
-                return (.command(query), text.startIndex)
+                return (.command(query), scope.startIndex)
             }
             // Past the command word ("/poll lunch?"): fall through — later
             // @/:/# triggers still autocomplete.
         }
 
         func lastTrigger(_ trigger: Character) -> String.Index? {
-            guard let index = text.lastIndex(of: trigger) else { return nil }
-            if index > text.startIndex {
-                let before = text[text.index(before: index)]
+            guard let index = scope.lastIndex(of: trigger) else { return nil }
+            if index > scope.startIndex {
+                let before = scope[scope.index(before: index)]
                 guard before.isWhitespace || before.isNewline else { return nil }
             }
             return index
@@ -88,7 +97,7 @@ public enum ComposeAutocomplete {
             lastTrigger(trigger).map { (trigger, $0) }
         }
         guard let (trigger, index) = candidates.max(by: { $0.1 < $1.1 }) else { return nil }
-        let query = String(text[text.index(after: index)...])
+        let query = String(scope[scope.index(after: index)...])
         // Channel+topic links run longer than other tokens.
         guard query.count <= (trigger == "#" ? 90 : 30), !query.contains("\n")
         else { return nil }

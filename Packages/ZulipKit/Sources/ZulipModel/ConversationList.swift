@@ -75,6 +75,30 @@ public final class ConversationList {
         }
     }
 
+    /// Latest DM message id per participant — the "recently messaged"
+    /// signal for mention and recipient ranking.
+    public var dmRecencyByUser: [Int: Int] {
+        var byUser: [Int: Int] = [:]
+        for conversation in byKey.values {
+            guard let ids = conversation.key.dmParticipantIds else { continue }
+            for id in ids {
+                byUser[id] = max(byUser[id] ?? 0, conversation.lastMessageId)
+            }
+        }
+        return byUser
+    }
+
+    /// Latest known message id per channel, for channel ranking.
+    public var channelRecency: [Int: Int] {
+        var byStream: [Int: Int] = [:]
+        for conversation in byKey.values {
+            if case .topic(let streamId, _) = conversation.key {
+                byStream[streamId] = max(byStream[streamId] ?? 0, conversation.lastMessageId)
+            }
+        }
+        return byStream
+    }
+
     func noteMessage(_ message: Message, selfUserId: Int) {
         guard let key = Unreads.conversationKey(for: message, selfUserId: selfUserId) else { return }
         guard (byKey[key]?.lastMessageId ?? -1) <= message.id else { return }

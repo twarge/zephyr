@@ -80,23 +80,23 @@ struct NewConversationSheet: View {
     private var userSuggestions: [User] {
         guard selectedChannel == nil else { return [] }
         let trimmed = query.trimmingCharacters(in: .whitespaces)
-        return store.users.values
-            .filter { $0.isActive != false }
-            .filter { trimmed.isEmpty || $0.fullName.localizedCaseInsensitiveContains(trimmed) }
-            .filter { user in !selectedUsers.contains(where: { $0.userId == user.userId }) }
-            .sorted { $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending }
-            .prefix(5)
-            .map { $0 }
+        return ComposeRanking.topUsers(
+            store.users.values.lazy.filter { user in
+                user.isActive != false
+                    && !selectedUsers.contains(where: { $0.userId == user.userId })
+            },
+            matching: trimmed, limit: 5,
+            conversationRecency: [:],
+            dmRecency: store.conversations.dmRecencyByUser)
     }
 
     private var channelSuggestions: [Subscription] {
         guard !peopleOnly, selectedUsers.isEmpty, selectedChannel == nil else { return [] }
         let trimmed = query.trimmingCharacters(in: .whitespaces)
-        return store.subscriptions.values
-            .filter { trimmed.isEmpty || $0.name.localizedCaseInsensitiveContains(trimmed) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            .prefix(5)
-            .map { $0 }
+        return ComposeRanking.topChannels(
+            store.subscriptions.values, matching: trimmed, limit: 5,
+            currentStreamId: nil,
+            recency: store.conversations.channelRecency)
     }
 
     private var destination: SendDestination? {

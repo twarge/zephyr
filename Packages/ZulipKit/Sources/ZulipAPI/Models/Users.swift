@@ -12,6 +12,18 @@ public struct User: Decodable, Sendable, Hashable, Identifiable {
     public var avatarUrl: String?
 
     public var id: Int { userId }
+
+    public init(
+        userId: Int, email: String, fullName: String, isBot: Bool = false,
+        isActive: Bool? = true, avatarUrl: String? = nil
+    ) {
+        self.userId = userId
+        self.email = email
+        self.fullName = fullName
+        self.isBot = isBot
+        self.isActive = isActive
+        self.avatarUrl = avatarUrl
+    }
 }
 
 /// The partial `person` payload of a `realm_user` / `update` event: only the
