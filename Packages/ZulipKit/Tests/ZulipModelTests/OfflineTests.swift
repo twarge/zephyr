@@ -380,6 +380,36 @@ struct OfflineTests {
         #expect(list.messages.map(\.id) == [1, 2, 3, 4, 5])
     }
 
+    @Test func cachedWindowStaleBacklogStillMarksRecentResumePoint() async throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        // Same resume rule as the fetch's stale-backlog path. The channel
+        // holds one never-read ancient topic (id 1) plus two active ones
+        // — enough messages that the 100-message newest window excludes
+        // the ancient unread. The preview opens at the newest window,
+        // read to its oldest edge, so its own first unread (the fresh
+        // arrivals, 118+) takes the marker instead of none at all.
+        let now = Int(Date.now.timeIntervalSince1970)
+        var all = [try fixtureMessage(id: 1, topic: "dead", flags: [])]
+        all += try (2...61).map { try fixtureMessage(id: $0, topic: "b", timestamp: now) }
+        all += try (62...117).map { try fixtureMessage(id: $0, topic: "c", timestamp: now) }
+        all += try (118...121).map {
+            try fixtureMessage(id: $0, topic: "c", timestamp: now, flags: [])
+        }
+        try #require(offline.openDatabase()).upsert(all, selfUserId: 1)
+
+        // The launch restore keeps the newest 50 per conversation: id 1,
+        // b's 12–61, c's 72–121 — 101 messages, so the 100-message
+        // preview window starts at 12 (read), past the ancient unread.
+        let (store, _) = try makeStore(script: [.networkError], offline: offline)
+        await store.restoreOfflineCache()
+        let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
+        await list.fetchInitial()
+        #expect(list.firstUnreadMarkerId == 118)
+        #expect(list.messages.map(\.id) == Array(12...61) + Array(72...121))
+        #expect(list.haveNewest)
+    }
+
     @Test func listOpenedBeforeRestoreRendersWhenRestoreLands() async throws {
         let offline = tempOfflineStore()
         defer { try? FileManager.default.removeItem(at: offline.directory) }

@@ -120,6 +120,28 @@ struct MessageListModelTests {
         #expect(list.firstUnreadMarkerId == nil)
     }
 
+    @Test func staleBacklogStillMarksRecentResumePoint() async throws {
+        // An ancient unread (e.g. one never-read channel in the combined
+        // feed) triggers the stale re-anchor at newest — but the newest
+        // window is read to its oldest edge, so the fresh unreads in it
+        // are the real resume point: the marker aims at the first one.
+        let (store, transport) = try makeStoreWithTransport(script: [
+            .json(Fixtures.getMessagesJSON(
+                [Fixtures.channelMessageJSON(id: 100)], foundNewest: false)),
+            .json(Fixtures.getMessagesJSON([
+                Fixtures.channelMessageJSON(id: 900, flags: ["read"]),
+                Fixtures.channelMessageJSON(id: 901),
+                Fixtures.channelMessageJSON(id: 902),
+            ])),
+        ])
+        let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
+        await list.fetchInitial()
+        #expect(transport.requests.count == 2)
+        #expect(list.messages.map(\.id) == [900, 901, 902])
+        #expect(list.haveNewest)
+        #expect(list.firstUnreadMarkerId == 901)
+    }
+
     @Test func recentFirstUnreadBacklogKeepsAnchor() async throws {
         // A backlog whose newest fetched message is recent stays anchored
         // at the first unread (normal Zulip semantics).

@@ -172,7 +172,15 @@ public final class MessageListModel: Identifiable {
                     narrow: narrow.apiElements)
                 guard generation == gen else { return }
                 anchoredMidHistory = false
-                suppressUnreadMarker = true
+                // The newest window can still hold the resume point: when
+                // its oldest message is read, recent reading reached into
+                // it, and its unreads are fresh arrivals (only the ancient
+                // backlog lies above) — the marker aims at the first of
+                // them below. Unread to the window's very edge is the
+                // bottomless backlog itself: no marker, open at newest.
+                suppressUnreadMarker = result.messages
+                    .min { $0.id < $1.id }
+                    .map { !($0.flags ?? []).contains("read") } ?? true
             }
             store.reconcileFetchedMessages(result.messages)
             let fetched = result.messages
@@ -326,12 +334,22 @@ public final class MessageListModel: Identifiable {
             anchorIndex = index
         } else if let index = cached.firstIndex(where: {
             !($0.flags ?? []).contains("read")
-        }), Date.now.timeIntervalSince1970 - TimeInterval(cached[index].timestamp)
-            <= Self.staleBacklogAge {
-            // The same stale-backlog rule as the fetch: an ancient first
-            // unread opens at the newest messages, with no NEW marker.
-            anchorIndex = index
-            firstUnreadMarkerId = cached[index].id
+        }) {
+            if Date.now.timeIntervalSince1970 - TimeInterval(cached[index].timestamp)
+                <= Self.staleBacklogAge {
+                anchorIndex = index
+                firstUnreadMarkerId = cached[index].id
+            } else if let resume = cached.suffix(count).first(where: {
+                !($0.flags ?? []).contains("read")
+            }), let oldest = cached.suffix(count).first,
+                (oldest.flags ?? []).contains("read")
+            {
+                // The same stale-backlog rule as the fetch: an ancient
+                // first unread opens at the newest messages — but the
+                // newest window read to its edge still marks the resume
+                // point at its own first unread (fresh arrivals).
+                firstUnreadMarkerId = resume.id
+            }
         }
         if let anchorIndex {
             let start = max(cached.startIndex, anchorIndex - count)

@@ -57,6 +57,13 @@ struct MessageFeedList: View {
     /// at the bottom: the NEW marker re-aims here on first appear
     /// (consumed one-shot — init must stay side-effect free).
     @State private var pendingMarkerReaim: Int?
+    /// The unread the opening anchor targeted (nil = a bottom open).
+    /// Compared against the server's answer when it replaces an offline
+    /// preview: a differing marker re-runs the opening scroll.
+    @State private var openingMarkerId: Int?
+    /// The reader has scrolled the feed themselves; the opening scroll
+    /// must no longer be corrected out from under them.
+    @State private var userDidScroll = false
     @State private var nearBottom = true
     @State private var quickLook = FeedQuickLook()
     @State private var pendingReadIds: Set<Int> = []
@@ -112,6 +119,9 @@ struct MessageFeedList: View {
         }
         _pendingMarkerReaim = State(initialValue: reaimId)
         _restoredPosition = State(initialValue: restored)
+        _openingMarkerId = State(
+            initialValue: reaimId
+                ?? (restored == nil ? model.firstUnreadMarkerId : nil))
         // The scroll target must be known BEFORE the first layout pass:
         // an onAppear write lands after it, re-targeting the lazy stack
         // mid-estimation — which could park the viewport in unrealized
@@ -344,7 +354,11 @@ struct MessageFeedList: View {
                                 Task { @MainActor in
                                     for delay in [300, 700] {
                                         try? await Task.sleep(for: .milliseconds(delay))
-                                        guard nearBottom else { return }
+                                        // openingMarkerId turning non-nil means
+                                        // the server's answer re-anchored the
+                                        // open at an unread marker mid-pass.
+                                        guard nearBottom, openingMarkerId == nil
+                                        else { return }
                                         proxy.scrollTo(Self.bottomAnchorId, anchor: .bottom)
                                     }
                                 }
@@ -401,6 +415,44 @@ struct MessageFeedList: View {
                                   model.messages.contains(where: { $0.id == newTip })
                             else { return }
                             revealSelection(newTip, previous: old, proxy: proxy)
+                        }
+                        // The offline preview committed the opening anchor
+                        // before the server answered (cold launches render
+                        // the cached transcript instantly, and a cache
+                        // written before the newest arrivals reads fully-
+                        // read, so the preview parks at the bottom). When
+                        // the server's answer then places the first unread
+                        // elsewhere, re-run the opening scroll — but only
+                        // while the reader hasn't touched the feed.
+                        .onChange(of: model.isOfflineFallback) { wasFallback, isFallback in
+                            guard wasFallback, !isFallback, model.fetchError == nil,
+                                  !userDidScroll, !didRestore,
+                                  keys.highlightMessageId == nil,
+                                  keys.selectedMessageId == nil,
+                                  model.firstUnreadMarkerId != openingMarkerId
+                            else { return }
+                            // Rows the swept-away viewport grazed were never
+                            // actually seen — they must not flush as read.
+                            readFlushTask?.cancel()
+                            pendingReadIds = []
+                            openingMarkerId = model.firstUnreadMarkerId
+                            if model.firstUnreadMarkerId != nil {
+                                anchorId = "unread-marker"
+                                Task { @MainActor in
+                                    try? await Task.sleep(for: .milliseconds(350))
+                                    guard !userDidScroll else { return }
+                                    withAnimation(.easeOut(duration: 0.2)) {
+                                        proxy.scrollTo(
+                                            "unread-marker",
+                                            anchor: UnitPoint(x: 0.5, y: 0.25))
+                                    }
+                                }
+                            } else {
+                                // The preview anchored at a cached marker the
+                                // server has since cleared (read elsewhere):
+                                // the true open is the bottom.
+                                scrollToBottomSettled(proxy)
+                            }
                         }
                         .overlay(alignment: .bottomTrailing) {
                             if !nearBottom || !model.haveNewest {
@@ -1023,6 +1075,12 @@ struct MessageFeedList: View {
             noteSeen(identifiers)
         })
         .onScrollPhaseChange { _, newPhase in
+            // User-driven phases only — programmatic scrolls (anchor
+            // binding, settle passes) report `.animating`.
+            switch newPhase {
+            case .tracking, .interacting, .decelerating: userDidScroll = true
+            default: break
+            }
             idleDebounce.task?.cancel()
             if newPhase.isScrolling {
                 // Same-value writes still invalidate; write only edges.
