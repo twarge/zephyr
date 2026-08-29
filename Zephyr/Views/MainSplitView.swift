@@ -225,6 +225,10 @@ struct MainSplitView: View {
                         if sidebarWidth - 150 >= 20 {
                             ToolbarItem(placement: .automatic) {
                                 RealmLogoView(store: store, maxWidth: sidebarWidth - 150)
+                                    // The logo is inert decoration, but a toolbar
+                                    // item still swallows mouse-downs — this hands
+                                    // them back to window dragging.
+                                    .gesture(WindowDragGesture())
                             }
                             .sharedBackgroundVisibility(.hidden)
                         }
