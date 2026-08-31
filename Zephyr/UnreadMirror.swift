@@ -87,11 +87,17 @@ final class UnreadMirror {
         var total = 0
         var mentions = 0
         var lines: [UnreadSummary.Line] = []
+        var servers: [UnreadSummary.ServerLine] = []
         // Count what the app surfaces: unreads in muted or unsubscribed
         // channels stay out, or the widget shows counts the app doesn't.
         for store in global.stores.values {
-            total += store.visibleUnreadCount
-            mentions += store.unreads.mentionIds.count
+            let unread = store.visibleUnreadCount
+            let mentionCount = store.unreads.mentionIds.count
+            total += unread
+            mentions += mentionCount
+            servers.append(UnreadSummary.ServerLine(
+                name: store.realmName ?? store.connection.realmURL.host() ?? "?",
+                unread: unread, mentions: mentionCount))
             for (key, ids) in store.unreads.unreadIds
             where !ids.isEmpty && store.isUnreadVisible(key) {
                 lines.append(UnreadSummary.Line(
@@ -101,6 +107,9 @@ final class UnreadMirror {
         let summary = UnreadSummary(
             totalUnread: total, mentions: mentions,
             lines: Array(lines.sorted { $0.count > $1.count }.prefix(6)),
+            servers: servers.sorted {
+                ($0.mentions, $0.unread, $1.name) > ($1.mentions, $1.unread, $0.name)
+            },
             updated: .now)
         if var previous = lastWritten {
             previous.updated = summary.updated

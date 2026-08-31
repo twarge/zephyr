@@ -9,10 +9,21 @@ nonisolated struct UnreadSummary: Codable, Equatable {
         var id: String { title }
     }
 
+    /// One server's slice of the digest; the widget shows one row per
+    /// server when more than one is connected.
+    struct ServerLine: Codable, Equatable {
+        var name: String
+        var unread: Int
+        var mentions: Int
+    }
+
     var totalUnread: Int
     var mentions: Int
     /// The most unread conversations across every server, best first.
     var lines: [Line]
+    /// Per-server breakdown, busiest first. Optional so a file written
+    /// by an older app still decodes in a newer widget.
+    var servers: [ServerLine]? = nil
     var updated: Date
 
     static let groupId = "group.com.twarge.zephyr"
