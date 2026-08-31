@@ -965,6 +965,33 @@ public final class PerAccountStore {
         topicVisibility[TopicKey(streamId: streamId, topic: topic)] ?? .none
     }
 
+    /// Whether unreads in this conversation are surfaced anywhere in the
+    /// UI. Channels the user muted or no longer subscribes to show no
+    /// badge in the sidebar, so their unreads must not count toward the
+    /// Combined row, the app badge, or the widget — except topics
+    /// explicitly unmuted or followed inside a muted channel.
+    public func isUnreadVisible(_ key: ConversationKey) -> Bool {
+        switch key {
+        case .dm:
+            return true
+        case .topic(let streamId, let topic):
+            guard let subscription = subscriptions[streamId] else { return false }
+            guard subscription.muted else { return true }
+            switch topicVisibility(streamId: streamId, topic: topic) {
+            case .unmuted, .followed: return true
+            case .none, .muted: return false
+            }
+        }
+    }
+
+    /// The unread total the UI presents: `Unreads.totalCount` minus
+    /// conversations hidden by muting or a dropped subscription.
+    public var visibleUnreadCount: Int {
+        unreads.unreadIds.reduce(0) { total, entry in
+            isUnreadVisible(entry.key) ? total + entry.value.count : total
+        }
+    }
+
     /// Sets a topic's visibility (mute/unmute/follow) optimistically; the
     /// user_topic event confirms.
     public func setTopicVisibility(

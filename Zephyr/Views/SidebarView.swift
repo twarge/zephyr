@@ -349,7 +349,7 @@ struct SidebarView: View {
                         }
                     viewRow(
                         "Combined", icon: "line.3.horizontal", tag: .combinedFeed,
-                        badge: store.unreads.totalCount)
+                        badge: store.visibleUnreadCount)
                         .contextMenu {
                             Button("Mark All Messages as Read") {
                                 store.markAllRead()

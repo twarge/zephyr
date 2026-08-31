@@ -39,7 +39,9 @@ final class UnreadMirror {
         guard let global else { return }
         withObservationTracking {
             for store in global.stores.values {
-                _ = store.unreads.unreadIds
+                // Reads unreadIds, subscriptions, and topicVisibility, so
+                // muting a channel or topic re-fires tracking too.
+                _ = store.visibleUnreadCount
                 _ = store.unreads.mentionIds
             }
         } onChange: { [weak self] in
@@ -71,7 +73,7 @@ final class UnreadMirror {
             case .dmsAndMentions:
                 total + store.unreads.dmAndMentionCount
             case .allUnreads:
-                total + store.unreads.totalCount
+                total + store.visibleUnreadCount
             case .none:
                 total
             }
@@ -85,10 +87,13 @@ final class UnreadMirror {
         var total = 0
         var mentions = 0
         var lines: [UnreadSummary.Line] = []
+        // Count what the app surfaces: unreads in muted or unsubscribed
+        // channels stay out, or the widget shows counts the app doesn't.
         for store in global.stores.values {
-            total += store.unreads.totalCount
+            total += store.visibleUnreadCount
             mentions += store.unreads.mentionIds.count
-            for (key, ids) in store.unreads.unreadIds where !ids.isEmpty {
+            for (key, ids) in store.unreads.unreadIds
+            where !ids.isEmpty && store.isUnreadVisible(key) {
                 lines.append(UnreadSummary.Line(
                     title: key.displayTitle(in: store), count: ids.count))
             }
@@ -101,8 +106,11 @@ final class UnreadMirror {
             previous.updated = summary.updated
             if previous == summary { return }
         }
-        guard let data = try? JSONEncoder().encode(summary) else { return }
-        try? data.write(to: url, options: .atomic)
+        // A failed write must not update lastWritten: the next refresh
+        // with the same state has to retry, not dedup against a file
+        // that still holds the old counts.
+        guard let data = try? JSONEncoder().encode(summary),
+              (try? data.write(to: url, options: .atomic)) != nil else { return }
         lastWritten = summary
         WidgetCenter.shared.reloadTimelines(ofKind: "ZephyrUnreads")
     }

@@ -833,3 +833,40 @@ struct SubmessageEventTests {
     }
 }
 
+
+@MainActor
+struct VisibleUnreadTests {
+    @Test func mutedAndUnsubscribedChannelsAreInvisible() throws {
+        let store = try makeStore()
+        // One unread in the subscribed channel, one in a channel the
+        // user never subscribed to.
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 100), flags: [])))
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 2, message: Fixtures.channelMessageJSON(id: 101, streamId: 99),
+                    flags: [])))
+        #expect(store.unreads.totalCount == 2)
+        #expect(store.visibleUnreadCount == 1)
+
+        store.setChannelMuted(10, muted: true)
+        #expect(store.visibleUnreadCount == 0)
+
+        // Following a topic inside the muted channel resurfaces it.
+        store.setTopicVisibility(streamId: 10, topic: "greetings", policy: .followed)
+        #expect(store.visibleUnreadCount == 1)
+    }
+
+    @Test func dmsStayVisibleRegardlessOfMuting() throws {
+        let store = try makeStore()
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.dmMessageJSON(id: 100), flags: [])))
+        #expect(store.visibleUnreadCount == 1)
+        #expect(store.isUnreadVisible(.dm("2")))
+    }
+}
