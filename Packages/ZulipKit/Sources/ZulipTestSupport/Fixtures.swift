@@ -121,6 +121,15 @@ public enum Fixtures {
         """
     }
 
+    /// The rate-limit error envelope (HTTP 429), with the server's
+    /// `retry-after` delay in seconds.
+    public static func rateLimitJSON(retryAfter: Double) -> String {
+        """
+        {"result": "error", "code": "RATE_LIMIT_HIT",
+         "msg": "API usage exceeded rate limit", "retry-after": \(retryAfter)}
+        """
+    }
+
     public static func getMessagesJSON(_ messages: [String], foundNewest: Bool = true) -> String {
         """
         {"result": "success", "msg": "", "messages": [\(messages.joined(separator: ", "))],

@@ -13,13 +13,15 @@ struct OfflineTests {
     }
 
     private func makeStore(
-        script: [FakeResponse], offline: OfflineStore? = nil
+        script: [FakeResponse], offline: OfflineStore? = nil,
+        unreadMsgs: String = Fixtures.emptyUnreadsJSON
     ) throws -> (PerAccountStore, FakeTransport) {
         let transport = FakeTransport(script: script, defaultResponse: .hang)
         let account = Account(
             realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
         let snapshot = try ZulipJSON.decoder.decode(
-            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+            InitialSnapshot.self,
+            from: Data(Fixtures.registerJSON(queueId: "q1", unreadMsgs: unreadMsgs).utf8))
         let connection = ApiConnection(
             realmURL: account.realmURL, email: account.email, apiKey: "key", transport: transport)
         return (
@@ -305,6 +307,48 @@ struct OfflineTests {
         }
     }
 
+    @Test func restoredActionsReapplyToSnapshotState() throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        // Recorded last session, still unsynced: 100 read, 42 starred.
+        offline.savePendingActions([
+            .updateFlags(messageIds: [100], add: true, flag: "read"),
+            .updateFlags(messageIds: [42], add: true, flag: "starred"),
+        ])
+
+        // The snapshot predates the queue (an offline relaunch, or a fresh
+        // register before the replay lands): it still lists 100 as unread.
+        let (store, _) = try makeStore(
+            script: [], offline: offline,
+            unreadMsgs: """
+                {"count": 2, "pms": [], "streams": [
+                  {"stream_id": 10, "topic": "greetings", "unread_message_ids": [100, 101]}],
+                 "huddles": [], "mentions": [100], "old_unreads_missing": false}
+                """)
+        let key = ConversationKey.topic(streamId: 10, topic: "greetings")
+        #expect(store.unreads.unreadIds[key] == [101])
+        #expect(store.unreads.mentionIds.isEmpty)
+        #expect(store.starredMessageIds.contains(42))
+    }
+
+    @Test func restoredMarkUnreadRefilesAfterCacheRestore() async throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        try #require(offline.openDatabase())
+            .upsert([try fixtureMessage(id: 100)], selfUserId: 1)
+        offline.savePendingActions([
+            .updateFlags(messageIds: [100], add: false, flag: "read")
+        ])
+
+        let (store, _) = try makeStore(script: [], offline: offline)
+        // At init the message map is empty, so the refile can't locate 100;
+        // the pass after cache hydration files it.
+        #expect(store.unreads.totalCount == 0)
+        await store.restoreOfflineCache()
+        let key = ConversationKey.topic(streamId: 10, topic: "greetings")
+        #expect(store.unreads.unreadIds[key] == [100])
+    }
+
     @Test func backloggedActionsPreserveOrder() async throws {
         let (store, _) = try makeStore(script: [.networkError])
         store.setStarred(true, messageId: 1)
@@ -315,6 +359,52 @@ struct OfflineTests {
             .updateFlags(messageIds: [1], add: true, flag: "starred"),
             .updateFlags(messageIds: [1], add: false, flag: "starred"),
         ])
+    }
+
+    // MARK: Rate limiting
+
+    @Test func rateLimitedActionRequeuesAndReplays() async throws {
+        let (store, transport) = try makeStore(script: [
+            .json(Fixtures.rateLimitJSON(retryAfter: 0.05), status: 429),
+            .json(#"{"result": "success"}"#),
+        ])
+        // The rate-limited attempt definitively didn't execute: it queues
+        // (not dropped as a rejection) and replays after the retry-after.
+        store.setStarred(true, messageId: 42)
+        try await eventually("replayed after retry-after") {
+            transport.requests.count == 2 && store.pendingActions.isEmpty
+        }
+        #expect(store.starredMessageIds.contains(42))
+    }
+
+    @Test func rateLimitedFlushKeepsBacklogAndRetries() async throws {
+        let (store, transport) = try makeStore(script: [
+            .networkError,
+            .json(Fixtures.rateLimitJSON(retryAfter: 0.05), status: 429),
+            .json(#"{"result": "success"}"#),
+        ])
+        store.setStarred(true, messageId: 42)
+        try await eventually("queued offline") { store.pendingActions.count == 1 }
+
+        store.flushPending()
+        try await eventually("replayed after retry-after") {
+            transport.requests.count == 3 && store.pendingActions.isEmpty
+        }
+    }
+
+    @Test func rateLimitedSendRequeuesAndAutoResends() async throws {
+        let (store, transport) = try makeStore(script: [
+            .json(Fixtures.rateLimitJSON(retryAfter: 0.05), status: 429),
+            .json(#"{"result": "success", "id": 500}"#),
+        ])
+        store.send("hello", to: .topic(streamId: 10, topic: "greetings"))
+        try await eventually("resent after retry-after") {
+            transport.requests.count(where: { $0.path == "/api/v1/messages" }) == 2
+        }
+        // Awaiting its echo, exactly like a reconnect resend.
+        try await eventually("entry awaits echo") {
+            store.outbox.first?.state == .sending
+        }
     }
 
     // MARK: Cached transcripts

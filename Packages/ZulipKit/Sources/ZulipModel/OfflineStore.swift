@@ -139,3 +139,11 @@ public func isTransientNetworkError(_ error: any Error) -> Bool {
         return false
     }
 }
+
+/// The server's requested delay when it rate-limited the request, nil for
+/// any other error. A rate-limited request definitively did not execute, so
+/// replaying it after the delay is safe — including non-idempotent sends.
+public func rateLimitRetryDelay(_ error: any Error) -> Duration? {
+    guard let apiError = error as? ApiError, apiError.isRateLimited else { return nil }
+    return .seconds(apiError.retryAfterSeconds ?? 5)
+}

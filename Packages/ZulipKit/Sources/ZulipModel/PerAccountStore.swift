@@ -196,6 +196,10 @@ public final class PerAccountStore {
                 return restored
             }
             pendingActions = offline.loadPendingActions()
+            // The snapshot (cached at an offline relaunch, or freshly
+            // registered before the queue replays) predates these actions:
+            // without the reapply, unreads cleared offline resurrect.
+            reapplyPendingActionsLocally()
         }
     }
 
@@ -209,6 +213,8 @@ public final class PerAccountStore {
         }
         conversations.seed(
             messages: Array(previous.messages.values), selfUserId: selfUserId)
+        // Mark-unread refiles skipped at init (no messages yet) land now.
+        reapplyPendingActionsLocally()
     }
 
     /// Hydrates recent transcripts from the SQLite store (also seeding
@@ -239,6 +245,9 @@ public final class PerAccountStore {
             cachedMessageIds.insert(message.id)
         }
         conversations.seed(messages: cached, selfUserId: selfId)
+        // Mark-unread actions recorded offline refile now that their
+        // messages are loadable (the init pass couldn't locate them).
+        reapplyPendingActionsLocally()
         // Lists that opened before this restore landed (the launch-selected
         // view) found an empty map and may still be waiting on their fetch:
         // hand them the now-hydrated cache.
@@ -487,6 +496,32 @@ public final class PerAccountStore {
 
     // MARK: Offline queue
 
+    /// Re-applies recorded offline actions to freshly-built local state. Any
+    /// snapshot — the disk cache at an offline relaunch, or a fresh register
+    /// after an event-queue rebuild — predates the queued mutations, so
+    /// without this, unreads cleared (and stars set) offline resurrect until
+    /// the replay's confirming events arrive. Idempotent; runs again after
+    /// cache hydration, when mark-unread refiles can locate their messages.
+    /// (Reactions need no pass: the message cache saved them optimistically.)
+    private func reapplyPendingActionsLocally() {
+        for case .updateFlags(let ids, let add, let flag) in pendingActions {
+            switch flag {
+            case "read":
+                unreads.handleFlagsEvent(
+                    op: add ? .add : .remove, flag: flag, ids: ids, all: false,
+                    locate: { self.messages[$0] })
+            case "starred":
+                if add {
+                    starredMessageIds.formUnion(ids)
+                } else {
+                    starredMessageIds.subtract(ids)
+                }
+            default:
+                break
+            }
+        }
+    }
+
     /// Runs one idempotent server mutation, or records it for replay when the
     /// network is down. Order is preserved: while a backlog exists, new
     /// actions join it instead of racing ahead of the replay.
@@ -505,8 +540,16 @@ public final class PerAccountStore {
                 pendingActions.append(action)
                 persistPendingActions()
             } catch {
-                // Server rejected it; the confirming event (or its absence)
-                // corrects our optimistic local state.
+                if let delay = rateLimitRetryDelay(error) {
+                    // Rate-limited: nothing executed. Queue for replay, and
+                    // schedule the flush ourselves — the connectivity
+                    // triggers won't fire, since the network is fine.
+                    pendingActions.append(action)
+                    persistPendingActions()
+                    scheduleFlushRetry(after: delay)
+                }
+                // Otherwise the server rejected it; the confirming event
+                // (or its absence) corrects our optimistic local state.
             }
         }
     }
@@ -554,6 +597,7 @@ public final class PerAccountStore {
                 }
                 await performSend(localId: entry.id)
             }
+            var rateLimitDelay: Duration?
             while let action = pendingActions.first {
                 do {
                     try await perform(action)
@@ -561,6 +605,10 @@ public final class PerAccountStore {
                 } catch where isTransientNetworkError(error) {
                     break  // Still offline; keep the backlog for next time.
                 } catch {
+                    if let delay = rateLimitRetryDelay(error) {
+                        rateLimitDelay = delay
+                        break  // Keep the backlog; resume after the delay.
+                    }
                     pendingActions.removeFirst()  // Rejected (e.g. duplicate): drop.
                 }
             }
@@ -574,16 +622,28 @@ public final class PerAccountStore {
             // The path monitor often fires before sockets are actually
             // usable; if work still failed, retry on a short ladder
             // instead of waiting out the event loop's next recovery.
-            if outbox.contains(where: { $0.state == .queued }) || !pendingActions.isEmpty {
+            if let rateLimitDelay {
+                scheduleFlushRetry(after: rateLimitDelay)
+            } else if outbox.contains(where: { $0.state == .queued }) || !pendingActions.isEmpty {
                 scheduleFlushRetry()
             }
         }
     }
 
-    private func scheduleFlushRetry() {
-        guard flushRetryTask == nil, flushRetryAttempt < 5 else { return }
-        flushRetryAttempt += 1
-        let delay = Duration.seconds(Double(flushRetryAttempt) * 2)
+    /// Schedules the next flush attempt: a short escalating ladder for
+    /// network-path flapping, or — when the server rate-limited us — its
+    /// advertised retry-after delay, which doesn't consume the ladder
+    /// (each such attempt is server-sanctioned).
+    private func scheduleFlushRetry(after override: Duration? = nil) {
+        guard flushRetryTask == nil else { return }
+        let delay: Duration
+        if let override {
+            delay = override
+        } else {
+            guard flushRetryAttempt < 5 else { return }
+            flushRetryAttempt += 1
+            delay = .seconds(Double(flushRetryAttempt) * 2)
+        }
         flushRetryTask = Task { [weak self] in
             try? await Task.sleep(for: delay)
             guard let self, !Task.isCancelled else { return }
@@ -747,9 +807,17 @@ public final class PerAccountStore {
                 // recovering event stream deliver the echo (which clears
                 // the entry) before resending. Server rejections stay
                 // failed and need a manual retry.
-                outbox[index].state = isTransientNetworkError(error)
-                    ? .queued
-                    : .failed(error.localizedDescription)
+                if let delay = rateLimitRetryDelay(error) {
+                    // Rate-limited: the send never executed, so a resend
+                    // can't duplicate. Connectivity triggers won't fire
+                    // (the network is fine) — schedule the flush ourselves.
+                    outbox[index].state = .queued
+                    scheduleFlushRetry(after: delay)
+                } else {
+                    outbox[index].state = isTransientNetworkError(error)
+                        ? .queued
+                        : .failed(error.localizedDescription)
+                }
             }
             persistOutbox()
         }
