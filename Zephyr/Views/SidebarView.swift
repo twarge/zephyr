@@ -332,10 +332,61 @@ struct SidebarView: View {
     @AppStorage("recentSearchLimit") private var recentSearchLimit = 5
 
     @FocusState private var listFocused: Bool
+    /// Set by a pick made while filtering (or a search just committed):
+    /// the unfiltered list that replaces the filtered one may have that
+    /// row folded away, so it's brought back into view.
+    @State private var revealOnFilterEnd = false
 
     var body: some View {
+        ScrollViewReader { proxy in
+            sidebarList
+                .onChange(of: selection) {
+                    if isFiltering {
+                        revealOnFilterEnd = true
+                    }
+                }
+                .onChange(of: isFiltering) { _, filtering in
+                    if filtering {
+                        revealOnFilterEnd = false
+                    } else if revealOnFilterEnd {
+                        revealOnFilterEnd = false
+                        revealSelection(with: proxy)
+                    }
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var sidebarList: some View {
         let _ = PerfLog.render("Sidebar")
         List(selection: $selection) {
+            #if os(macOS)
+            // Suggestions ride in the list, not the field's native
+            // suggestion menu: on macOS that menu swallows the click that
+            // dismisses it, so a filtered row took two clicks to select.
+            // (iOS keeps the native presentation, which replaces the
+            // detail content while typing instead.)
+            if isFiltering {
+                Section("Search") {
+                    SearchSuggestionRow(
+                        title: "Search for “\(typedQuery.displayDescription)”",
+                        icon: "magnifyingglass"
+                    ) {
+                        runSearch(recordInRecents: true)
+                    }
+                    ForEach(search.suggestions) { token in
+                        SearchSuggestionRow(
+                            title: token.suggestionTitle, icon: token.suggestionIcon
+                        ) {
+                            search.commit(token)
+                            // The click moved focus to the list; the field
+                            // is where the free text comes next.
+                            searchFocused = true
+                        }
+                    }
+                }
+            }
+            #endif
             if !isFiltering {
                 Section("Views", isExpanded: expansion("views")) {
                     viewRow(
@@ -426,9 +477,11 @@ struct SidebarView: View {
         // Return capture lives inside the searchable subtree so it sees
         // `isSearching`.
         .safeAreaInset(edge: .top, spacing: 0) {
-            SearchReturnCapture(search: search, searchFocused: searchFocused) {
-                runSearch(recordInRecents: true)
-            }
+            SearchReturnCapture(
+                search: search, searchFocused: searchFocused,
+                onSubmitSearch: { runSearch(recordInRecents: true) },
+                // ↓ from the field: native list navigation takes over.
+                onMoveDown: { listFocused = true })
         }
         // Mail-style activity footer: a bulk mark-as-read sweep shows its
         // running count here, then the outcome lingers briefly.
@@ -455,16 +508,9 @@ struct SidebarView: View {
         ) { token in
             Text(token.bubbleText)
         }
-        // Native suggestions: the system anchors these to the search field
-        // itself, wherever the field lives (window toolbar on macOS).
-        // Picking one commits it into the tokens binding and clears the
-        // typed text; the tokens onChange below runs the search.
-        .searchSuggestions {
-            ForEach(search.suggestions) { token in
-                Label(token.suggestionTitle, systemImage: token.suggestionIcon)
-                    .searchCompletion(token)
-            }
-        }
+        // No `.searchSuggestions` here: on macOS they present as a menu
+        // under the field, and the click that dismisses a menu never
+        // reaches the row beneath. The list's Search section shows them.
         .searchFocused($searchFocused)
         .onSubmit(of: .search) {
             runSearch(recordInRecents: true)
@@ -596,18 +642,27 @@ struct SidebarView: View {
         .automatic
     }
 
+    /// The query as typed: committed tokens plus the free text.
+    private var typedQuery: SearchQuery {
+        SearchQuery(tokens: search.tokens, text: search.filterText)
+    }
+
     /// Runs the current query. Return finalizes it: the query is recorded in
-    /// Recent Searches, the field clears back to filter duty, and the
-    /// recorded row (tagged with the same query) highlights as the
-    /// selection. Intermediate token-commit searches show results but leave
-    /// the field composing and don't touch recents.
+    /// Recent Searches, the field clears back to filter duty and gives up
+    /// focus (the results are what to read next, and the single-key
+    /// shortcuts should reach them, as in the web app), and the recorded
+    /// row (tagged with the same query) highlights as the selection.
+    /// Intermediate token-commit searches show results but leave the
+    /// field composing and don't touch recents.
     private func runSearch(recordInRecents: Bool) {
-        let query = SearchQuery(tokens: search.tokens, text: search.filterText)
+        let query = typedQuery
         guard !query.isEmpty else { return }
         if recordInRecents {
             search.recordSearch(query)
+            revealOnFilterEnd = true
             search.filterText = ""
             search.tokens = []
+            searchFocused = false
         }
         selection = .search(query)
     }
@@ -621,10 +676,13 @@ struct SidebarView: View {
         }
     }
 
-    /// A channel is "active" when pinned, carrying unreads, or present in
-    /// the recency list; the rest hide behind "Inactive channels…".
+    /// A channel is "active" when pinned, carrying unreads, present in
+    /// the recency list, or the one being viewed (a selection hidden
+    /// behind the expander would highlight nothing); the rest hide behind
+    /// "Inactive channels…".
     private func isActiveChannel(_ subscription: Subscription) -> Bool {
         if subscription.pinToTop ?? false { return true }
+        if subscription.streamId == selectedStreamId { return true }
         if store.unreads.unreadCount(inChannel: subscription.streamId) > 0 { return true }
         return recentStreamIds.contains(subscription.streamId)
     }
@@ -637,6 +695,71 @@ struct SidebarView: View {
             }
         }
         return ids
+    }
+
+    /// The channel the selection lives in, if any.
+    private var selectedStreamId: Int? {
+        switch selection {
+        case .channel(let streamId), .channelTopics(let streamId):
+            streamId
+        case .conversation(.topic(let streamId, _)):
+            streamId
+        default:
+            nil
+        }
+    }
+
+    /// The section a channel is listed under (see channelsSections).
+    private func sectionId(forChannel streamId: Int) -> String {
+        guard !store.channelFolders.isEmpty else { return "channels" }
+        return store.channels[streamId]?.folderId.map { "folder-\($0)" } ?? "folder-none"
+    }
+
+    /// Brings the selection back into view once the filter is cancelled:
+    /// the unfiltered list may have it folded away (a topic under an
+    /// unexpanded channel, past the inline cap, or in a collapsed
+    /// section). Its section and channel expand, then the row scrolls
+    /// into view — a no-op when it's already showing. A token search in
+    /// progress is left alone; its results are the point.
+    private func revealSelection(with proxy: ScrollViewProxy) {
+        guard search.tokens.isEmpty, let selection else { return }
+        switch selection {
+        case .channel(let streamId), .channelTopics(let streamId):
+            collapsedSections.remove(sectionId(forChannel: streamId))
+            scrollSoon(proxy, to: streamId)
+        case .conversation(.topic(let streamId, let topic)):
+            collapsedSections.remove(sectionId(forChannel: streamId))
+            expandedChannels.insert(streamId)
+            guard let topics = search.channelTopics[streamId],
+                  let index = topics.firstIndex(where: { TopicName.matches($0.name, topic) })
+            else {
+                // Topics not cached yet (the expansion fetches them): the
+                // channel row stands in.
+                scrollSoon(proxy, to: streamId)
+                return
+            }
+            if index >= Self.maxInlineTopics {
+                expandedAllTopics.insert(streamId)
+            }
+            scrollSoon(proxy, to: TopicRowEntry.id(streamId: streamId, topic: topics[index].name))
+        case .conversation(let key):
+            collapsedSections.remove("dms")
+            scrollSoon(proxy, to: key)
+        case .search(let query):
+            collapsedSections.remove("recents")
+            scrollSoon(proxy, to: query)
+        default:
+            break
+        }
+    }
+
+    /// The expansions above land on the next render; the scroll waits a
+    /// beat for the row to exist.
+    private func scrollSoon<ID: Hashable>(_ proxy: ScrollViewProxy, to id: ID) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            proxy.scrollTo(id)
+        }
     }
 
     @ViewBuilder
@@ -761,13 +884,19 @@ struct SidebarView: View {
         let id: String
         let index: Int
         let topic: ChannelTopic
+
+        static func id(streamId: Int, topic: String) -> String {
+            "\(streamId)/\(topic)"
+        }
     }
 
     private func topicRowEntries(
         _ topics: [ChannelTopic], streamId: Int
     ) -> [TopicRowEntry] {
         topics.enumerated().map { index, topic in
-            TopicRowEntry(id: "\(streamId)/\(topic.name)", index: index, topic: topic)
+            TopicRowEntry(
+                id: TopicRowEntry.id(streamId: streamId, topic: topic.name),
+                index: index, topic: topic)
         }
     }
 
@@ -1028,6 +1157,28 @@ private struct SidebarExpanderRow: View {
                 Spacer(minLength: 0)
             }
             .foregroundStyle(.secondary)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .sidebarRowPadding()
+    }
+}
+
+/// A search suggestion as a list row (macOS): a token to commit, or the
+/// free-text search itself. Rows rather than the field's suggestion menu,
+/// so the sidebar stays clickable while suggestions show.
+private struct SearchSuggestionRow: View {
+    let title: String
+    let icon: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Label(title, systemImage: icon)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

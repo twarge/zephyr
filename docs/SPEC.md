@@ -165,9 +165,14 @@ in PROTOCOL.md §7; pipeline in ARCHITECTURE.md §5.
   (channels, DMs, topics). Typeahead suggestions (channels, topics, people, flag
   filters) commit to native search tokens — the analog of the web app's search pills —
   and any committed token searches immediately; Return searches the free text via the
-  server's full-text `search` operator. Results render in the main view as a feed with
-  recipient bars; search results are static (no live appends). In-conversation find
-  (⌘F) filters within the narrow (later).
+  server's full-text `search` operator. On macOS the suggestions are rows in a Search
+  section atop the filtered sidebar rather than the field's suggestion menu (an open
+  menu swallows the click that dismisses it, which cost every filtered row a click);
+  ↓ from the field moves into the list. Cancelling the filter reveals whatever was
+  selected while filtering (its section and channel expand, the row scrolls into
+  view). Results render in the main view as a feed with recipient bars; search results
+  are static (no live appends). In-conversation find (⌘F) filters within the narrow
+  (later).
 
 ## 7. macOS integration
 

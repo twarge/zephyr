@@ -88,9 +88,11 @@ final class SidebarSearchModel {
 
     private static let recentSearchesKey = "recentSearches"
 
-    /// Submit hook installed by SidebarView (called on Return via the key
-    /// monitor).
+    /// Hooks installed by SidebarView's Return capture: Return runs the
+    /// search; ↓ hands keyboard focus to the list beneath the field
+    /// (false when it declined — the key press stays with the field).
     @ObservationIgnored var onSubmit: (() -> Void)?
+    @ObservationIgnored var onMoveDown: (() -> Bool)?
 
     init(store: PerAccountStore) {
         self.store = store
@@ -135,6 +137,15 @@ final class SidebarSearchModel {
 
     var isFiltering: Bool {
         !filterText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Commits a suggestion the way picking a native completion does: the
+    /// token joins the bubbles and the typed text clears. The sidebar's
+    /// tokens observer then runs the search.
+    func commit(_ token: SearchToken) {
+        guard !tokens.contains(token) else { return }
+        tokens.append(token)
+        filterText = ""
     }
 
     @ObservationIgnored private var refreshingTopics: Set<Int> = []
@@ -229,14 +240,16 @@ final class SidebarSearchModel {
 /// A hidden view inside the searchable subtree: it tracks the search
 /// session (`isSearching`) and captures Return while the field is active —
 /// SwiftUI's onSubmit(of: .search) does not fire reliably for token search
-/// fields on macOS. Suggestions themselves are native `.searchSuggestions`,
-/// anchored to the field by the system.
+/// fields on macOS. ↓ hands focus to the list beneath, where the
+/// suggestions live as rows (SidebarView's Search section).
 struct SearchReturnCapture: View {
     let search: SidebarSearchModel
     let searchFocused: Bool
     let onSubmitSearch: () -> Void
+    let onMoveDown: () -> Void
 
     @Environment(\.isSearching) private var isSearching
+    @Environment(KeyboardRouter.self) private var keys
     @State private var keyMonitor: Any?
 
     var body: some View {
@@ -263,7 +276,21 @@ struct SearchReturnCapture: View {
     private func installMonitor() {
         #if os(macOS)
         guard keyMonitor == nil else { return }
-        search.onSubmit = onSubmitSearch
+        // The monitor is app-wide, and a focused field keeps it installed
+        // while another window is key: the hooks act only for this
+        // sidebar's window.
+        let keys = keys
+        let onSubmitSearch = onSubmitSearch
+        let onMoveDown = onMoveDown
+        search.onSubmit = {
+            guard keys.hostWindow?.isKeyWindow != false else { return }
+            onSubmitSearch()
+        }
+        search.onMoveDown = {
+            guard keys.hostWindow?.isKeyWindow != false else { return false }
+            onMoveDown()
+            return true
+        }
         keyMonitor = Self.makeReturnMonitor(search: search)
         #endif
     }
@@ -272,18 +299,30 @@ struct SearchReturnCapture: View {
     /// nonisolated so the AppKit handler closure infers nonisolated (the
     /// monitor fires on the main thread; assumeIsolated hops back safely).
     ///
-    /// The Return is never consumed here: it may be choosing a highlighted
-    /// suggestion, whose token commit only happens if the field receives
-    /// the event (consuming it turned "Messages from …" picks into literal
-    /// text searches). The event is delivered first; a beat later, if it
-    /// neither committed a token nor submitted (the token field's dropped-
-    /// Return case this monitor exists for), the search runs as a fallback.
+    /// The Return is never consumed here: the field must see it first —
+    /// an input method may be using it to confirm marked text, and the
+    /// native submit path stays intact. A beat later, if the query is
+    /// unchanged and nothing submitted (the token field's dropped-Return
+    /// case this monitor exists for), the search runs as a fallback.
+    /// ↓ is consumed: it moves keyboard focus into the list.
     private nonisolated static func makeReturnMonitor(search: SidebarSearchModel) -> Any? {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            let isReturn = event.keyCode == 36 || event.keyCode == 76
             let plain = event.modifierFlags
                 .intersection([.command, .option, .control]).isEmpty
-            guard isReturn, plain else { return event }
+            guard plain else { return event }
+            if event.keyCode == 125 {
+                let handled = MainActor.assumeIsolated {
+                    // Only a ↓ typed into a text field (the search field's
+                    // editor, while this monitor is installed) hands off.
+                    guard NSApp.keyWindow?.firstResponder is NSTextView,
+                          let moveDown = search.onMoveDown
+                    else { return false }
+                    return moveDown()
+                }
+                return handled ? nil : event
+            }
+            let isReturn = event.keyCode == 36 || event.keyCode == 76
+            guard isReturn else { return event }
             MainActor.assumeIsolated {
                 let textBefore = search.filterText
                 let tokensBefore = search.tokens
