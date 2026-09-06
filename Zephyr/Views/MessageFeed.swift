@@ -1464,6 +1464,14 @@ struct MessageRow: View {
                         }
                     }
                     .padding(.top, 10)
+                } else {
+                    // A follow-on message from the same sender keeps its
+                    // time on a line of its own, as the sender line does
+                    // for a first message: a hidden copy of the label holds
+                    // the line open and the overlay draws the time in it.
+                    // Text never runs under the time, and consecutive
+                    // messages are separated by exactly the label's height.
+                    timeLabel(timeText).hidden()
                 }
                 if interaction.editing {
                     VStack(alignment: .leading, spacing: 6) {
@@ -1773,16 +1781,11 @@ struct MessageRow: View {
                 .help(isStarred ? "Unstar" : "Star")
                 .opacity(controlsActive || isStarred ? 1 : 0)
                 .allowsHitTesting(controlsActive || isStarred)
-                // The time rides the overlay (not a layout column), so
-                // content flows full-width beneath it; the star sits just
-                // to its left.
-                Text(
-                    Date(timeIntervalSince1970: TimeInterval(message.timestamp))
-                        .formatted(date: .omitted, time: .shortened))
-                    .font(.body.smallCaps())
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 4)
+                // The time rides the overlay (not a layout column) so the
+                // hover controls line up beside it; the row holds a line
+                // open for it (the sender line, or a follow-on message's
+                // own time line). The star sits just to its left.
+                timeLabel(timeText)
                     .padding(.top, showHeader ? 2 : 1)
             }
             .padding(.top, showHeader ? 8 : 0)
@@ -1866,6 +1869,21 @@ struct MessageRow: View {
             }
     }
     #endif
+
+    private var timeText: String {
+        Date(timeIntervalSince1970: TimeInterval(message.timestamp))
+            .formatted(date: .omitted, time: .shortened)
+    }
+
+    /// The row's time, as drawn in the overlay and as the hidden copy that
+    /// holds a follow-on message's time line open (same font, same height).
+    private func timeLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.body.smallCaps())
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+            .padding(.leading, 4)
+    }
 
     /// Hover-control metrics: pointer-sized on macOS, tap-sized on touch.
     private var controlFont: Font {
