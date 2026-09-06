@@ -66,16 +66,26 @@ struct UnreadsWidgetView: View {
     /// the same size ("12 @4"), scaling down before it would clip.
     private func countLine(_ summary: UnreadSummary, size: CGFloat) -> some View {
         HStack(alignment: .lastTextBaseline, spacing: 5) {
-            Text("\(summary.totalUnread)")
-                .contentTransition(.numericText())
+            rollingCount(summary.totalUnread)
             if summary.mentions > 0 {
-                Text("@\(summary.mentions)")
+                rollingCount(summary.mentions, prefix: "@")
                     .foregroundStyle(.orange)
             }
         }
         .font(.system(size: size, weight: .semibold, design: .rounded))
         .lineLimit(1)
         .minimumScaleFactor(0.5)
+    }
+
+    /// A count whose digits roll when a new entry changes it — upward as
+    /// it grows, downward as it shrinks. WidgetKit animates between
+    /// entries only through modifiers like these (no withAnimation), and
+    /// its default for text is a blur; the explicit animation makes the
+    /// roll the transition it uses.
+    private func rollingCount(_ count: Int, prefix: String = "") -> some View {
+        Text("\(prefix)\(count)")
+            .contentTransition(.numericText(value: Double(count)))
+            .animation(.spring(duration: 0.4), value: count)
     }
 
     private func small(_ summary: UnreadSummary) -> some View {
@@ -127,11 +137,15 @@ struct UnreadsWidgetView: View {
                             .lineLimit(1)
                         Spacer(minLength: 8)
                         if server.mentions > 0 {
-                            Label("\(server.mentions)", systemImage: "at")
-                                .font(.caption.weight(.medium).monospacedDigit())
-                                .foregroundStyle(.orange)
+                            Label {
+                                rollingCount(server.mentions)
+                            } icon: {
+                                Image(systemName: "at")
+                            }
+                            .font(.caption.weight(.medium).monospacedDigit())
+                            .foregroundStyle(.orange)
                         }
-                        Text("\(server.unread)")
+                        rollingCount(server.unread)
                             .font(.caption.weight(.semibold).monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
@@ -145,7 +159,7 @@ struct UnreadsWidgetView: View {
                             .font(.caption)
                             .lineLimit(1)
                         Spacer(minLength: 8)
-                        Text("\(line.count)")
+                        rollingCount(line.count)
                             .font(.caption.weight(.semibold).monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
@@ -209,6 +223,28 @@ struct ZephyrWidgetBundle: WidgetBundle {
             .init(title: "#design › icons", count: 2),
         ],
         servers: [.init(name: "DC Quantum", unread: 12, mentions: 2)],
+        updated: .now))
+}
+
+// Two entries, so the canvas plays the count roll between them.
+#Preview("Update", as: .systemMedium) {
+    UnreadsWidget()
+} timeline: {
+    UnreadsEntry(date: .now, summary: UnreadSummary(
+        totalUnread: 12, mentions: 2,
+        lines: [
+            .init(title: "#general › releases", count: 7),
+            .init(title: "Nikolai", count: 3),
+        ],
+        servers: [.init(name: "DC Quantum", unread: 12, mentions: 2)],
+        updated: .now))
+    UnreadsEntry(date: .now.addingTimeInterval(2), summary: UnreadSummary(
+        totalUnread: 15, mentions: 4,
+        lines: [
+            .init(title: "#general › releases", count: 9),
+            .init(title: "Nikolai", count: 4),
+        ],
+        servers: [.init(name: "DC Quantum", unread: 15, mentions: 4)],
         updated: .now))
 }
 
