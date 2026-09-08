@@ -55,6 +55,13 @@ macOS only as an unsupported dev target. This project fills that gap with a real
 SwiftUI, system notifications, Keychain, menu-bar/dock integration, and native text
 rendering of Zulip's message content.
 
+Home, at the top of the sidebar, summarizes recent channel topics using Apple's
+on-device model on eligible Apple Intelligence devices. Red dots identify personal
+mentions awaiting a response, blue dots identify unseen messages, and green checks
+show that you replied or reacted. Summary rows open the existing conversation;
+devices without the model show message previews. See the
+[Home implementation notes](docs/HOME_VIEW_STUDY.md) for response rules and history limits.
+
 ## Documents
 
 - [docs/SPEC.md](docs/SPEC.md) — product specification: vision, the Messages-style

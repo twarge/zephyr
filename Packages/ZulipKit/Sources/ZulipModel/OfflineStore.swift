@@ -72,6 +72,22 @@ public struct OfflineStore: Sendable {
 
     // MARK: Realm branding
 
+    func loadHomeMentions() -> [HomeMentionRecord] {
+        load([HomeMentionRecord].self, from: "home-mentions.json") ?? []
+    }
+
+    func saveHomeMentions(_ messages: [HomeMentionRecord]) {
+        save(messages, to: "home-mentions.json")
+    }
+
+    func loadHomeSummaries() -> [HomeSummary] {
+        load([HomeSummary].self, from: "home-summaries.json") ?? []
+    }
+
+    func saveHomeSummaries(_ summaries: [HomeSummary]) {
+        save(summaries, to: "home-summaries.json")
+    }
+
     /// Realm branding images (logo/icon variants) by stable key, so the
     /// toolbar brand renders offline. Bytes exactly as fetched.
     public func loadBrandImage(key: String) -> Data? {

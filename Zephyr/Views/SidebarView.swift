@@ -389,6 +389,7 @@ struct SidebarView: View {
             #endif
             if !isFiltering {
                 Section("Views", isExpanded: expansion("views")) {
+                    viewRow("Home", icon: "house", tag: .home, badge: 0)
                     viewRow(
                         "Recent", icon: "clock", tag: .recentConversations,
                         badge: 0)

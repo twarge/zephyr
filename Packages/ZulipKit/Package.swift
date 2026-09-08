@@ -20,7 +20,7 @@ let package = Package(
         .target(name: "ZulipAPI"),
         .target(
             name: "ZulipModel",
-            dependencies: ["ZulipAPI", .product(name: "GRDB", package: "GRDB.swift")]),
+            dependencies: ["ZulipAPI", "ZulipContent", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "ZulipContent", dependencies: ["SwiftSoup"]),
         .target(name: "ZulipMath", dependencies: ["SwiftMath"]),
         .executableTarget(name: "Harness", dependencies: ["ZulipAPI", "ZulipModel"]),

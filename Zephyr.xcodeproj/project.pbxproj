@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0977CC5FABE9E6F84BF48DA5 /* ShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */; };
+		0A60B1F1876B2D7E2F7ED48B /* TopicSummaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA4E5D37553DA7CA7D98DE9 /* TopicSummaryService.swift */; };
 		0A7AFFF808844CC0EE4BE1EE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */; };
 		0B1CBDD1323F731109D06DEC /* RecentConversationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 475341E1FDF45E220243460A /* RecentConversationsView.swift */; };
 		0BC179CD59C27B54EA265364 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C391C25A76B13BD0D05B8706 /* NotificationManager.swift */; };
@@ -24,6 +25,7 @@
 		25FE3BFD9203521A1B8E2231 /* DraftsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BABEF92E892ACE3DBCEF0E5 /* DraftsView.swift */; };
 		299A23FEDA899300B4B4BECF /* AttachmentDownloadProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CD0F4E9EE27675541C64AB3 /* AttachmentDownloadProgress.swift */; };
 		33A594A0E80E868623E9F348 /* ZephyrTVApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EC76EB5F5AC4DBFA4F47ED0 /* ZephyrTVApp.swift */; };
+		346BBA186AC92525017028EB /* MessageWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0358AA017C745BB21FEC6222 /* MessageWindowView.swift */; };
 		3D07A493DA42E4D98B0DA530 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9C40C777893FC7275F955B /* Platform.swift */; };
 		3F863C40AC99B169668E1DD0 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7106DB9D273F41FC9FE36ABF /* AppModel.swift */; };
 		428E7CBC70049F69CF04CAB5 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC85F6AA56F7EF9105F7742E /* HelpView.swift */; };
@@ -53,12 +55,12 @@
 		8F49328DDC70D304E6FE4130 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4093541134383EBC6243F280 /* ShareViewController.swift */; };
 		90244AA61E53F58A6D9AA222 /* OpenQuicklyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149499DA07B92E143F965C6C /* OpenQuicklyView.swift */; };
 		9511713F095ADB5FAF8E1593 /* MessageWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */; };
-		7F8A9B0C1D2E3F4A5B6C7D8E /* MessageWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D5E6F7A8B9C0D1E2F3A4B5C /* MessageWindowView.swift */; };
 		9890C37B9865F39B29EDF88D /* DraftSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4611B74F89FA03A6C524C9 /* DraftSync.swift */; };
 		9C2971F9C1F755CB722B43E8 /* MainSplitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B2CA9D7CF1C06AA7B0A1D52 /* MainSplitView.swift */; };
 		A2B018739699F9B2B4505207 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C17B1B985702AAFC4C30468A /* SidebarView.swift */; };
 		A395FC333148C3BE66791CC5 /* ChannelTopicsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB37E72A9961DF2EB9503B4D /* ChannelTopicsView.swift */; };
 		A4DAC225CFBF91023FFE91B3 /* ZulipAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 27D0006F9ED91CF207CFAA5B /* ZulipAPI */; };
+		A7595ABAA3B5AFE5760BA5C0 /* UnreadMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = 273C543CAF20C2C2615132A1 /* UnreadMirror.swift */; };
 		A82A7771694C25DF30CA4009 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28E9D19485B08518476527C2 /* LoginView.swift */; };
 		B1054F65A0FA0D40D60D9523 /* FeedWarmCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B107C9FA821BCB2E527459E9 /* FeedWarmCache.swift */; };
 		B25F5C4B54A1AD406C201ECB /* ZephyrIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14B376B2915109D9F3810E20 /* ZephyrIntents.swift */; };
@@ -68,9 +70,9 @@
 		BD6ED142E9B10E20B22453B7 /* UnreadSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */; };
 		C2C81E0729324AE820EB8883 /* ChannelFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1758438236E9536CC8336895 /* ChannelFeedView.swift */; };
 		CAFDE08EBB3B372F2C6AA2B1 /* DetachedWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */; };
-		D3781CBA4A886F9D8F4A553A /* UnreadMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9AF8AD4ED790447AC128257 /* UnreadMirror.swift */; };
 		D98ABC4211B58928C55BB7B0 /* MediaDropTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFE3DF32C25009CB60756EAD /* MediaDropTarget.swift */; };
 		E100D2C195474421ED98A3B1 /* WebAuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5410F479FB8AE6E80F4866 /* WebAuthSession.swift */; };
+		E548312377EA2842E67F4BFD /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC213B388FEDE34D9114613E /* HomeView.swift */; };
 		F33ED1EE8D08E1F58540F09B /* Tips.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AB37CBF3789C6E2854F3632 /* Tips.swift */; };
 		F6C17F7A2914098D59DE30AB /* AllChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C28BE5A0DA537D6EB9C97A /* AllChannelsView.swift */; };
 /* End PBXBuildFile section */
@@ -109,15 +111,18 @@
 
 /* Begin PBXFileReference section */
 		0336B10E85CC165AC34AE4A6 /* Zephyr.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Zephyr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0358AA017C745BB21FEC6222 /* MessageWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWindowView.swift; sourceTree = "<group>"; };
 		066FAF47CC310A2445AAB0A9 /* ZephyrApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZephyrApp.swift; sourceTree = "<group>"; };
 		067FC7012EB2D00C26EF2527 /* MessageContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageContentView.swift; sourceTree = "<group>"; };
 		08D61FEDB2BCFA89017740EF /* Zephyr.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Zephyr.entitlements; sourceTree = "<group>"; };
+		0FA4E5D37553DA7CA7D98DE9 /* TopicSummaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicSummaryService.swift; sourceTree = "<group>"; };
 		149499DA07B92E143F965C6C /* OpenQuicklyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenQuicklyView.swift; sourceTree = "<group>"; };
 		14B376B2915109D9F3810E20 /* ZephyrIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZephyrIntents.swift; sourceTree = "<group>"; };
 		1758438236E9536CC8336895 /* ChannelFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelFeedView.swift; sourceTree = "<group>"; };
 		1BFA44C0924355E456163217 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityMonitor.swift; sourceTree = "<group>"; };
 		232E47A83B732D68F7D53F8A /* AppStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateStore.swift; sourceTree = "<group>"; };
 		246E2A99D0BD63D5209BD33B /* ZulipKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ZulipKit; path = Packages/ZulipKit; sourceTree = SOURCE_ROOT; };
+		273C543CAF20C2C2615132A1 /* UnreadMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadMirror.swift; sourceTree = "<group>"; };
 		28D32E783B00DD974C9E8971 /* AccountWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountWindowView.swift; sourceTree = "<group>"; };
 		28E9D19485B08518476527C2 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		2AB37CBF3789C6E2854F3632 /* Tips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tips.swift; sourceTree = "<group>"; };
@@ -137,7 +142,6 @@
 		4D9C40C777893FC7275F955B /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
 		52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadSummary.swift; sourceTree = "<group>"; };
 		68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWidgetView.swift; sourceTree = "<group>"; };
-		4D5E6F7A8B9C0D1E2F3A4B5C /* MessageWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWindowView.swift; sourceTree = "<group>"; };
 		6948BF0E49980622700ED102 /* OutboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxView.swift; sourceTree = "<group>"; };
 		7106DB9D273F41FC9FE36ABF /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		726EF7F3ABF31AB4CF23C545 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -150,10 +154,10 @@
 		A38B120E431BE62466F5CB98 /* ZephyrTV.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ZephyrTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInbox.swift; sourceTree = "<group>"; };
 		A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiPickerView.swift; sourceTree = "<group>"; };
-		A9AF8AD4ED790447AC128257 /* UnreadMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadMirror.swift; sourceTree = "<group>"; };
 		AD6E84868E4713FC5F20FD6B /* Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Support.swift; sourceTree = "<group>"; };
 		B107C9FA821BCB2E527459E9 /* FeedWarmCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedWarmCache.swift; sourceTree = "<group>"; };
 		B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewConversationSheet.swift; sourceTree = "<group>"; };
+		BC213B388FEDE34D9114613E /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		BC85F6AA56F7EF9105F7742E /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
 		BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		C0B6E7BF3930F81D1C28D6C1 /* Search.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Search.swift; sourceTree = "<group>"; };
@@ -219,6 +223,7 @@
 				A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */,
 				B107C9FA821BCB2E527459E9 /* FeedWarmCache.swift */,
 				BC85F6AA56F7EF9105F7742E /* HelpView.swift */,
+				BC213B388FEDE34D9114613E /* HomeView.swift */,
 				28E9D19485B08518476527C2 /* LoginView.swift */,
 				3B2CA9D7CF1C06AA7B0A1D52 /* MainSplitView.swift */,
 				CFE3DF32C25009CB60756EAD /* MediaDropTarget.swift */,
@@ -226,7 +231,7 @@
 				067FC7012EB2D00C26EF2527 /* MessageContentView.swift */,
 				3BD4EE59C8A33FC99AA510C3 /* MessageFeed.swift */,
 				68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */,
-				4D5E6F7A8B9C0D1E2F3A4B5C /* MessageWindowView.swift */,
+				0358AA017C745BB21FEC6222 /* MessageWindowView.swift */,
 				E7EBB59257B9154EAF76D934 /* NarrowFeedView.swift */,
 				B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */,
 				149499DA07B92E143F965C6C /* OpenQuicklyView.swift */,
@@ -297,8 +302,9 @@
 				37E26CC20F2298B58C015538 /* PerfLog.swift */,
 				4D9C40C777893FC7275F955B /* Platform.swift */,
 				2AB37CBF3789C6E2854F3632 /* Tips.swift */,
+				0FA4E5D37553DA7CA7D98DE9 /* TopicSummaryService.swift */,
+				273C543CAF20C2C2615132A1 /* UnreadMirror.swift */,
 				FC5410F479FB8AE6E80F4866 /* WebAuthSession.swift */,
-				A9AF8AD4ED790447AC128257 /* UnreadMirror.swift */,
 				08D61FEDB2BCFA89017740EF /* Zephyr.entitlements */,
 				066FAF47CC310A2445AAB0A9 /* ZephyrApp.swift */,
 				14B376B2915109D9F3810E20 /* ZephyrIntents.swift */,
@@ -520,6 +526,7 @@
 				67B681DC63058035652E4E1A /* EmojiPickerView.swift in Sources */,
 				B1054F65A0FA0D40D60D9523 /* FeedWarmCache.swift in Sources */,
 				428E7CBC70049F69CF04CAB5 /* HelpView.swift in Sources */,
+				E548312377EA2842E67F4BFD /* HomeView.swift in Sources */,
 				188461C8A7C5D3500365BA6D /* KeyboardRouter.swift in Sources */,
 				A82A7771694C25DF30CA4009 /* LoginView.swift in Sources */,
 				9C2971F9C1F755CB722B43E8 /* MainSplitView.swift in Sources */,
@@ -528,7 +535,7 @@
 				685FD431FA29FEA255D3FBC1 /* MessageContentView.swift in Sources */,
 				BB931F8230B45BC90B104176 /* MessageFeed.swift in Sources */,
 				9511713F095ADB5FAF8E1593 /* MessageWidgetView.swift in Sources */,
-				7F8A9B0C1D2E3F4A5B6C7D8E /* MessageWindowView.swift in Sources */,
+				346BBA186AC92525017028EB /* MessageWindowView.swift in Sources */,
 				5F0FCA79F46D92DA6EF1091E /* NarrowFeedView.swift in Sources */,
 				7520AD45B999226B180174C7 /* NewConversationSheet.swift in Sources */,
 				0BC179CD59C27B54EA265364 /* NotificationManager.swift in Sources */,
@@ -547,10 +554,11 @@
 				706E3B7C39B1F3C9F5DF0E1E /* Support.swift in Sources */,
 				F33ED1EE8D08E1F58540F09B /* Tips.swift in Sources */,
 				883C05E8DCB4C721B557D835 /* TopicAutocompleteField.swift in Sources */,
+				0A60B1F1876B2D7E2F7ED48B /* TopicSummaryService.swift in Sources */,
 				75DE44DBC8650067EEAA958D /* TranscriptView.swift in Sources */,
+				A7595ABAA3B5AFE5760BA5C0 /* UnreadMirror.swift in Sources */,
 				5E2EA17274897B42F4A65347 /* UnreadSummary.swift in Sources */,
 				E100D2C195474421ED98A3B1 /* WebAuthSession.swift in Sources */,
-				D3781CBA4A886F9D8F4A553A /* UnreadMirror.swift in Sources */,
 				B8CB761D6FE61F47C1E0FCBC /* ZephyrApp.swift in Sources */,
 				B25F5C4B54A1AD406C201ECB /* ZephyrIntents.swift in Sources */,
 			);
