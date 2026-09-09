@@ -21,7 +21,7 @@ private func reaction(_ messageId: Int, op: String = "add", user: Int = 1) throw
         """)
 }
 
-private actor RacingHomeTransport: ApiTransport {
+private actor RacingActivityTransport: ApiTransport {
     let underlying: FakeTransport
     var race: (@Sendable () async -> Void)?
     init(underlying: FakeTransport, race: @escaping @Sendable () async -> Void) {
@@ -38,7 +38,7 @@ private actor RacingHomeTransport: ApiTransport {
     }
 }
 
-@MainActor private final class HomeStoreHolder { var store: PerAccountStore? }
+@MainActor private final class ActivityStoreHolder { var store: PerAccountStore? }
 
 struct TopicActivityTests {
     @Test func readMentionStaysRedAndUnreadDoesNotHideIt() throws {
@@ -156,7 +156,7 @@ struct TopicActivityTests {
         index.upsert(message)
         #expect(index.activities(since: 0).count == 2)
         #expect(index.activities(since: 0).first(where: { $0.topic == "Elsewhere" })?.unansweredMentionIds == [10])
-        #expect(HomeTopicID(streamId: 10, topic: "") == HomeTopicID(streamId: 10, topic: TopicName.legacyEmptyName))
+        #expect(TopicActivityID(streamId: 10, topic: "") == TopicActivityID(streamId: 10, topic: TopicName.legacyEmptyName))
     }
 
     @Test func oldUnansweredMentionSurvivesRecentWindow() throws {
@@ -169,7 +169,7 @@ struct TopicActivityTests {
 }
 
 @MainActor
-struct HomeActivityStoreTests {
+struct TopicActivityStoreTests {
     private func networkStore(_ script: [FakeResponse], fallback: FakeResponse = .hang) throws -> (PerAccountStore, FakeTransport) {
         let transport = FakeTransport(script: script, defaultResponse: fallback)
         let account = Account(realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
@@ -201,12 +201,12 @@ struct HomeActivityStoreTests {
             response([mention, newest]), response([mention]), response([newest]),
             response([reply]), response([mention]),
         ])
-        await store.homeActivity.refresh()
-        let row = try #require(store.homeActivity.activities.first)
+        await store.topicActivity.refresh()
+        let row = try #require(store.topicActivity.activities.first)
         #expect(row.unansweredMentionIds.isEmpty)
         #expect(row.hasReplied)
-        #expect(store.homeActivity.verifiedTopics.contains(row.id))
-        #expect(!store.homeActivity.refreshFailed)
+        #expect(store.topicActivity.verifiedTopics.contains(row.id))
+        #expect(!store.topicActivity.refreshFailed)
         #expect(transport.requests.allSatisfy { $0.method == "GET" })
         #expect(transport.requests.contains { $0.queryValue("narrow")?.contains("sender") == true })
     }
@@ -219,13 +219,13 @@ struct HomeActivityStoreTests {
             response([mention, newest]), response([mention]), response([mention, newest]), response([]),
         ])
         store.reconcileFetchedMessages([mention, deletedReply, newest])
-        store.homeActivity.saveSummary(HomeSummary(topic: HomeTopicID(mention)!, fingerprint: "old", text: "You replied.", sourceIds: [20]), source: [deletedReply])
-        await store.homeActivity.refresh()
-        let row = try #require(store.homeActivity.activities.first)
+        store.topicActivity.saveSummary(TopicSummary(topic: TopicActivityID(mention)!, fingerprint: "old", text: "You replied.", sourceIds: [20]), source: [deletedReply])
+        await store.topicActivity.refresh()
+        let row = try #require(store.topicActivity.activities.first)
         #expect(row.unansweredMentionIds == [10])
         #expect(!row.hasReplied)
         #expect(!row.messages.contains { $0.id == 20 })
-        #expect(store.homeActivity.summaries.isEmpty)
+        #expect(store.topicActivity.summaries.isEmpty)
     }
 
     @Test func refreshUsesCrossDeviceReactionEvenWhenCanonicalCopyAlreadyExists() async throws {
@@ -237,8 +237,8 @@ struct HomeActivityStoreTests {
             response([confirmed, newest]), response([confirmed]), response([confirmed, newest]), response([]),
         ])
         store.reconcileFetchedMessages([old])
-        await store.homeActivity.refresh()
-        let row = try #require(store.homeActivity.activities.first)
+        await store.topicActivity.refresh()
+        let row = try #require(store.topicActivity.activities.first)
         #expect(row.unansweredMentionIds.isEmpty)
         #expect(row.hasReacted)
         #expect(row.indicator(unreadCount: 0) == .participated)
@@ -249,20 +249,46 @@ struct HomeActivityStoreTests {
         let (store, _) = try networkStore([
             response([mention]), response([mention]), response([mention]), response([], limited: true),
         ])
-        await store.homeActivity.refresh()
-        #expect(store.homeActivity.historyIsLimited)
-        #expect(store.homeActivity.verifiedTopics.isEmpty)
-        #expect(store.homeActivity.activities.first?.unansweredMentionIds == [10])
+        await store.topicActivity.refresh()
+        #expect(store.topicActivity.historyIsLimited)
+        #expect(store.topicActivity.verifiedTopics.isEmpty)
+        #expect(store.topicActivity.activities.first?.unansweredMentionIds == [10])
     }
 
     @Test func cancelledRefreshStopsLoadingAndCanBeRetried() async throws {
         let (store, _) = try networkStore([])
-        let refresh = Task { await store.homeActivity.refresh() }
+        let refresh = Task { await store.topicActivity.refresh() }
         await Task.yield()
         refresh.cancel()
         await refresh.value
-        #expect(!store.homeActivity.isLoading)
-        #expect(!store.homeActivity.refreshFailed)
+        #expect(!store.topicActivity.isLoading)
+        #expect(!store.topicActivity.refreshFailed)
+    }
+
+    @Test func failedPassKeepsItsNoticeUntilAPassSucceeds() async throws {
+        let message = try recent(10)
+        let (store, transport) = try networkStore([.networkError])
+        await store.topicActivity.refresh()
+        #expect(store.topicActivity.refreshFailed)
+
+        // Summary retries on its own, and the saved-activity notice has to
+        // hold steady through each attempt rather than blink off at its
+        // start; neither a running pass nor a cancelled one takes it down.
+        let retry = Task { await store.topicActivity.refresh() }
+        await Task.yield()
+        #expect(store.topicActivity.isLoading)
+        #expect(store.topicActivity.refreshFailed)
+        retry.cancel()
+        await retry.value
+        #expect(store.topicActivity.refreshFailed)
+
+        for reply in [try response([message]), try response([]),
+                      try response([message]), try response([])] {
+            transport.enqueue(reply)
+        }
+        await store.topicActivity.refresh()
+        #expect(!store.topicActivity.refreshFailed)
+        #expect(store.topicActivity.activities.count == 1)
     }
 
     @Test func oldMentionChecksHaveABoundedRequestBudget() async throws {
@@ -271,19 +297,19 @@ struct HomeActivityStoreTests {
         let (store, transport) = try networkStore([
             response(mentions + [newest]), response(mentions), response([newest]), response([]),
         ], fallback: response([]))
-        await store.homeActivity.refresh()
+        await store.topicActivity.refresh()
         #expect(transport.requests.count == 64)
-        #expect(store.homeActivity.historyIsLimited)
-        #expect(store.homeActivity.verifiedTopics.isEmpty)
-        #expect(store.homeActivity.activities.first?.unansweredMentionIds == [61])
+        #expect(store.topicActivity.historyIsLimited)
+        #expect(store.topicActivity.verifiedTopics.isEmpty)
+        #expect(store.topicActivity.activities.first?.unansweredMentionIds == [61])
     }
 
     @Test func staleFetchCannotResurrectMessageDeletedWhileRequestWasRunning() async throws {
         let mention = try recent(10, content: mentionHTML)
-        let holder = HomeStoreHolder()
+        let holder = ActivityStoreHolder()
         let backing = FakeTransport(script: [try response([mention]), try response([])], defaultResponse: .hang)
         let deletion = try decodeEvent(#"{"id":1,"type":"delete_message","message_ids":[10]}"#)
-        let transport = RacingHomeTransport(underlying: backing) {
+        let transport = RacingActivityTransport(underlying: backing) {
             await MainActor.run { holder.store?.handleEvent(deletion) }
         }
         let account = Account(realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
@@ -292,37 +318,37 @@ struct HomeActivityStoreTests {
         let store = PerAccountStore(account: account, connection: connection, snapshot: snapshot)
         holder.store = store
         store.reconcileFetchedMessages([mention])
-        await store.homeActivity.refresh()
+        await store.topicActivity.refresh()
         #expect(store.messages[10] == nil)
-        #expect(store.homeActivity.activities.isEmpty)
+        #expect(store.topicActivity.activities.isEmpty)
     }
 
     @Test func readFlagsDoNotResolveMentionAndOptimisticReactionsWaitForEvent() throws {
         let store = try makeStore()
         let message = try activityMessage(10, content: mentionHTML)
         store.reconcileFetchedMessages([message])
-        store.homeActivity.rebuild(now: Date(timeIntervalSince1970: 1_750_000_100))
+        store.topicActivity.rebuild(now: Date(timeIntervalSince1970: 1_750_000_100))
         store.markMessagesRead(ids: [10])
-        #expect(store.homeActivity.activities.first?.unansweredMentionIds == [10])
+        #expect(store.topicActivity.activities.first?.unansweredMentionIds == [10])
         store.toggleReaction(message: message, emojiName: "check", emojiCode: "2705", reactionType: "unicode_emoji")
-        store.homeActivity.rebuild(now: Date(timeIntervalSince1970: 1_750_000_100))
-        #expect(store.homeActivity.activities.first?.unansweredMentionIds == [10])
+        store.topicActivity.rebuild(now: Date(timeIntervalSince1970: 1_750_000_100))
+        #expect(store.topicActivity.activities.first?.unansweredMentionIds == [10])
         store.handleEvent(try reaction(10))
-        store.homeActivity.rebuild(now: Date(timeIntervalSince1970: 1_750_000_100))
-        #expect(store.homeActivity.activities.first?.unansweredMentionIds.isEmpty == true)
+        store.topicActivity.rebuild(now: Date(timeIntervalSince1970: 1_750_000_100))
+        #expect(store.topicActivity.activities.first?.unansweredMentionIds.isEmpty == true)
     }
 
     @Test func summaryIsInvalidatedOnDeleteAndLateGenerationCannotRestoreIt() throws {
         let store = try makeStore()
         let message = try activityMessage(10, content: mentionHTML)
         store.reconcileFetchedMessages([message])
-        let summary = HomeSummary(topic: HomeTopicID(message)!, fingerprint: "test", text: "A review was requested.", sourceIds: [10])
-        store.homeActivity.saveSummary(summary, source: [message])
-        #expect(store.homeActivity.summaries.count == 1)
+        let summary = TopicSummary(topic: TopicActivityID(message)!, fingerprint: "test", text: "A review was requested.", sourceIds: [10])
+        store.topicActivity.saveSummary(summary, source: [message])
+        #expect(store.topicActivity.summaries.count == 1)
         store.handleEvent(try decodeEvent(#"{"id":3,"type":"delete_message","message_ids":[10]}"#))
-        #expect(store.homeActivity.summaries.isEmpty)
-        store.homeActivity.saveSummary(summary, source: [message])
-        #expect(store.homeActivity.summaries.isEmpty)
+        #expect(store.topicActivity.summaries.isEmpty)
+        store.topicActivity.saveSummary(summary, source: [message])
+        #expect(store.topicActivity.summaries.isEmpty)
     }
 
     @Test func pendingRequestsPersistAndAccountCachesAreIsolated() throws {
@@ -332,13 +358,13 @@ struct HomeActivityStoreTests {
             try? FileManager.default.removeItem(at: first.directory)
             try? FileManager.default.removeItem(at: second.directory)
         }
-        let home = HomeActivityStore(selfUserId: 1, offline: first)
-        home.seedMissing([try activityMessage(10, content: mentionHTML)])
-        home.rebuild()
-        let restored = HomeActivityStore(selfUserId: 1, offline: first)
+        let activity = TopicActivityStore(selfUserId: 1, offline: first)
+        activity.seedMissing([try activityMessage(10, content: mentionHTML)])
+        activity.rebuild()
+        let restored = TopicActivityStore(selfUserId: 1, offline: first)
         restored.rebuild()
         #expect(restored.activities.first?.unansweredMentionIds == [10])
-        let other = HomeActivityStore(selfUserId: 1, offline: second)
+        let other = TopicActivityStore(selfUserId: 1, offline: second)
         other.rebuild()
         #expect(other.activities.isEmpty)
     }
@@ -348,38 +374,38 @@ struct HomeActivityStoreTests {
             directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
         defer { try? FileManager.default.removeItem(at: offline.directory) }
         let file = offline.directory.appendingPathComponent("home-mentions.json")
-        let home = HomeActivityStore(selfUserId: 1, offline: offline)
-        home.seedMissing([try activityMessage(10, content: mentionHTML)])
-        home.rebuild()
+        let activity = TopicActivityStore(selfUserId: 1, offline: offline)
+        activity.seedMissing([try activityMessage(10, content: mentionHTML)])
+        activity.rebuild()
         #expect(FileManager.default.fileExists(atPath: file.path))
         // A rebuild follows any channel event within 60ms; ordinary traffic
         // that leaves the pending set alone must not write the same records
         // again. The removed file reappearing would mean it did.
         try FileManager.default.removeItem(at: file)
-        home.seedMissing([try activityMessage(11)])
-        home.rebuild()
+        activity.seedMissing([try activityMessage(11)])
+        activity.rebuild()
         #expect(!FileManager.default.fileExists(atPath: file.path))
         // Answering the request does change the set, so that is written.
-        home.seedMissing([try activityMessage(20, sender: 1)])
-        home.rebuild()
+        activity.seedMissing([try activityMessage(20, sender: 1)])
+        activity.rebuild()
         #expect(FileManager.default.fileExists(atPath: file.path))
-        #expect(HomeActivityStore(selfUserId: 1, offline: offline).activities.isEmpty)
+        #expect(TopicActivityStore(selfUserId: 1, offline: offline).activities.isEmpty)
     }
 
     @Test func rowsBeyondTheRefreshLimitAreVerifiedOnceDisplayed() async throws {
         let all = [try recent(10), try recent(20, topic: "Other")]
         let (store, transport) = try networkStore([], fallback: try response(all))
-        await store.homeActivity.refresh(limit: 1)
-        let shown = store.homeActivity.activities.map(\.id)
+        await store.topicActivity.refresh(limit: 1)
+        let shown = store.topicActivity.activities.map(\.id)
         #expect(shown.count == 2)
         // Only the first row is covered by the refresh itself; a sidebar
         // filter can put the other one on screen.
-        #expect(store.homeActivity.verifiedTopics == [shown[0]])
-        await store.homeActivity.verifyVisible(Set(shown))
-        #expect(store.homeActivity.verifiedTopics == Set(shown))
+        #expect(store.topicActivity.verifiedTopics == [shown[0]])
+        await store.topicActivity.verifyVisible(Set(shown))
+        #expect(store.topicActivity.verifiedTopics == Set(shown))
         // An already-verified row is not fetched again.
         let settled = transport.requests.count
-        await store.homeActivity.verifyVisible(Set(shown))
+        await store.topicActivity.verifyVisible(Set(shown))
         #expect(transport.requests.count == settled)
     }
 }

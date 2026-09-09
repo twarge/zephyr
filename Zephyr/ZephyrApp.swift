@@ -153,7 +153,7 @@ struct GoCommands: Commands {
             Button("Forward") { model.pendingHistoryStep = 1 }
                 .keyboardShortcut("]", modifiers: .command)
             Divider()
-            Button("Home") { model.pendingCommand = .navigate(.home) }
+            Button("Summary") { model.pendingCommand = .navigate(.summary) }
                 .keyboardShortcut("0", modifiers: [.command, .option])
             Button("Recent") { model.pendingCommand = .navigate(.recentConversations) }
                 .keyboardShortcut("1", modifiers: [.command, .option])

@@ -23,7 +23,7 @@ struct OpenQuicklyView: View {
 
     /// The sidebar's Views section, same names and icons.
     private static let specialViews: [Entry] = [
-        Entry(destination: .home, name: "Home", icon: "house"),
+        Entry(destination: .summary, name: "Summary", icon: "newspaper"),
         Entry(destination: .recentConversations, name: "Recent", icon: "clock"),
         Entry(destination: .combinedFeed, name: "Combined", icon: "line.3.horizontal"),
         Entry(destination: .mentions, name: "Mentions", icon: "at"),

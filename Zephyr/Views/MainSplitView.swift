@@ -7,7 +7,7 @@ import ZulipModel
 /// interleaved message feed, a channel's topic list, or a cross-channel view.
 /// Codable so each server's selection persists across launches.
 nonisolated enum Destination: Hashable, Codable {
-    case home
+    case summary
     case conversation(ConversationKey)
     case channel(streamId: Int)
     case channelTopics(streamId: Int)
@@ -110,7 +110,7 @@ struct MainSplitView: View {
         _selectedAccount = selectedAccount
         _search = State(initialValue: SidebarSearchModel(store: store))
         _selection = State(
-            initialValue: initialSelection ?? AppStateStore.selection(for: store.accountId) ?? .home)
+            initialValue: initialSelection ?? AppStateStore.selection(for: store.accountId) ?? .summary)
         _columnVisibility = State(
             initialValue: startsWithSidebarClosed ? .detailOnly : .automatic)
     }
@@ -1207,9 +1207,9 @@ struct MainSplitView: View {
     private var detailContent: some View {
         Group {
             switch selection {
-            case .home:
-                HomeView(store: store, search: search, selection: $selection)
-                    .id(Destination.home)
+            case .summary:
+                SummaryView(store: store, search: search, selection: $selection)
+                    .id(Destination.summary)
             case .conversation(let key):
                 TranscriptView(store: store, conversation: key, selection: $selection)
                     .id(key)

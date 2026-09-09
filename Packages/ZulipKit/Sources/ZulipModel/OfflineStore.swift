@@ -70,23 +70,27 @@ public struct OfflineStore: Sendable {
         try? FileManager.default.removeItem(at: url("messages.json"))
     }
 
-    // MARK: Realm branding
+    // MARK: Summary activity
 
-    func loadHomeMentions() -> [HomeMentionRecord] {
-        load([HomeMentionRecord].self, from: "home-mentions.json") ?? []
+    /// The file names predate the Summary rename; keeping them keeps an
+    /// upgrade's pending mentions and generated summaries.
+    func loadTopicMentions() -> [TopicMentionRecord] {
+        load([TopicMentionRecord].self, from: "home-mentions.json") ?? []
     }
 
-    func saveHomeMentions(_ messages: [HomeMentionRecord]) {
+    func saveTopicMentions(_ messages: [TopicMentionRecord]) {
         save(messages, to: "home-mentions.json")
     }
 
-    func loadHomeSummaries() -> [HomeSummary] {
-        load([HomeSummary].self, from: "home-summaries.json") ?? []
+    func loadTopicSummaries() -> [TopicSummary] {
+        load([TopicSummary].self, from: "home-summaries.json") ?? []
     }
 
-    func saveHomeSummaries(_ summaries: [HomeSummary]) {
+    func saveTopicSummaries(_ summaries: [TopicSummary]) {
         save(summaries, to: "home-summaries.json")
     }
+
+    // MARK: Realm branding
 
     /// Realm branding images (logo/icon variants) by stable key, so the
     /// toolbar brand renders offline. Bytes exactly as fetched.

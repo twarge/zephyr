@@ -2,7 +2,7 @@ import SwiftUI
 import ZulipAPI
 import ZulipModel
 
-struct HomeView: View {
+struct SummaryView: View {
     let store: PerAccountStore
     let search: SidebarSearchModel
     @Binding var selection: Destination?
@@ -10,10 +10,19 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var limit = 30
 
+    /// How often the visible rows re-check the server while the window is
+    /// frontmost. Events keep the list itself current; this pass covers
+    /// what they cannot report — a reply or reaction of yours on another
+    /// device, and a mention target that moved while the app was away.
+    private static let refreshInterval = Duration.seconds(300)
+    /// Delay before the first retry of a failed pass; each further failure
+    /// doubles it, up to `refreshInterval`.
+    private static let firstRetry = Duration.seconds(15)
+
     private var allRows: [TopicActivity] {
         let filter = search.filterText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return store.homeActivity.activities.filter { activity in
-            guard store.homeActivity.isVisible(activity, in: store) else { return false }
+        return store.topicActivity.activities.filter { activity in
+            guard store.topicActivity.isVisible(activity, in: store) else { return false }
             return filter.isEmpty || activity.topic.localizedCaseInsensitiveContains(filter)
                 || channelName(activity.id.streamId).localizedCaseInsensitiveContains(filter)
         }
@@ -25,11 +34,11 @@ struct HomeView: View {
 
     /// One pass over the unread map per render rather than one per row.
     /// `unreadIds` is keyed by the server's topic spelling, so each entry
-    /// has to be canonicalized before it can match a Home row.
-    private var unreadCounts: [HomeTopicID: Int] {
+    /// has to be canonicalized before it can match a Summary row.
+    private var unreadCounts: [TopicActivityID: Int] {
         store.unreads.unreadIds.reduce(into: [:]) { counts, entry in
             guard case .topic(let stream, let topic) = entry.key else { return }
-            counts[HomeTopicID(streamId: stream, topic: topic), default: 0] += entry.value.count
+            counts[TopicActivityID(streamId: stream, topic: topic), default: 0] += entry.value.count
         }
     }
 
@@ -37,39 +46,33 @@ struct HomeView: View {
         let rows = allRows
         let shown = Array(rows.prefix(limit))
         let unread = unreadCounts
+        // Rows an event has un-verified re-check themselves: this set
+        // grows the moment one does, which is the task's identity.
+        let unverified = Set(shown.map(\.id)).subtracting(store.topicActivity.verifiedTopics)
         return VStack(spacing: 0) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Recent channel activity").font(.headline)
                     Text(TopicSummaryService.shared.availabilityMessage
-                         ?? "Recent messages summarized on this device")
+                         ?? "On-device AI summaries can be wrong.")
                         .font(.caption).foregroundStyle(.secondary)
-                    if store.homeActivity.refreshFailed || store.isRecoveringEventStream {
-                        Text("Showing saved activity. Connect to check for newer replies.")
+                    if store.topicActivity.refreshFailed || store.isRecoveringEventStream {
+                        Text("Showing saved activity. Checking again automatically.")
                             .font(.caption).foregroundStyle(.secondary)
-                    } else if store.homeActivity.historyIsLimited {
+                    } else if store.topicActivity.historyIsLimited {
                         Text("Some older activity isn’t included.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
-                if store.homeActivity.isLoading { ProgressView().controlSize(.small) }
-                Button {
-                    Task { await store.homeActivity.refresh(limit: limit, force: true) }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.borderless)
-                .help("Refresh Home")
-                .accessibilityLabel("Refresh Home")
-                .disabled(store.homeActivity.isLoading)
+                if store.topicActivity.isLoading { ProgressView().controlSize(.small) }
             }
             .padding(16)
             Divider()
             if rows.isEmpty {
                 ContentUnavailableView(
-                    store.homeActivity.isLoading ? "Loading Recent Activity" : "No Recent Topics",
-                    systemImage: "house",
+                    store.topicActivity.isLoading ? "Loading Recent Activity" : "No Recent Topics",
+                    systemImage: "newspaper",
                     description: Text(search.filterText.isEmpty
                         ? "Activity from your channels and unanswered mentions will appear here."
                         : "No channels or topics match your search."))
@@ -77,7 +80,7 @@ struct HomeView: View {
             } else {
                 List {
                     ForEach(shown) { activity in
-                        HomeTopicRow(
+                        SummaryTopicRow(
                             store: store, activity: activity,
                             channelName: channelName(activity.id.streamId),
                             unreadCount: unread[activity.id] ?? 0,
@@ -92,18 +95,35 @@ struct HomeView: View {
                 .listStyle(.plain)
             }
         }
-        .serverTitled("Home", store: store)
-        .task(id: limit) { await store.homeActivity.refresh(limit: limit) }
-        .task(id: Set(shown.map(\.id))) {
-            await store.homeActivity.verifyVisible(Set(shown.map(\.id)))
+        .serverTitled("Summary", store: store)
+        // Refreshing is the view's own job: the pass runs when Summary
+        // appears, on every return to the front, and on its own clock
+        // while it stays there. A failed pass retries on a backoff rather
+        // than waiting for a person to ask again.
+        .task(id: AutoRefresh(limit: limit, active: scenePhase == .active)) {
+            guard scenePhase == .active else { return }
+            var failures = 0
+            while !Task.isCancelled {
+                await store.topicActivity.refresh(limit: limit)
+                failures = store.topicActivity.refreshFailed ? failures + 1 : 0
+                let delay = failures == 0
+                    ? Self.refreshInterval
+                    : min(Self.refreshInterval, Self.firstRetry * (1 << min(failures - 1, 5)))
+                do { try await Task.sleep(for: delay) } catch { return }
+            }
+        }
+        .task(id: unverified) {
+            guard !unverified.isEmpty else { return }
+            // Rows verify in bursts as a pass lands. Letting the set settle
+            // keeps that from restarting this check on every one of them.
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            await store.topicActivity.verifyVisible(unverified)
         }
         .onChange(of: store.isRecoveringEventStream) { wasRecovering, recovering in
             if wasRecovering && !recovering {
-                Task { await store.homeActivity.refresh(limit: limit, force: true) }
+                Task { await store.topicActivity.refresh(limit: limit, force: true) }
             }
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await store.homeActivity.refresh(limit: limit) } }
         }
     }
 
@@ -114,12 +134,19 @@ struct HomeView: View {
             keys.pendingNear = (activity.conversation, near)
         }
         // The existing transcript handles first-unread anchoring and owns
-        // every reply/reaction action. Home never marks a summary read.
+        // every reply/reaction action. Summary never marks a message read.
         selection = .conversation(activity.conversation)
+    }
+
+    /// Restarts the refresh loop when the row budget changes or the window
+    /// comes back to the front; going away cancels it.
+    private struct AutoRefresh: Equatable {
+        let limit: Int
+        let active: Bool
     }
 }
 
-private struct HomeTopicRow: View {
+private struct SummaryTopicRow: View {
     let store: PerAccountStore
     let activity: TopicActivity
     let channelName: String
@@ -139,7 +166,7 @@ private struct HomeTopicRow: View {
     }
 
     private var summaryText: String? {
-        guard let input = currentInput, let summary = store.homeActivity.summaries[activity.id],
+        guard let input = currentInput, let summary = store.topicActivity.summaries[activity.id],
               summary.fingerprint == input.fingerprint else { return nil }
         return summary.text
     }
@@ -150,7 +177,7 @@ private struct HomeTopicRow: View {
             if activity.needsReactionReview {
                 parts.append("Check response to edited mention")
             } else {
-                parts.append(store.homeActivity.verifiedTopics.contains(activity.id)
+                parts.append(store.topicActivity.verifiedTopics.contains(activity.id)
                     ? "Mention awaiting response" : "Mention · checking replies")
             }
         }
@@ -203,7 +230,7 @@ private struct HomeTopicRow: View {
                 let text = try await TopicSummaryService.shared.summarize(input, account: store.accountId)
                 try Task.checkCancellation()
                 guard preparedRevision == source else { return }
-                store.homeActivity.saveSummary(HomeSummary(
+                store.topicActivity.saveSummary(TopicSummary(
                     topic: activity.id, fingerprint: input.fingerprint,
                     text: text, sourceIds: activity.messages.map(\.id)), source: activity.messages)
             } catch {

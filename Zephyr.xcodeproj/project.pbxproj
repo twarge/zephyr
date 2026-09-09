@@ -65,6 +65,7 @@
 		B1054F65A0FA0D40D60D9523 /* FeedWarmCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B107C9FA821BCB2E527459E9 /* FeedWarmCache.swift */; };
 		B25F5C4B54A1AD406C201ECB /* ZephyrIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14B376B2915109D9F3810E20 /* ZephyrIntents.swift */; };
 		B8CB761D6FE61F47C1E0FCBC /* ZephyrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066FAF47CC310A2445AAB0A9 /* ZephyrApp.swift */; };
+		B97056A0F86D718EC7C1A28A /* SummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A0AA221515FD4C19AD8224 /* SummaryView.swift */; };
 		BB931F8230B45BC90B104176 /* MessageFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BD4EE59C8A33FC99AA510C3 /* MessageFeed.swift */; };
 		BCBA356FC8FA69612CEAE5DA /* ComposeBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48877EEA1FAFF61902860BD0 /* ComposeBar.swift */; };
 		BD6ED142E9B10E20B22453B7 /* UnreadSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */; };
@@ -72,7 +73,6 @@
 		CAFDE08EBB3B372F2C6AA2B1 /* DetachedWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */; };
 		D98ABC4211B58928C55BB7B0 /* MediaDropTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFE3DF32C25009CB60756EAD /* MediaDropTarget.swift */; };
 		E100D2C195474421ED98A3B1 /* WebAuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5410F479FB8AE6E80F4866 /* WebAuthSession.swift */; };
-		E548312377EA2842E67F4BFD /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC213B388FEDE34D9114613E /* HomeView.swift */; };
 		F33ED1EE8D08E1F58540F09B /* Tips.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AB37CBF3789C6E2854F3632 /* Tips.swift */; };
 		F6C17F7A2914098D59DE30AB /* AllChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C28BE5A0DA537D6EB9C97A /* AllChannelsView.swift */; };
 /* End PBXBuildFile section */
@@ -157,7 +157,6 @@
 		AD6E84868E4713FC5F20FD6B /* Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Support.swift; sourceTree = "<group>"; };
 		B107C9FA821BCB2E527459E9 /* FeedWarmCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedWarmCache.swift; sourceTree = "<group>"; };
 		B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewConversationSheet.swift; sourceTree = "<group>"; };
-		BC213B388FEDE34D9114613E /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		BC85F6AA56F7EF9105F7742E /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
 		BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		C0B6E7BF3930F81D1C28D6C1 /* Search.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Search.swift; sourceTree = "<group>"; };
@@ -168,6 +167,7 @@
 		CFE3DF32C25009CB60756EAD /* MediaDropTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDropTarget.swift; sourceTree = "<group>"; };
 		D037A907658BA511667CA882 /* ZephyrShare.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ZephyrShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetachedWindow.swift; sourceTree = "<group>"; };
+		E5A0AA221515FD4C19AD8224 /* SummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryView.swift; sourceTree = "<group>"; };
 		E7EBB59257B9154EAF76D934 /* NarrowFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NarrowFeedView.swift; sourceTree = "<group>"; };
 		E8EB162FCCE5166524648043 /* RemindersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersView.swift; sourceTree = "<group>"; };
 		EC11E5BCCDABAA47341BC0CA /* MessageActionSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageActionSheets.swift; sourceTree = "<group>"; };
@@ -223,7 +223,6 @@
 				A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */,
 				B107C9FA821BCB2E527459E9 /* FeedWarmCache.swift */,
 				BC85F6AA56F7EF9105F7742E /* HelpView.swift */,
-				BC213B388FEDE34D9114613E /* HomeView.swift */,
 				28E9D19485B08518476527C2 /* LoginView.swift */,
 				3B2CA9D7CF1C06AA7B0A1D52 /* MainSplitView.swift */,
 				CFE3DF32C25009CB60756EAD /* MediaDropTarget.swift */,
@@ -243,6 +242,7 @@
 				BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */,
 				7DBB2BFB3C180FACDCB32F82 /* SharePickerSheet.swift */,
 				C17B1B985702AAFC4C30468A /* SidebarView.swift */,
+				E5A0AA221515FD4C19AD8224 /* SummaryView.swift */,
 				AD6E84868E4713FC5F20FD6B /* Support.swift */,
 				828F7934E9D581DD3703EAAC /* TopicAutocompleteField.swift */,
 				2D95D81BD326A92094707205 /* TranscriptView.swift */,
@@ -526,7 +526,6 @@
 				67B681DC63058035652E4E1A /* EmojiPickerView.swift in Sources */,
 				B1054F65A0FA0D40D60D9523 /* FeedWarmCache.swift in Sources */,
 				428E7CBC70049F69CF04CAB5 /* HelpView.swift in Sources */,
-				E548312377EA2842E67F4BFD /* HomeView.swift in Sources */,
 				188461C8A7C5D3500365BA6D /* KeyboardRouter.swift in Sources */,
 				A82A7771694C25DF30CA4009 /* LoginView.swift in Sources */,
 				9C2971F9C1F755CB722B43E8 /* MainSplitView.swift in Sources */,
@@ -551,6 +550,7 @@
 				7CA83B9202B397D38737BD29 /* ShareInbox.swift in Sources */,
 				53D49ACBC473F8B9F2B5BD5E /* SharePickerSheet.swift in Sources */,
 				A2B018739699F9B2B4505207 /* SidebarView.swift in Sources */,
+				B97056A0F86D718EC7C1A28A /* SummaryView.swift in Sources */,
 				706E3B7C39B1F3C9F5DF0E1E /* Support.swift in Sources */,
 				F33ED1EE8D08E1F58540F09B /* Tips.swift in Sources */,
 				883C05E8DCB4C721B557D835 /* TopicAutocompleteField.swift in Sources */,

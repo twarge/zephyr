@@ -58,7 +58,7 @@ public final class PerAccountStore {
     public let unreads: Unreads
     /// The unified sidebar model.
     public let conversations: ConversationList
-    public let homeActivity: HomeActivityStore
+    public let topicActivity: TopicActivityStore
 
     private struct WeakMessageList {
         weak var value: MessageListModel?
@@ -170,7 +170,7 @@ public final class PerAccountStore {
             uniquingKeysWith: { first, _ in first })
         unreads = Unreads(snapshot: snapshot.unreadMsgs, selfUserId: account.userId)
         conversations = ConversationList(snapshot: snapshot, selfUserId: account.userId)
-        homeActivity = HomeActivityStore(selfUserId: account.userId, offline: offline)
+        topicActivity = TopicActivityStore(selfUserId: account.userId, offline: offline)
         channelFolders = (snapshot.channelFolders ?? []).sorted { $0.order < $1.order }
         realmEmoji = snapshot.realmEmoji ?? [:]
         for draft in snapshot.drafts ?? [] {
@@ -203,7 +203,7 @@ public final class PerAccountStore {
             // without the reapply, unreads cleared offline resurrect.
             reapplyPendingActionsLocally()
         }
-        homeActivity.attach(to: self)
+        topicActivity.attach(to: self)
     }
 
     /// Carries a replaced store instance's cached-message hydration across
@@ -216,7 +216,7 @@ public final class PerAccountStore {
         }
         conversations.seed(
             messages: Array(previous.messages.values), selfUserId: selfUserId)
-        homeActivity.seedMissing(Array(previous.messages.values))
+        topicActivity.seedMissing(Array(previous.messages.values))
         // Mark-unread refiles skipped at init (no messages yet) land now.
         reapplyPendingActionsLocally()
     }
@@ -249,7 +249,7 @@ public final class PerAccountStore {
             cachedMessageIds.insert(message.id)
         }
         conversations.seed(messages: cached, selfUserId: selfId)
-        homeActivity.seedMissing(cached)
+        topicActivity.seedMissing(cached)
         // Mark-unread actions recorded offline refile now that their
         // messages are loadable (the init pass couldn't locate them).
         reapplyPendingActionsLocally()
@@ -1361,7 +1361,7 @@ public final class PerAccountStore {
             }
         }
         guard !written.isEmpty else { return }
-        homeActivity.seedMissing(written.compactMap { messages[$0] })
+        topicActivity.seedMissing(written.compactMap { messages[$0] })
         // Other open lists showing these messages refresh too.
         forEachMessageList { $0.handleChangedMessages(ids: written) }
         scheduleMessageCacheSave(written)
@@ -1412,7 +1412,7 @@ public final class PerAccountStore {
     }
 
     private func apply(_ event: Event) {
-        defer { homeActivity.handleEvent(event) }
+        defer { topicActivity.handleEvent(event) }
         switch event.kind {
         case .heartbeat:
             break

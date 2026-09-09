@@ -2,9 +2,9 @@ import Foundation
 import ZulipAPI
 import ZulipContent
 
-/// Home uses a canonical identity, keeping the latest server spelling for
+/// Summary uses a canonical identity, keeping the latest server spelling for
 /// display and navigation. A rename/move removes messages from the old key.
-public struct HomeTopicID: Hashable, Codable, Sendable {
+public struct TopicActivityID: Hashable, Codable, Sendable {
     public let streamId: Int
     public let topic: String
 
@@ -24,7 +24,7 @@ public struct TopicActivity: Identifiable, Sendable {
         case awaitingResponse, unseen, participated, seen
     }
 
-    public let id: HomeTopicID
+    public let id: TopicActivityID
     public let topic: String
     public let messages: [Message]
     public let lastMessageId: Int
@@ -43,7 +43,7 @@ public struct TopicActivity: Identifiable, Sendable {
     }
 }
 
-struct HomeMentionRecord: Codable, Sendable, Equatable {
+struct TopicMentionRecord: Codable, Sendable, Equatable {
     let message: Message
     let since: Int
     let reactionNeedsConfirmation: Bool
@@ -54,7 +54,7 @@ struct HomeMentionRecord: Codable, Sendable, Equatable {
 public struct TopicActivityIndex: Sendable {
     public let selfUserId: Int
     private(set) var messages: [Int: Message] = [:]
-    private var groups: [HomeTopicID: Set<Int>] = [:]
+    private var groups: [TopicActivityID: Set<Int>] = [:]
     private var mentionSince: [Int: Int] = [:]
     private var uncertainReactions: Set<Int> = []
     private var liveOrder = 0
@@ -70,11 +70,11 @@ public struct TopicActivityIndex: Sendable {
             liveOrder &+= 1
             if old == nil && message.senderId == selfUserId { replyOrder[message.id] = liveOrder }
         }
-        if let oldKey = old.flatMap(HomeTopicID.init) {
+        if let oldKey = old.flatMap(TopicActivityID.init) {
             groups[oldKey]?.remove(message.id)
             if groups[oldKey]?.isEmpty == true { groups.removeValue(forKey: oldKey) }
         }
-        guard let key = HomeTopicID(message) else { remove([message.id]); return }
+        guard let key = TopicActivityID(message) else { remove([message.id]); return }
         messages[message.id] = message
         groups[key, default: []].insert(message.id)
         if old?.content != message.content {
@@ -97,7 +97,7 @@ public struct TopicActivityIndex: Sendable {
 
     public mutating func remove(_ ids: [Int]) {
         for id in ids {
-            if let message = messages.removeValue(forKey: id), let key = HomeTopicID(message) {
+            if let message = messages.removeValue(forKey: id), let key = TopicActivityID(message) {
                 groups[key]?.remove(id)
                 if groups[key]?.isEmpty == true { groups.removeValue(forKey: key) }
             }
@@ -128,15 +128,15 @@ public struct TopicActivityIndex: Sendable {
 
     /// Ordered by id: the caller compares successive record sets to decide
     /// whether a write is needed, and a Set's iteration order is not stable.
-    func mentionRecords(ids: Set<Int>) -> [HomeMentionRecord] {
+    func mentionRecords(ids: Set<Int>) -> [TopicMentionRecord] {
         ids.compactMap { id in
             guard let message = messages[id], let since = mentionSince[id] else { return nil }
-            return HomeMentionRecord(message: message, since: since,
+            return TopicMentionRecord(message: message, since: since,
                                      reactionNeedsConfirmation: uncertainReactions.contains(id))
         }.sorted { $0.message.id < $1.message.id }
     }
 
-    mutating func restore(_ record: HomeMentionRecord) {
+    mutating func restore(_ record: TopicMentionRecord) {
         upsert(record.message)
         guard mentionSince[record.message.id] != nil else { return }
         mentionSince[record.message.id] = record.since
@@ -144,7 +144,7 @@ public struct TopicActivityIndex: Sendable {
         else { uncertainReactions.remove(record.message.id) }
     }
 
-    public func activities(since cutoff: Int, topics: Set<HomeTopicID>? = nil) -> [TopicActivity] {
+    public func activities(since cutoff: Int, topics: Set<TopicActivityID>? = nil) -> [TopicActivity] {
         let selected = topics.map { keys in
             Dictionary(uniqueKeysWithValues: keys.compactMap { key in groups[key].map { (key, $0) } })
         } ?? groups

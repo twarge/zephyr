@@ -53,7 +53,7 @@ struct HelpView: View {
     private static let appShortcuts: [(String, String)] = [
         ("⌘⇧O", "Open Quickly — channel or view"),
         ("⌘[  ⌘]", "Back / forward"),
-        ("⌥⌘1…6", "Go to Recent, Combined, Mentions, Starred, Drafts, Outbox"),
+        ("⌥⌘0…6", "Go to Summary, Recent, Combined, Mentions, Starred, Drafts, Outbox"),
         ("⌘F", "Search"),
         ("⌘R", "Reply to the selected message"),
         ("⌥⌘R", "Reload the current view"),

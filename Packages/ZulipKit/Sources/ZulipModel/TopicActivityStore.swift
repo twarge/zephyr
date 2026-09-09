@@ -2,14 +2,14 @@ import Foundation
 import Observation
 import ZulipAPI
 
-public struct HomeSummary: Codable, Sendable {
-    public var topic: HomeTopicID
+public struct TopicSummary: Codable, Sendable {
+    public var topic: TopicActivityID
     public var fingerprint: String
     public var text: String
     public var sourceIds: [Int]
     public var generatedAt: Date
 
-    public init(topic: HomeTopicID, fingerprint: String, text: String, sourceIds: [Int]) {
+    public init(topic: TopicActivityID, fingerprint: String, text: String, sourceIds: [Int]) {
         self.topic = topic
         self.fingerprint = fingerprint
         self.text = text
@@ -18,17 +18,17 @@ public struct HomeSummary: Codable, Sendable {
     }
 }
 
-/// Account-scoped Home state, shared by windows. Its own fetch/event fence
+/// Account-scoped Summary state, shared by windows. Its own fetch/event fence
 /// lets read mentions and cross-device reactions refresh without replacing
 /// a canonical transcript message with an older network response.
 @MainActor @Observable
-public final class HomeActivityStore {
+public final class TopicActivityStore {
     public private(set) var activities: [TopicActivity] = []
-    public private(set) var verifiedTopics: Set<HomeTopicID> = []
+    public private(set) var verifiedTopics: Set<TopicActivityID> = []
     public private(set) var isLoading = false
     public private(set) var historyIsLimited = false
     public private(set) var refreshFailed = false
-    public private(set) var summaries: [HomeTopicID: HomeSummary] = [:]
+    public private(set) var summaries: [TopicActivityID: TopicSummary] = [:]
     public private(set) var revision = 0
 
     @ObservationIgnored private weak var store: PerAccountStore?
@@ -36,21 +36,21 @@ public final class HomeActivityStore {
     @ObservationIgnored private var index: TopicActivityIndex
     @ObservationIgnored private var eventRevision = 0
     @ObservationIgnored private var changedAt: [Int: Int] = [:]
-    @ObservationIgnored private var topicChangedAt: [HomeTopicID: Int] = [:]
+    @ObservationIgnored private var topicChangedAt: [TopicActivityID: Int] = [:]
     @ObservationIgnored private var rebuildTask: Task<Void, Never>?
     @ObservationIgnored private var lastRefresh: Date?
     @ObservationIgnored private var loadedLimit = 0
-    @ObservationIgnored private var dirtyTopics: Set<HomeTopicID> = []
-    @ObservationIgnored private var derived: [HomeTopicID: TopicActivity] = [:]
+    @ObservationIgnored private var dirtyTopics: Set<TopicActivityID> = []
+    @ObservationIgnored private var derived: [TopicActivityID: TopicActivity] = [:]
     @ObservationIgnored private var cutoffDay: Int?
     @ObservationIgnored private var checkedMentionTargets: Set<Int> = []
     @ObservationIgnored private var mentionChecksRemaining = 0
-    @ObservationIgnored private var savedMentions: [HomeMentionRecord] = []
-    @ObservationIgnored private var checking: Set<HomeTopicID> = []
+    @ObservationIgnored private var savedMentions: [TopicMentionRecord] = []
+    @ObservationIgnored private var checking: Set<TopicActivityID> = []
 
     /// Topic checks are independent narrows, so they overlap rather than
-    /// queue: a 30-row Home was ~90 strictly serial round trips. Bounded so
-    /// opening Home doesn't arrive at the server as one burst.
+    /// queue: a 30-row Summary was ~90 strictly serial round trips. Bounded so
+    /// opening Summary doesn't arrive at the server as one burst.
     private static let maxConcurrentTopicChecks = 4
 
     init(selfUserId: Int, offline: OfflineStore?) {
@@ -58,12 +58,12 @@ public final class HomeActivityStore {
         self.offline = offline
         // Only known pending requests are retained separately from the
         // normal history cache, so they survive its per-topic launch cap.
-        savedMentions = (offline?.loadHomeMentions() ?? []).sorted { $0.message.id < $1.message.id }
+        savedMentions = (offline?.loadTopicMentions() ?? []).sorted { $0.message.id < $1.message.id }
         for record in savedMentions {
             index.restore(record)
-            if let key = HomeTopicID(record.message) { dirtyTopics.insert(key) }
+            if let key = TopicActivityID(record.message) { dirtyTopics.insert(key) }
         }
-        for summary in offline?.loadHomeSummaries() ?? [] { summaries[summary.topic] = summary }
+        for summary in offline?.loadTopicSummaries() ?? [] { summaries[summary.topic] = summary }
     }
 
     func attach(to store: PerAccountStore) { self.store = store }
@@ -123,23 +123,23 @@ public final class HomeActivityStore {
         let records = index.mentionRecords(ids: pending)
         guard records != savedMentions else { return }
         savedMentions = records
-        offline.saveHomeMentions(records)
+        offline.saveTopicMentions(records)
     }
 
     private func upsert(_ message: Message, live: Bool = false) {
         if live {
-            if let old = index.messages[message.id].flatMap(HomeTopicID.init) { topicChangedAt[old] = eventRevision }
-            if let key = HomeTopicID(message) { topicChangedAt[key] = eventRevision }
+            if let old = index.messages[message.id].flatMap(TopicActivityID.init) { topicChangedAt[old] = eventRevision }
+            if let key = TopicActivityID(message) { topicChangedAt[key] = eventRevision }
         }
         guard index.messages[message.id] != message else { return }
-        if let old = index.messages[message.id].flatMap(HomeTopicID.init) { dirtyTopics.insert(old) }
+        if let old = index.messages[message.id].flatMap(TopicActivityID.init) { dirtyTopics.insert(old) }
         index.upsert(message, live: live)
-        if let key = HomeTopicID(message) { dirtyTopics.insert(key) }
+        if let key = TopicActivityID(message) { dirtyTopics.insert(key) }
     }
 
     private func remove(_ ids: [Int], live: Bool = false) {
         for id in ids {
-            if let key = index.messages[id].flatMap(HomeTopicID.init) {
+            if let key = index.messages[id].flatMap(TopicActivityID.init) {
                 dirtyTopics.insert(key)
                 if live { topicChangedAt[key] = eventRevision }
             }
@@ -147,7 +147,7 @@ public final class HomeActivityStore {
         index.remove(ids)
     }
 
-    public func saveSummary(_ summary: HomeSummary, source: [Message]) {
+    public func saveSummary(_ summary: TopicSummary, source: [Message]) {
         guard let store, store.subscriptions[summary.topic.streamId] != nil,
               source.allSatisfy({ old in
                   guard let current = index.messages[old.id] else { return false }
@@ -160,14 +160,14 @@ public final class HomeActivityStore {
             let oldest = summaries.values.min { $0.generatedAt < $1.generatedAt }
             if let oldest { summaries.removeValue(forKey: oldest.topic) }
         }
-        offline?.saveHomeSummaries(Array(summaries.values))
+        offline?.saveTopicSummaries(Array(summaries.values))
     }
 
     private func invalidateSummaries(ids: Set<Int>) {
         let affected = summaries.values.filter { !ids.isDisjoint(with: $0.sourceIds) }.map(\.topic)
         guard !affected.isEmpty else { return }
         for key in affected { summaries.removeValue(forKey: key) }
-        offline?.saveHomeSummaries(Array(summaries.values))
+        offline?.saveTopicSummaries(Array(summaries.values))
     }
 
     func handleEvent(_ event: Event) {
@@ -183,7 +183,7 @@ public final class HomeActivityStore {
             touched = event.messageIds ?? [event.messageId]
             for id in touched {
                 guard var message = index.messages[id] else { continue }
-                if let old = HomeTopicID(message) { verifiedTopics.remove(old) }
+                if let old = TopicActivityID(message) { verifiedTopics.remove(old) }
                 if id == event.messageId, let content = event.renderedContent {
                     message.content = content
                     message.lastEditTimestamp = event.editTimestamp ?? message.lastEditTimestamp
@@ -191,12 +191,12 @@ public final class HomeActivityStore {
                 if let topic = event.subject { message.subject = topic }
                 if let stream = event.newStreamId { message.streamId = stream }
                 upsert(message, live: true)
-                if let new = HomeTopicID(message) { verifiedTopics.remove(new) }
+                if let new = TopicActivityID(message) { verifiedTopics.remove(new) }
             }
         case .deleteMessage(let event):
             touched = event.allIds
             for id in touched {
-                if let message = index.messages[id], let key = HomeTopicID(message) {
+                if let message = index.messages[id], let key = TopicActivityID(message) {
                     verifiedTopics.remove(key)
                 }
             }
@@ -204,7 +204,7 @@ public final class HomeActivityStore {
         case .reaction(let event):
             touched = [event.messageId]
             index.applyReaction(event)
-            if let key = index.messages[event.messageId].flatMap(HomeTopicID.init) {
+            if let key = index.messages[event.messageId].flatMap(TopicActivityID.init) {
                 dirtyTopics.insert(key)
                 topicChangedAt[key] = eventRevision
             }
@@ -218,7 +218,7 @@ public final class HomeActivityStore {
             for key in summaries.keys where removed.contains(key.streamId) {
                 summaries.removeValue(forKey: key)
             }
-            offline?.saveHomeSummaries(Array(summaries.values))
+            offline?.saveTopicSummaries(Array(summaries.values))
         case .subscriptionAdd, .subscriptionUpdate, .streamUpdate, .userTopic:
             break
         default:
@@ -233,12 +233,15 @@ public final class HomeActivityStore {
 
     /// A bounded recent-history discovery pass followed by complete latest
     /// reply checks for visible topics. It never marks messages read.
+    ///
+    /// `refreshFailed` stays set until a pass actually succeeds, so the
+    /// saved-activity notice holds steady instead of blinking off at the
+    /// start of every automatic retry.
     public func refresh(limit: Int = 30, force: Bool = false) async {
         guard let store, !isLoading else { return }
         if !force, loadedLimit >= limit, let lastRefresh,
            Date().timeIntervalSince(lastRefresh) < 60 { return }
         isLoading = true
-        refreshFailed = false
         mentionChecksRemaining = 60
         if force { checkedMentionTargets.removeAll() }
         defer { isLoading = false; rebuild() }
@@ -257,21 +260,29 @@ public final class HomeActivityStore {
             try await check(Array(activities.filter { isVisible($0, in: store) }.prefix(limit)))
             loadedLimit = max(loadedLimit, limit)
             lastRefresh = Date()
+            refreshFailed = false
         } catch is CancellationError {
-            // A later Home visit resumes; do not make cancellation look
+            // A later Summary visit resumes; do not make cancellation look
             // like a connection error or claim its partial fetch is fresh.
         } catch {
             refreshFailed = true
         }
     }
 
-    /// Checks exactly the rows Home is showing. `refresh` covers the first
+    /// Checks exactly the rows Summary is showing. `refresh` covers the first
     /// `limit` visible topics, but a sidebar filter surfaces rows from
     /// further down the list; without this they sit at "checking replies"
-    /// for as long as the filter is on.
-    public func verifyVisible(_ ids: Set<HomeTopicID>) async {
+    /// for as long as the filter is on. An edit, move or delete drops the
+    /// affected topics from `verifiedTopics`, which puts them back in the
+    /// caller's set — so they re-check themselves within the second.
+    public func verifyVisible(_ ids: Set<TopicActivityID>) async {
         guard store != nil else { return }
-        let pending = activities.filter { ids.contains($0.id) && !verifiedTopics.contains($0.id) }
+        // Topics a running pass already claimed are skipped here rather
+        // than inside `check`, so repeat calls during that pass cannot
+        // keep topping its mention-check budget back up.
+        let pending = activities.filter {
+            ids.contains($0.id) && !verifiedTopics.contains($0.id) && !checking.contains($0.id)
+        }
         guard !pending.isEmpty else { return }
         mentionChecksRemaining = max(mentionChecksRemaining, 60)
         do {
@@ -339,7 +350,7 @@ public final class HomeActivityStore {
             let lowerBound = tail.messages.map(\.id).min()
                 ?? (tail.foundOldest == true ? 0 : Int.max)
             let deleted = index.messages.values.filter {
-                HomeTopicID($0) == activity.id && $0.id >= lowerBound
+                TopicActivityID($0) == activity.id && $0.id >= lowerBound
                     && !tailIds.contains($0.id) && (changedAt[$0.id] ?? 0) <= tailStart
             }.map(\.id)
             remove(deleted)
@@ -355,7 +366,7 @@ public final class HomeActivityStore {
             // Remove a stale/deleted last reply learned in an earlier
             // session, retaining any newer event that raced this request.
             let obsolete = index.messages.values.filter {
-                HomeTopicID($0) == activity.id && $0.senderId == index.selfUserId
+                TopicActivityID($0) == activity.id && $0.senderId == index.selfUserId
                     && $0.id > latestOwnId && (changedAt[$0.id] ?? 0) <= start
             }.map(\.id)
             remove(obsolete)
@@ -411,7 +422,7 @@ public final class HomeActivityStore {
             upsert(message)
         }
         // A deleted message must not slip back in through the canonical
-        // store's seedMissing callback after failing Home's event fence.
+        // store's seedMissing callback after failing Summary's event fence.
         store.reconcileFetchedMessages(accepted)
         return result
     }
