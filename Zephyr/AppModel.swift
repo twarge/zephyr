@@ -1,3 +1,6 @@
+#if canImport(AppKit)
+import AppKit
+#endif
 import Foundation
 import Observation
 import SwiftUI
@@ -85,6 +88,20 @@ final class AppModel {
     /// Set by notification clicks; the key window consumes it as navigation
     /// (switching servers first if needed).
     var pendingDestination: PendingDestination?
+    #if os(macOS)
+    /// Every account window (main and detached), registered as it appears.
+    /// A standalone message window has no feed of its own to navigate: it
+    /// hands its destination to the frontmost of these.
+    @ObservationIgnored private let accountWindows = NSHashTable<NSWindow>.weakObjects()
+
+    func registerAccountWindow(_ window: NSWindow) {
+        accountWindows.add(window)
+    }
+
+    var frontmostAccountWindow: NSWindow? {
+        NSApp.orderedWindows.first { accountWindows.contains($0) }
+    }
+    #endif
     /// Set after adding an account: the first window to see the request
     /// switches to it.
     var pendingAccountFocus: Account.ID?

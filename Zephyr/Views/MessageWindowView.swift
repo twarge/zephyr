@@ -42,6 +42,8 @@ struct MessageWindowRootView: View {
 /// votes, todo strikes, edits, and reactions all keep flowing in through
 /// the account's event queue, and widget interactions work as in the feed.
 private struct MessageWindowContent: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     let store: PerAccountStore
     let messageId: Int
 
@@ -104,6 +106,15 @@ private struct MessageWindowContent: View {
                     MessageContentView(
                         content: ContentParser.parse(html: message.content),
                         connection: store.connection)
+                        // Same menu over the text: selectable Text otherwise
+                        // substitutes the system edit menu on right-click,
+                        // which a SwiftUI .contextMenu can't override on
+                        // macOS — the AppKit overlay intercepts instead.
+                        #if os(macOS)
+                        .overlay { RightClickMenu { messageMenu(message) } }
+                        #else
+                        .contextMenu { messageMenu(message) }
+                        #endif
                 }
                 if !message.reactions.isEmpty {
                     ReactionsRow(store: store, message: message)
@@ -111,6 +122,39 @@ private struct MessageWindowContent: View {
             }
             Spacer(minLength: 0)
         }
+        .contentShape(.rect)
+        .contextMenu { messageMenu(message) }
+    }
+
+    /// The window shows the message away from its topic, so the menu offers
+    /// the way there (the feed rows' item).
+    @ViewBuilder
+    private func messageMenu(_ message: Message) -> some View {
+        Button(
+            message.type == .stream ? "Go to Message in Topic" : "Go to Message in Conversation",
+            systemImage: "arrow.turn.down.right"
+        ) {
+            goToConversation(message)
+        }
+    }
+
+    /// Lands an account window on the message in its own conversation by the
+    /// notification-click route (this window has no feed to navigate). An
+    /// account window only takes a destination while key, so on macOS the
+    /// frontmost one is made key first — or a new one opened when none is
+    /// left, which takes it on appearing.
+    private func goToConversation(_ message: Message) {
+        guard let key = Unreads.conversationKey(for: message, selfUserId: store.selfUserId)
+        else { return }
+        #if os(macOS)
+        if let window = model.frontmostAccountWindow {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            openWindow(id: "main")
+        }
+        #endif
+        model.pendingDestination = PendingDestination(
+            account: store.accountId, destination: .conversation(key), near: message.id)
     }
 
     /// Poll question or todo title when the message is a widget (that's

@@ -298,6 +298,16 @@ struct MessageFeedList: View {
     }
     @State private var idleDebounce = IdleDebounce()
 
+    /// Everywhere but a topic or DM transcript, a row's message is shown
+    /// away from its own conversation: the context menu offers a jump to
+    /// the message there.
+    private var offersConversationJump: Bool {
+        switch model.narrow {
+        case .topic, .dm: false
+        default: true
+        }
+    }
+
     var body: some View {
         let _ = PerfLog.render("FeedList")
         Group {
@@ -615,7 +625,8 @@ struct MessageFeedList: View {
                 isKeySelected: keys.selectedMessageId == message.id,
                 isMultiSelected: keys.selectedMessageIds.contains(message.id),
                 isLinkTarget: keys.highlightMessageId == message.id,
-                showsConversationJump: showsConversationJump)
+                showsConversationJump: showsConversationJump,
+                offersConversationJump: offersConversationJump)
                 .onGeometryChange(for: CGRect.self) { proxy in
                     proxy.frame(in: .scrollView)
                 } action: { frame in
@@ -1376,6 +1387,10 @@ struct MessageRow: View {
     /// Set in cross-conversation feeds: the control row swaps quoted
     /// reply for a jump to the message's own conversation.
     var showsConversationJump = false
+    /// Set anywhere but the message's own transcript (the channel feed and
+    /// every cross-conversation feed): the context menu leads with a jump
+    /// to the message in its topic (or DM thread).
+    var offersConversationJump = false
 
     @Environment(KeyboardRouter.self) private var keys
     @Environment(\.openWindow) private var openWindow
@@ -1695,7 +1710,7 @@ struct MessageRow: View {
                             .background(.quaternary.opacity(0.6), in: .circle)
                     }
                     .buttonStyle(.plain)
-                    .help("Go to conversation")
+                    .help(conversationJumpTitle)
                     .opacity(controlsActive ? 1 : 0)
                     .allowsHitTesting(controlsActive)
                 } else {
@@ -1926,6 +1941,12 @@ struct MessageRow: View {
     /// otherwise replace it).
     @ViewBuilder
     private func messageMenu() -> some View {
+        if offersConversationJump {
+            Button(conversationJumpTitle, systemImage: "arrow.turn.down.right") {
+                goToConversation()
+            }
+            Divider()
+        }
         #if os(macOS)
         // Falls back to quoting the whole message when nothing is selected.
         Button("Reply Quoting Selection", systemImage: "text.quote") {
@@ -2035,6 +2056,11 @@ struct MessageRow: View {
             keys.insertIntoCompose?(quote)
             keys.focusCompose?()
         }
+    }
+
+    /// The jump's menu title: DMs have no topic to name.
+    private var conversationJumpTitle: String {
+        message.type == .stream ? "Go to Message in Topic" : "Go to Message in Conversation"
     }
 
     /// Jumps to the message's own conversation, anchored at (and

@@ -26,7 +26,7 @@ struct HelpView: View {
                 keyboardSection
 
                 helpSection("Messages and Composing", bullets: [
-                    "Hover a message for the react and star controls; right-click for Reply Quoting Message, Copy Message Reference, Move, Edit, and Delete.",
+                    "Hover a message for the react and star controls; right-click for Reply Quoting Message, Copy Message Reference, Move, Edit, and Delete — and, anywhere but the message's own topic, Go to Message in Topic.",
                     "Select an image and press Space for Quick Look; the arrow keys step through every image in the view.",
                     "Drag files anywhere into a conversation, or paste an image (⌘V), to upload — Send waits until uploads finish.",
                     "The chevron beside the message field opens long-form compose: a resizable editor with a rendered preview (the eye); there, Return makes a new line and ⇧Return sends.",

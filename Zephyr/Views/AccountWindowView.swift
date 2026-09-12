@@ -55,7 +55,10 @@ struct AccountWindowView: View {
         }
         .focusedSceneValue(\.windowAccount, $accountId)
         #if os(macOS)
-        .background(WindowReader { window in hostWindow = window })
+        .background(WindowReader { window in
+            hostWindow = window
+            if let window { model.registerAccountWindow(window) }
+        })
         #endif
         .onAppear {
             guard accountId == nil else { return }
