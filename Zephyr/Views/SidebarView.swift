@@ -62,9 +62,11 @@ struct SidebarView: View {
             initialValue: AppStateStore.expandedChannels(for: store.accountId))
     }
 
-    /// Double-clicking a sidebar entry opens it standalone in a new window.
-    private func detachGesture(_ destination: Destination) -> some Gesture {
-        TapGesture(count: 2).onEnded {
+    /// Row click handling: double-click opens the entry standalone in a
+    /// new window; on macOS 26 a single click also selects it (see
+    /// SidebarRowClicks).
+    private func rowClicks(_ destination: Destination) -> SidebarRowClicks {
+        SidebarRowClicks(destination: destination, selection: $selection) {
             DetachWindowTip().invalidate(reason: .actionPerformed)
             openWindow(
                 value: DetachedWindow(accountId: store.accountId, destination: destination))
@@ -146,8 +148,7 @@ struct SidebarView: View {
             ForEach(dmRows) { conversation in
                 DirectMessageRow(store: store, conversation: conversation)
                     .tag(Destination.conversation(conversation.key))
-                    .simultaneousGesture(
-                        detachGesture(.conversation(conversation.key)))
+                    .modifier(rowClicks(.conversation(conversation.key)))
             }
             // Namespaced ids: a bare userId that numerically matches a
             // channel row's streamId would alias the two rows in the
@@ -157,7 +158,7 @@ struct SidebarView: View {
                     participantIds: [user.userId], selfUserId: store.selfUserId)
                 UserDirectMessageRow(store: store, user: user)
                     .tag(Destination.conversation(key))
-                    .simultaneousGesture(detachGesture(.conversation(key)))
+                    .modifier(rowClicks(.conversation(key)))
             }
             if directory.hiddenCount > 0 {
                 SidebarExpanderRow(
@@ -780,8 +781,7 @@ struct SidebarView: View {
                         isExpanded: expandedChannels.contains(streamId),
                         onToggle: isFiltering ? nil : { toggleChannel(streamId) })
                         .tag(Destination.channel(streamId: streamId))
-                        .simultaneousGesture(
-                            detachGesture(.channel(streamId: streamId)))
+                        .modifier(rowClicks(.channel(streamId: streamId)))
                         .contextMenu {
                             Button(subscription.muted ? "Unmute Channel" : "Mute Channel") {
                                 store.setChannelMuted(streamId, muted: !subscription.muted)
@@ -846,9 +846,8 @@ struct SidebarView: View {
                                 onRenamed: { refreshTopicsSoon(streamId) })
                                 .tag(Destination.conversation(
                                     .topic(streamId: streamId, topic: entry.topic.name)))
-                                .simultaneousGesture(
-                                    detachGesture(.conversation(
-                                        .topic(streamId: streamId, topic: entry.topic.name))))
+                                .modifier(rowClicks(.conversation(
+                                    .topic(streamId: streamId, topic: entry.topic.name))))
                         }
                     } else if expandedChannels.contains(streamId) {
                         topicRows(for: streamId)
@@ -914,9 +913,8 @@ struct SidebarView: View {
                     onRenamed: { refreshTopicsSoon(streamId) })
                     .tag(Destination.conversation(
                         .topic(streamId: streamId, topic: entry.topic.name)))
-                    .simultaneousGesture(
-                        detachGesture(.conversation(
-                            .topic(streamId: streamId, topic: entry.topic.name))))
+                    .modifier(rowClicks(.conversation(
+                        .topic(streamId: streamId, topic: entry.topic.name))))
             }
             if hasMore {
                 // Expands in place; the rail's dotted end says "more
@@ -994,7 +992,7 @@ struct SidebarView: View {
             }
         }
         .tag(tag)
-        .simultaneousGesture(detachGesture(tag))
+        .modifier(rowClicks(tag))
     }
 }
 
@@ -1551,6 +1549,37 @@ private extension View {
         #else
         self
         #endif
+    }
+}
+
+/// Sidebar row clicks. Double-click opens the entry standalone in a new
+/// window. On macOS 26 that recognizer swallows a single click landing on
+/// the row's label, icon, or badge — the List only sees clicks that miss
+/// it, on the trailing Spacer — so a one-click gesture selects the row
+/// itself. macOS 27 forwards the click to the List; the fallback stays off.
+private struct SidebarRowClicks: ViewModifier {
+    let destination: Destination
+    @Binding var selection: Destination?
+    let detach: () -> Void
+
+    /// macOS 26 and earlier. iOS delivers the tap to the List regardless.
+    private static let clickSelects: Bool = {
+        if #available(macOS 27, *) { return false }
+        return true
+    }()
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let detachable = content
+            .simultaneousGesture(TapGesture(count: 2).onEnded { detach() })
+        if Self.clickSelects {
+            // Low priority: a click on a control inside the row (the
+            // channel's disclosure chevron) stays with the control
+            // instead of also selecting the row.
+            detachable.gesture(TapGesture().onEnded { selection = destination })
+        } else {
+            detachable
+        }
     }
 }
 
