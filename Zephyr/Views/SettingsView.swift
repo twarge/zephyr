@@ -54,10 +54,12 @@ struct SettingsView: View {
     var body: some View {
         #if os(macOS)
         TabView {
-            GeneralSettings()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            AccountsSettings()
-                .tabItem { Label("Accounts", systemImage: "person.crop.circle") }
+            Tab("General", systemImage: "gearshape") {
+                GeneralSettings()
+            }
+            Tab("Accounts", systemImage: "person.crop.circle") {
+                AccountsSettings()
+            }
         }
         .frame(width: 460)
         .padding(.bottom, 8)
@@ -66,24 +68,27 @@ struct SettingsView: View {
         // sheet geometry); each tab gets its own navigation stack and a
         // native grouped form. Help lives here (iOS has no Help menu).
         TabView {
-            NavigationStack {
-                GeneralSettings()
-                    .navigationTitle("General")
-                    .navigationBarTitleDisplayMode(.inline)
+            Tab("General", systemImage: "gearshape") {
+                NavigationStack {
+                    GeneralSettings()
+                        .navigationTitle("General")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
             }
-            .tabItem { Label("General", systemImage: "gearshape") }
-            NavigationStack {
-                AccountsSettings()
-                    .navigationTitle("Accounts")
-                    .navigationBarTitleDisplayMode(.inline)
+            Tab("Accounts", systemImage: "person.crop.circle") {
+                NavigationStack {
+                    AccountsSettings()
+                        .navigationTitle("Accounts")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
             }
-            .tabItem { Label("Accounts", systemImage: "person.crop.circle") }
-            NavigationStack {
-                HelpView()
-                    .navigationTitle("Help")
-                    .navigationBarTitleDisplayMode(.inline)
+            Tab("Help", systemImage: "questionmark.circle") {
+                NavigationStack {
+                    HelpView()
+                        .navigationTitle("Help")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
             }
-            .tabItem { Label("Help", systemImage: "questionmark.circle") }
         }
         #endif
     }
