@@ -27,6 +27,21 @@ struct NarrowFeedView: View {
         if case .combinedFeed = narrow { true } else { false }
     }
 
+    /// The sidebar badge's count, under the title.
+    private var subtitle: String {
+        switch narrow {
+        case .combinedFeed(let includesMuted):
+            return unreadSubtitle(store.combinedUnreadCount(includesMuted: includesMuted))
+        case .mentions:
+            return unreadSubtitle(store.unreads.mentionIds.count)
+        case .starred:
+            let count = store.starredMessageIds.count
+            return count == 1 ? "1 message" : count > 0 ? "\(count.formatted()) messages" : ""
+        default:
+            return ""
+        }
+    }
+
     init(
         store: PerAccountStore, title: String, narrow: Narrow,
         useMatchHighlights: Bool = false,
@@ -84,6 +99,7 @@ struct NarrowFeedView: View {
             }
         }
         .serverTitled(title, store: store)
+        .subtitled { subtitle }
         // Store-keyed: re-binds when the store instance is replaced
         // (warm-launch swap, queue rebuild).
         .task(id: ObjectIdentifier(store)) {

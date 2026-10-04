@@ -69,6 +69,17 @@ struct MainSplitView: View {
         default: false
         }
     }
+    #if !os(macOS)
+    /// Mailbox-like views wear Mail's large title, which collapses into
+    /// the bar as the list scrolls; a transcript (Mail's message view)
+    /// and search results stay inline.
+    private var detailTitleDisplayMode: ToolbarTitleDisplayMode {
+        switch selection {
+        case .conversation, .search, nil: .inline
+        default: .large
+        }
+    }
+    #endif
     /// True while the narrow-window watcher hid the sidebar (so growing
     /// the window restores it; a user's manual collapse is left alone).
     @State private var autoCollapsedSidebar = false
@@ -250,7 +261,7 @@ struct MainSplitView: View {
                 // split view it never reached the iPad's navigation bar.
                 .toolbar { detailToolbar }
                 #if !os(macOS)
-                .toolbarTitleDisplayMode(.inline)
+                .toolbarTitleDisplayMode(detailTitleDisplayMode)
                 // The sidebar-filtering search field renders here — the
                 // main view's toolbar, not the sidebar's (see
                 // detailToolbar's placement per size class).

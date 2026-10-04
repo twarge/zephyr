@@ -50,6 +50,7 @@ struct ChannelFeedView: View {
             }
         }
         .serverTitled(channelName, store: store)
+        .subtitled { unreadSubtitle(store.unreads.unreadCount(inChannel: streamId)) }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ComposeBar(store: store, mode: .channel(streamId: streamId))
         }

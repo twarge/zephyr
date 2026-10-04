@@ -37,6 +37,7 @@ struct ChannelTopicsView: View {
             }
         }
         .serverTitled("#\(channelName)", store: store)
+        .subtitled { unreadSubtitle(store.unreads.unreadCount(inChannel: streamId)) }
         .task {
             // Offline-first: the local database's recent topics render
             // immediately; the server list replaces them when it lands

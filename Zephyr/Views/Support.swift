@@ -134,6 +134,40 @@ extension View {
     func serverTitled(_ title: String, store: PerAccountStore) -> some View {
         modifier(ServerPrefixedTitle(store: store, title: title))
     }
+
+    /// Mail's line under the title ("12 unread"): beneath the large
+    /// title, then beneath the inline title once that scrolls away (the
+    /// window subtitle on macOS). Empty shows none. iOS 26+; none on
+    /// visionOS.
+    func subtitled(_ text: @escaping () -> String) -> some View {
+        modifier(LiveSubtitle(text: text))
+    }
+}
+
+/// Evaluates its text in its own body, so a changing count re-renders
+/// only the title — not the feed the modifier wraps.
+private struct LiveSubtitle: ViewModifier {
+    let text: () -> String
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.navigationSubtitle(text())
+        #elseif os(visionOS)
+        // No navigation subtitle on visionOS: the title stands alone.
+        content
+        #else
+        if #available(iOS 26.0, *) {
+            content.navigationSubtitle(text())
+        } else {
+            content
+        }
+        #endif
+    }
+}
+
+/// "12 unread" — or no subtitle at all when nothing is.
+func unreadSubtitle(_ count: Int) -> String {
+    count > 0 ? "\(count.formatted()) unread" : ""
 }
 
 struct RealmLogoView: View {

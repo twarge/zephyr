@@ -29,7 +29,10 @@ struct RecentConversationsView: View {
         var id: ConversationKey { key }
     }
 
-    private var rows: [Row] {
+    /// The rows shown, and the unread count across every conversation the
+    /// filters match — past the row cap too, so the subtitle's number
+    /// doesn't move when a filter changes which rows fit under it.
+    private var listing: (rows: [Row], unreadCount: Int) {
         // One pass over the canonical map: recent senders + participation.
         var messagesByKey: [ConversationKey: [Message]] = [:]
         for message in store.messages.values {
@@ -41,6 +44,7 @@ struct RecentConversationsView: View {
         let filter = search.filterText.trimmingCharacters(in: .whitespaces).lowercased()
 
         var out: [Row] = []
+        var unreadCount = 0
         for conversation in store.conversations.conversations {
             let key = conversation.key
             var streamId: Int?
@@ -70,47 +74,68 @@ struct RecentConversationsView: View {
                 continue
             }
 
+            unreadCount += unread
+            guard out.count < 150 else { continue }
             out.append(
                 Row(
                     key: key, streamId: streamId, channelName: channelName, title: title,
                     timestamp: conversation.timestamp ?? cached.first?.timestamp,
                     unreadCount: unread))
-            if out.count == 150 { break }
         }
-        return out
+        return (out, unreadCount)
+    }
+
+    private var filterBar: some View {
+        HStack(spacing: 8) {
+            Toggle("Include DMs", isOn: $includeDMs)
+            Toggle("Unread", isOn: $unreadOnly)
+            Toggle("Participated", isOn: $participatedOnly)
+            Spacer()
+        }
+        .toggleStyle(.button)
+        .controlSize(.small)
     }
 
     var body: some View {
+        let (rows, unreadCount) = listing
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Toggle("Include DMs", isOn: $includeDMs)
-                    Toggle("Unread", isOn: $unreadOnly)
-                    Toggle("Participated", isOn: $participatedOnly)
-                    Spacer()
-                }
-                .toggleStyle(.button)
-                .controlSize(.small)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            #if os(macOS)
+            filterBar
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             Divider()
-            if rows.isEmpty {
-                ContentUnavailableView(
-                    "No Recent Conversations", systemImage: "clock",
-                    description: Text("Conversations with recent activity appear here."))
-                    .frame(maxHeight: .infinity)
-            } else {
-                List(rows) { row in
+            #endif
+            List {
+                #if !os(macOS)
+                // The first row, so it scrolls away with the large title
+                // (Mail's category bar) rather than pinning under the bar.
+                filterBar
+                    // Each toggle takes its own taps — a row of default-
+                    // style buttons fires every one of them on any tap.
+                    .buttonStyle(.borderless)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                    .listRowSeparator(.hidden)
+                #endif
+                ForEach(rows) { row in
                     RecentConversationRow(store: store, row: row) {
                         selection = .conversation(row.key)
                     }
                     .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                 }
-                .listStyle(.plain)
+            }
+            .listStyle(.plain)
+            // Over the list, not instead of it: the filters stay
+            // reachable when they are what emptied it.
+            .overlay {
+                if rows.isEmpty {
+                    ContentUnavailableView(
+                        "No Recent Conversations", systemImage: "clock",
+                        description: Text("Conversations with recent activity appear here."))
+                }
             }
         }
         .serverTitled("Recent conversations", store: store)
+        .subtitled { unreadSubtitle(unreadCount) }
         // Widen the recency window beyond the sidebar's initial seed.
         .task { await store.seedConversations(count: 200) }
     }

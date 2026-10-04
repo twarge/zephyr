@@ -49,26 +49,7 @@ struct SummaryView: View {
         // Rows an event has un-verified re-check themselves: this set
         // grows the moment one does, which is the task's identity.
         let unverified = Set(shown.map(\.id)).subtracting(store.topicActivity.verifiedTopics)
-        return VStack(spacing: 0) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Recent channel activity").font(.headline)
-                    Text(TopicSummaryService.shared.availabilityMessage
-                         ?? "On-device AI summaries can be wrong.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    if store.topicActivity.refreshFailed || store.isRecoveringEventStream {
-                        Text("Showing saved activity. Checking again automatically.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    } else if store.topicActivity.historyIsLimited {
-                        Text("Some older activity isn’t included.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-                if store.topicActivity.isLoading { ProgressView().controlSize(.small) }
-            }
-            .padding(16)
-            Divider()
+        return Group {
             if rows.isEmpty {
                 ContentUnavailableView(
                     store.topicActivity.isLoading ? "Loading Recent Activity" : "No Recent Topics",
@@ -91,11 +72,30 @@ struct SummaryView: View {
                     if rows.count > limit {
                         Button("More topics…") { limit += 30 }
                     }
+                    // A plain row, not a section footer: plain-style
+                    // footers pin to the bottom edge while scrolling.
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(TopicSummaryService.shared.availabilityMessage
+                             ?? "On-device AI summaries can be wrong.")
+                        if store.topicActivity.historyIsLimited {
+                            Text("Some older activity isn’t included.")
+                        }
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
+                    .listRowSeparator(.hidden)
                 }
                 .listStyle(.plain)
             }
         }
         .serverTitled("Summary", store: store)
+        // Mail's "Checking for Mail…" line: the refresh state rides the
+        // title instead of a header above the list.
+        .subtitled {
+            if store.topicActivity.refreshFailed || store.isRecoveringEventStream {
+                return "Showing saved activity"
+            }
+            return store.topicActivity.isLoading ? "Updating…" : "Recent channel activity"
+        }
         // Refreshing is the view's own job: the pass runs when Summary
         // appears, on every return to the front, and on its own clock
         // while it stays there. A failed pass retries on a backoff rather
