@@ -28,6 +28,7 @@ struct SidebarView: View {
     @State private var expandedChannels: Set<Int>
     @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
     @AppStorage("channelsAboveDMs") private var channelsAboveDMs = true
+    @AppStorage("combinedShowsMuted") private var combinedShowsMuted = false
     @State private var showOfflineUsers = false
     @State private var expandedInactiveSections: Set<String> = []
     /// Channels whose topic list shows everything (past the inline cap).
@@ -402,7 +403,9 @@ struct SidebarView: View {
                         }
                     viewRow(
                         "Combined", icon: "line.3.horizontal", tag: .combinedFeed,
-                        badge: store.visibleUnreadCount)
+                        // The unreads the feed itself will show: a badge
+                        // it hides the messages for could never clear.
+                        badge: store.combinedUnreadCount(includesMuted: combinedShowsMuted))
                         .contextMenu {
                             Button("Mark All Messages as Read") {
                                 store.markAllRead()

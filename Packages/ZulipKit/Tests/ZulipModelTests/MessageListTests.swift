@@ -7,13 +7,14 @@ import ZulipTestSupport
 @MainActor
 struct MessageListModelTests {
     private func makeStoreWithTransport(
-        script: [FakeResponse]
+        script: [FakeResponse], unreadMsgs: String = Fixtures.emptyUnreadsJSON
     ) throws -> (PerAccountStore, FakeTransport) {
         let transport = FakeTransport(script: script, defaultResponse: .hang)
         let account = Account(
             realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
         let snapshot = try ZulipJSON.decoder.decode(
-            InitialSnapshot.self, from: Data(Fixtures.registerJSON(queueId: "q1").utf8))
+            InitialSnapshot.self,
+            from: Data(Fixtures.registerJSON(queueId: "q1", unreadMsgs: unreadMsgs).utf8))
         let connection = ApiConnection(
             realmURL: account.realmURL, email: account.email, apiKey: "key", transport: transport)
         return (PerAccountStore(account: account, connection: connection, snapshot: snapshot), transport)
@@ -111,7 +112,7 @@ struct MessageListModelTests {
                 Fixtures.channelMessageJSON(id: 901),
             ])),
         ])
-        let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
+        let list = MessageListModel(store: store, narrow: .topic(streamId: 10, topic: "greetings"))
         await list.fetchInitial()
         #expect(transport.requests.count == 2)
         #expect(transport.requests[1].queryValue("anchor") == "newest")
@@ -121,10 +122,10 @@ struct MessageListModelTests {
     }
 
     @Test func staleBacklogStillMarksRecentResumePoint() async throws {
-        // An ancient unread (e.g. one never-read channel in the combined
-        // feed) triggers the stale re-anchor at newest — but the newest
-        // window is read to its oldest edge, so the fresh unreads in it
-        // are the real resume point: the marker aims at the first one.
+        // An ancient unread triggers the stale re-anchor at newest — but
+        // the newest window is read to its oldest edge, so the fresh
+        // unreads in it are the real resume point: the marker aims at the
+        // first one.
         let (store, transport) = try makeStoreWithTransport(script: [
             .json(Fixtures.getMessagesJSON(
                 [Fixtures.channelMessageJSON(id: 100)], foundNewest: false)),
@@ -134,7 +135,7 @@ struct MessageListModelTests {
                 Fixtures.channelMessageJSON(id: 902),
             ])),
         ])
-        let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
+        let list = MessageListModel(store: store, narrow: .topic(streamId: 10, topic: "greetings"))
         await list.fetchInitial()
         #expect(transport.requests.count == 2)
         #expect(list.messages.map(\.id) == [900, 901, 902])
@@ -151,12 +152,144 @@ struct MessageListModelTests {
                 [Fixtures.channelMessageJSON(id: 100, timestamp: now - 3600)],
                 foundNewest: false))
         ])
-        let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
+        let list = MessageListModel(store: store, narrow: .topic(streamId: 10, topic: "greetings"))
         await list.fetchInitial()
         #expect(transport.requests.count == 1)
         #expect(list.messages.map(\.id) == [100])
         #expect(!list.haveNewest)
         #expect(list.firstUnreadMarkerId == 100)
+    }
+
+    // MARK: Catch-up feeds (Combined, channel) resume at the oldest
+    // surfaced, still-fresh unread — never the server's first_unread.
+
+    /// Unreads in #general (subscribed, id 10) and in a channel the user
+    /// doesn't subscribe to (id 11 — its unreads surface nowhere).
+    private static let catchUpUnreads = """
+        {"count": 4, "pms": [], "streams": [
+          {"stream_id": 10, "topic": "greetings", "unread_message_ids": [50, 500, 510]},
+          {"stream_id": 11, "topic": "noise", "unread_message_ids": [400]}],
+         "huddles": [], "mentions": [], "old_unreads_missing": false}
+        """
+
+    @Test func combinedResumesAtOldestSurfacedFreshUnread() async throws {
+        let now = Int(Date.now.timeIntervalSince1970)
+        let (store, transport) = try makeStoreWithTransport(
+            script: [
+                .json(Fixtures.getMessagesJSON([
+                    Fixtures.channelMessageJSON(
+                        id: 400, streamId: 11, channelName: "noise", topic: "noise",
+                        timestamp: now - 7200),
+                    Fixtures.channelMessageJSON(id: 499, timestamp: now - 3700, flags: ["read"]),
+                    Fixtures.channelMessageJSON(id: 500, timestamp: now - 3600),
+                    Fixtures.channelMessageJSON(id: 510, timestamp: now - 60),
+                ]))
+            ],
+            unreadMsgs: Self.catchUpUnreads)
+        // A cached message from long ago sets the staleness floor: unread
+        // 50, older still, is backlog — not a resume point.
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 60), flags: ["read"])))
+
+        let list = MessageListModel(store: store, narrow: .combinedFeed(includesMuted: true))
+        await list.fetchInitial()
+        #expect(transport.requests.count == 1)
+        #expect(transport.requests[0].queryValue("anchor") == "500")
+        // 400 is unread and older, but surfaces nowhere: no marker for it.
+        #expect(list.firstUnreadMarkerId == 500)
+        #expect(list.firstUnreadId(after: nil) == 500)
+    }
+
+    @Test func resumeWithoutLocalFloorVerifiesStalenessOnFetch() async throws {
+        // Nothing cached to date the unread ids: the ancient 50 is tried,
+        // its fetched timestamp (June 2025) exposes it, and the feed opens
+        // at the newest messages with the marker at the fresh unread.
+        let now = Int(Date.now.timeIntervalSince1970)
+        let (store, transport) = try makeStoreWithTransport(
+            script: [
+                .json(Fixtures.getMessagesJSON(
+                    [Fixtures.channelMessageJSON(id: 50)], foundNewest: false)),
+                .json(Fixtures.getMessagesJSON([
+                    Fixtures.channelMessageJSON(id: 499, timestamp: now - 3700, flags: ["read"]),
+                    Fixtures.channelMessageJSON(id: 500, timestamp: now - 3600),
+                ])),
+            ],
+            unreadMsgs: Self.catchUpUnreads)
+        let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
+        await list.fetchInitial()
+        #expect(transport.requests.count == 2)
+        #expect(transport.requests[0].queryValue("anchor") == "50")
+        #expect(transport.requests[1].queryValue("anchor") == "newest")
+        #expect(list.haveNewest)
+        #expect(list.firstUnreadMarkerId == 500)
+    }
+
+    @Test func combinedWithNothingToResumeOpensAtNewest() async throws {
+        // Only an unsurfaced unread: open at the newest, without a marker.
+        let now = Int(Date.now.timeIntervalSince1970)
+        let (store, transport) = try makeStoreWithTransport(
+            script: [
+                .json(Fixtures.getMessagesJSON([
+                    Fixtures.channelMessageJSON(id: 399, timestamp: now - 7300, flags: ["read"]),
+                    Fixtures.channelMessageJSON(
+                        id: 400, streamId: 11, channelName: "noise", topic: "noise",
+                        timestamp: now - 7200),
+                ]))
+            ],
+            unreadMsgs: """
+                {"count": 1, "pms": [], "streams": [
+                  {"stream_id": 11, "topic": "noise", "unread_message_ids": [400]}],
+                 "huddles": [], "mentions": [], "old_unreads_missing": false}
+                """)
+        let list = MessageListModel(store: store, narrow: .combinedFeed(includesMuted: true))
+        await list.fetchInitial()
+        #expect(transport.requests.count == 1)
+        #expect(transport.requests[0].queryValue("anchor") == "newest")
+        #expect(list.haveNewest)
+        #expect(list.firstUnreadMarkerId == nil)
+        #expect(list.firstUnreadId(after: nil) == nil)
+    }
+
+    @Test func homeViewKeepsMutedConversationsOut() async throws {
+        let now = Int(Date.now.timeIntervalSince1970)
+        let (store, transport) = try makeStoreWithTransport(script: [
+            .json(Fixtures.getMessagesJSON([
+                Fixtures.channelMessageJSON(id: 100, timestamp: now, flags: ["read"]),
+                Fixtures.channelMessageJSON(id: 101, topic: "lunch", timestamp: now, flags: ["read"]),
+            ]))
+        ])
+        let list = MessageListModel(store: store, narrow: .combinedFeed(includesMuted: false))
+        await list.fetchInitial()
+        // The server does the filtering for fetches…
+        #expect(transport.requests[0].queryValue("narrow")?.contains(#""in""#) == true)
+        #expect(list.messages.map(\.id) == [100, 101])
+
+        // …and the client for everything else. Muting "lunch" drops its
+        // rows in place, and its later arrivals stay out.
+        store.handleEvent(
+            try decodeEvent(
+                #"{"id": 1, "type": "user_topic", "stream_id": 10, "topic_name": "lunch", "visibility_policy": 1, "last_updated": 0}"#))
+        #expect(list.messages.map(\.id) == [100])
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 2,
+                    message: Fixtures.channelMessageJSON(id: 102, topic: "lunch", timestamp: now))))
+        store.handleEvent(
+            try decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 3, message: Fixtures.channelMessageJSON(id: 103, timestamp: now))))
+        #expect(list.messages.map(\.id) == [100, 103])
+        // A muted unread is no resume point, and no part of the badge.
+        #expect(list.firstUnreadId(after: nil) == 103)
+        #expect(store.combinedUnreadCount(includesMuted: false) == 1)
+        #expect(store.combinedUnreadCount(includesMuted: true) == 2)
+
+        // The full Combined feed still takes everything.
+        let full = MessageListModel(store: store, narrow: .combinedFeed(includesMuted: true))
+        #expect(full.narrow.apiElements.isEmpty)
     }
 
     @Test func pagingForwardTrimsWindow() async throws {

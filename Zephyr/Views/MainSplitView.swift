@@ -79,6 +79,7 @@ struct MainSplitView: View {
         var destination: Destination
     }
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("combinedShowsMuted") private var combinedShowsMuted = false
     #if !os(macOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -1232,10 +1233,13 @@ struct MainSplitView: View {
                 RemindersView(store: store, selection: $selection)
                     .id(Destination.reminders)
             case .combinedFeed:
+                // Keyed on the muted preference too: flipping it is a
+                // different narrow, with its own model and warm cache.
                 NarrowFeedView(
-                    store: store, title: "Combined feed", narrow: .combinedFeed,
+                    store: store, title: "Combined feed",
+                    narrow: .combinedFeed(includesMuted: combinedShowsMuted),
                     showsConversationJump: true, selection: $selection)
-                    .id(Destination.combinedFeed)
+                    .id(Narrow.combinedFeed(includesMuted: combinedShowsMuted))
             case .mentions:
                 NarrowFeedView(
                     store: store, title: "Mentions", narrow: .mentions,

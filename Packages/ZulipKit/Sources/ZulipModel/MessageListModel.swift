@@ -68,6 +68,41 @@ public final class MessageListModel: Identifiable {
     /// this is a stale backlog (e.g. years of never-read #general): the
     /// view opens at the newest messages instead of deep in history.
     private static let staleBacklogAge: TimeInterval = 14 * 86400
+
+    /// Catch-up feeds interleave many conversations, so the server's
+    /// `first_unread` is the wrong opening anchor — in Combined it is
+    /// nearly always a muted or years-stale message, not where the reader
+    /// left off. These narrows resume at the oldest unread the UI
+    /// surfaces (`PerAccountStore.resumeUnreadId`) instead.
+    private var resumesAtVisibleUnread: Bool {
+        switch narrow {
+        case .combinedFeed, .channel: true
+        default: false
+        }
+    }
+
+    /// An unread worth resuming at: surfaced in the UI (a Combined feed
+    /// can hold muted conversations too) and not a stale backlog.
+    private func isResumePoint(_ message: Message, in store: PerAccountStore) -> Bool {
+        guard !(message.flags ?? []).contains("read"),
+              Date.now.timeIntervalSince1970 - TimeInterval(message.timestamp)
+                  <= Self.staleBacklogAge
+        else { return false }
+        guard case .combinedFeed(let includesMuted) = narrow else { return true }
+        return Unreads.conversationKey(for: message, selfUserId: store.selfUserId)
+            .map { store.isCombinedUnread($0, includesMuted: includesMuted) } ?? true
+    }
+
+    /// Narrow membership for messages no server fetch filtered (live
+    /// events, the local cache). The home view's muting rule lives in the
+    /// store, beyond what `Narrow.containsMessage` can see.
+    private func admits(_ message: Message, in store: PerAccountStore) -> Bool {
+        guard narrow.containsMessage(message, selfUserId: store.selfUserId) else { return false }
+        if case .combinedFeed(includesMuted: false) = narrow {
+            return store.isShownInHome(message)
+        }
+        return true
+    }
     /// Paging keeps at most this many messages in memory — beyond it the
     /// far end is dropped and re-pages from the server or cache on demand.
     private static let maxWindowCount = 600
@@ -108,12 +143,16 @@ public final class MessageListModel: Identifiable {
 
     /// The oldest unread newer than `newestId` (nil accepts any unread) —
     /// the logical resume point when a feed parked at the bottom reopens
-    /// after messages arrived. Pure: callable from view init.
+    /// after messages arrived. Catch-up feeds count only unreads worth
+    /// resuming at, as their fresh open does: a muted arrival must not
+    /// capture the reopen. Pure: callable from view init.
     public func firstUnreadId(after newestId: Int?) -> Int? {
         messages.first { message in
-            guard !(message.flags ?? []).contains("read") else { return false }
-            guard let newestId else { return true }
-            return message.id > newestId
+            if let newestId, message.id <= newestId { return false }
+            if resumesAtVisibleUnread, let store {
+                return isResumePoint(message, in: store)
+            }
+            return !(message.flags ?? []).contains("read")
         }?.id
     }
 
@@ -136,21 +175,33 @@ public final class MessageListModel: Identifiable {
         // Zulip semantics: open at the first unread (or a linked message),
         // with history in both directions. Search narrows can't ask for
         // first_unread; they open at the newest results.
-        let anchor: MessageAnchor
-        var anchoredMidHistory = true
-        if let initialAnchorMessageId {
-            anchor = .id(initialAnchorMessageId)
-        } else if case .custom = narrow {
-            anchor = .newest
-            anchoredMidHistory = false
-        } else {
-            anchor = .firstUnread
-        }
         // Offline-first: render the cached transcript immediately, anchored
         // where the server render will land. The fetch below still runs:
         // success replaces the preview and clears the fallback flag;
         // failure leaves it showing, and reconnect refetches.
         populateOfflineFallback()
+        var anchor: MessageAnchor
+        var anchoredMidHistory = true
+        var resumeId: Int?
+        if let initialAnchorMessageId {
+            anchor = .id(initialAnchorMessageId)
+        } else if case .custom = narrow {
+            anchor = .newest
+            anchoredMidHistory = false
+        } else if resumesAtVisibleUnread {
+            resumeId = await store.resumeUnreadId(
+                for: narrow, staleAfter: Self.staleBacklogAge)
+            guard generation == gen else { return }
+            if let resumeId {
+                anchor = .id(resumeId)
+            } else {
+                // Nothing the reader would catch up on: the newest messages.
+                anchor = .newest
+                anchoredMidHistory = false
+            }
+        } else {
+            anchor = .firstUnread
+        }
         do {
             var result = try await store.connection.getMessages(
                 anchor: anchor, numBefore: count,
@@ -182,6 +233,21 @@ public final class MessageListModel: Identifiable {
                     .min { $0.id < $1.id }
                     .map { !($0.flags ?? []).contains("read") } ?? true
             }
+            // The resume id came from unread bookkeeping, which has no
+            // dates: a cache too shallow to set the staleness floor can
+            // hand back an ancient one. The fetched message settles it —
+            // stale means open at the newest messages instead.
+            if let resumeId,
+               let resumed = result.messages.filter({ $0.id >= resumeId })
+                   .min(by: { $0.id < $1.id }),
+               Date.now.timeIntervalSince1970 - TimeInterval(resumed.timestamp)
+                   > Self.staleBacklogAge {
+                result = try await store.connection.getMessages(
+                    anchor: .newest, numBefore: count, numAfter: 0,
+                    narrow: narrow.apiElements)
+                guard generation == gen else { return }
+                anchoredMidHistory = false
+            }
             store.reconcileFetchedMessages(result.messages)
             let fetched = result.messages
                 .sorted { $0.id < $1.id }
@@ -195,10 +261,16 @@ public final class MessageListModel: Identifiable {
             messages = fetched
             haveNewest = result.foundNewest ?? !anchoredMidHistory
             haveOldest = result.foundOldest ?? false
-            // The marker is the oldest fetched message still unread.
-            firstUnreadMarkerId = suppressUnreadMarker ? nil : messages.first { message in
-                !(message.flags ?? []).contains("read")
-            }?.id
+            // The marker is the oldest fetched message still unread — in
+            // a catch-up feed, the oldest one worth resuming at (its window
+            // also holds muted and stale unreads, which never anchor).
+            if resumesAtVisibleUnread, initialAnchorMessageId == nil {
+                firstUnreadMarkerId = messages.first { isResumePoint($0, in: store) }?.id
+            } else {
+                firstUnreadMarkerId = suppressUnreadMarker ? nil : messages.first { message in
+                    !(message.flags ?? []).contains("read")
+                }?.id
+            }
             fetchError = nil
             didInitialFetch = true
             isOfflineFallback = false
@@ -302,7 +374,7 @@ public final class MessageListModel: Identifiable {
             return
         }
         let cached = store.messages.values
-            .filter { narrow.containsMessage($0, selfUserId: store.selfUserId) }
+            .filter { admits($0, in: store) }
             .sorted { $0.id < $1.id }
         if !cached.isEmpty {
             applyCachedWindow(cached)
@@ -314,6 +386,7 @@ public final class MessageListModel: Identifiable {
         Task { [weak self] in
             guard let self, let store = self.store else { return }
             let rows = await store.olderFromCache(than: .max, narrow: narrow)
+                .filter { self.admits($0, in: store) }
             guard self.generation == gen, self.messages.isEmpty,
                   !self.serverDidRespond, !rows.isEmpty
             else { return }
@@ -332,6 +405,14 @@ public final class MessageListModel: Identifiable {
             guard let index = cached.firstIndex(where: { $0.id == target })
             else { return }
             anchorIndex = index
+        } else if resumesAtVisibleUnread {
+            // The same rule as the fetch, answered from the cache: the
+            // oldest surfaced, still-fresh unread — else the newest.
+            if let store,
+               let index = cached.firstIndex(where: { isResumePoint($0, in: store) }) {
+                anchorIndex = index
+                firstUnreadMarkerId = cached[index].id
+            }
         } else if let index = cached.firstIndex(where: {
             !($0.flags ?? []).contains("read")
         }) {
@@ -404,7 +485,7 @@ public final class MessageListModel: Identifiable {
             // database instead.
             let cached = await store.olderFromCache(than: first.id, narrow: narrow)
             guard generation == gen, let currentFirst = messages.first?.id else { return }
-            let older = cached.filter { $0.id < currentFirst }
+            let older = cached.filter { $0.id < currentFirst && admits($0, in: store) }
             guard !older.isEmpty else { return }
             store.installCachedMessages(older)
             messages.insert(
@@ -432,7 +513,9 @@ public final class MessageListModel: Identifiable {
     // MARK: Event fan-in (called by PerAccountStore)
 
     func handleNewMessage(_ message: Message, selfUserId: Int) {
-        guard narrow.containsMessage(message, selfUserId: selfUserId) else { return }
+        guard narrow.containsMessage(message, selfUserId: selfUserId),
+              store.map({ admits(message, in: $0) }) ?? true
+        else { return }
         guard haveNewest else {
             stashPendingNewest([message])
             return
@@ -454,12 +537,29 @@ public final class MessageListModel: Identifiable {
             // (.custom) can't be re-evaluated client-side — keep them.
             if case .custom = narrow {
                 messages[index] = updated
-            } else if narrow.containsMessage(updated, selfUserId: store.selfUserId) {
+            } else if admits(updated, in: store) {
                 messages[index] = updated
             } else {
                 messages.remove(at: index)
             }
         }
+    }
+
+    /// A conversation's mute state changed. Only the home view cares:
+    /// newly hidden messages leave in place (their neighbors hold the
+    /// viewport), while a reveal needs the server — it alone knows what
+    /// belongs between the rows already here.
+    func handleHomeVisibilityChange(revealed: Bool) {
+        guard case .combinedFeed(includesMuted: false) = narrow,
+              let store, didInitialFetch
+        else { return }
+        if revealed {
+            Task { await self.fetchInitial(count: max(60, min(messages.count, 100))) }
+            return
+        }
+        let shown = messages.filter { store.isShownInHome($0) }
+        if shown.count != messages.count { messages = shown }
+        pendingNewest.removeAll { !store.isShownInHome($0) }
     }
 
     /// A mid-history window whose pending buffer holds one of our own sends
@@ -501,8 +601,7 @@ public final class MessageListModel: Identifiable {
         let merged = pendingNewest
             .compactMap { store.messages[$0.id] }
             .filter {
-                $0.id > lastId
-                    && narrow.containsMessage($0, selfUserId: store.selfUserId)
+                $0.id > lastId && admits($0, in: store)
             }
             .sorted { $0.id < $1.id }
         pendingNewest = []

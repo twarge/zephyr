@@ -5,7 +5,10 @@ import ZulipAPI
 /// UI-side membership/visibility logic arrives with the message-list model
 /// in M1.
 public enum Narrow: Sendable, Hashable {
-    case combinedFeed
+    /// Every conversation, interleaved. `includesMuted: false` is Zulip's
+    /// home view: muted channels and topics stay out (topics unmuted or
+    /// followed inside a muted channel stay in).
+    case combinedFeed(includesMuted: Bool)
     case channel(streamId: Int)
     case topic(streamId: Int, topic: String)
     case dm(userIds: [Int])
@@ -18,8 +21,8 @@ public enum Narrow: Sendable, Hashable {
 
     public var apiElements: [NarrowElement] {
         switch self {
-        case .combinedFeed:
-            []
+        case .combinedFeed(let includesMuted):
+            includesMuted ? [] : [NarrowElement("in", .string("home"))]
         case .channel(let streamId):
             [NarrowElement("channel", .int(streamId))]
         case .topic(let streamId, let topic):

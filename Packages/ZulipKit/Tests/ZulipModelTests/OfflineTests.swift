@@ -473,12 +473,10 @@ struct OfflineTests {
     @Test func cachedWindowStaleBacklogStillMarksRecentResumePoint() async throws {
         let offline = tempOfflineStore()
         defer { try? FileManager.default.removeItem(at: offline.directory) }
-        // Same resume rule as the fetch's stale-backlog path. The channel
-        // holds one never-read ancient topic (id 1) plus two active ones
-        // — enough messages that the 100-message newest window excludes
-        // the ancient unread. The preview opens at the newest window,
-        // read to its oldest edge, so its own first unread (the fresh
-        // arrivals, 118+) takes the marker instead of none at all.
+        // Same resume rule as the fetch. The channel holds one never-read
+        // ancient topic (id 1) plus two active ones: the ancient unread is
+        // stale backlog, so the preview anchors at the oldest fresh unread
+        // (the arrivals, 118+) instead.
         let now = Int(Date.now.timeIntervalSince1970)
         var all = [try fixtureMessage(id: 1, topic: "dead", flags: [])]
         all += try (2...61).map { try fixtureMessage(id: $0, topic: "b", timestamp: now) }
@@ -489,15 +487,46 @@ struct OfflineTests {
         try #require(offline.openDatabase()).upsert(all, selfUserId: 1)
 
         // The launch restore keeps the newest 50 per conversation: id 1,
-        // b's 12–61, c's 72–121 — 101 messages, so the 100-message
-        // preview window starts at 12 (read), past the ancient unread.
+        // b's 12–61, c's 72–121 — all within the window around 118.
         let (store, _) = try makeStore(script: [.networkError], offline: offline)
         await store.restoreOfflineCache()
         let list = MessageListModel(store: store, narrow: .channel(streamId: 10))
         await list.fetchInitial()
         #expect(list.firstUnreadMarkerId == 118)
-        #expect(list.messages.map(\.id) == Array(12...61) + Array(72...121))
+        #expect(list.messages.map(\.id) == [1] + Array(12...61) + Array(72...121))
         #expect(list.haveNewest)
+    }
+
+    @Test func databaseDatesTheResumeFloor() async throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        // Unread ids carry no dates. The database (not restored into
+        // memory here) holds a months-old message at id 60, so unread 50
+        // is stale backlog and the feed resumes at 500 in one request.
+        let now = Int(Date.now.timeIntervalSince1970)
+        let database = try #require(offline.openDatabase())
+        try database.upsert(
+            [try fixtureMessage(id: 60), try fixtureMessage(id: 490, timestamp: now - 86400)],
+            selfUserId: 1)
+        #expect(try database.newestId(sentBefore: .now.addingTimeInterval(-14 * 86400)) == 60)
+
+        let (store, transport) = try makeStore(
+            script: [
+                .json(Fixtures.getMessagesJSON([
+                    Fixtures.channelMessageJSON(id: 500, timestamp: now - 3600)
+                ]))
+            ],
+            offline: offline,
+            unreadMsgs: """
+                {"count": 2, "pms": [], "streams": [
+                  {"stream_id": 10, "topic": "greetings", "unread_message_ids": [50, 500]}],
+                 "huddles": [], "mentions": [], "old_unreads_missing": false}
+                """)
+        let list = MessageListModel(store: store, narrow: .combinedFeed(includesMuted: true))
+        await list.fetchInitial()
+        #expect(transport.requests.count == 1)
+        #expect(transport.requests[0].queryValue("anchor") == "500")
+        #expect(list.firstUnreadMarkerId == 500)
     }
 
     @Test func listOpenedBeforeRestoreRendersWhenRestoreLands() async throws {

@@ -23,6 +23,10 @@ struct NarrowFeedView: View {
         if case .custom = narrow { true } else { false }
     }
 
+    private var isCombinedFeed: Bool {
+        if case .combinedFeed = narrow { true } else { false }
+    }
+
     init(
         store: PerAccountStore, title: String, narrow: Narrow,
         useMatchHighlights: Bool = false,
@@ -71,7 +75,7 @@ struct NarrowFeedView: View {
                             selection = .conversation(key)
                         },
                         showsConversationJump: showsConversationJump,
-                        marksReadOnView: narrow == .combinedFeed,
+                        marksReadOnView: isCombinedFeed,
                         scrollMemory: scrollMemory)
                 }
             } else {

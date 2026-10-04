@@ -108,11 +108,14 @@ struct MessageFeedList: View {
         // A feed parked at the bottom reopens at the first unread that
         // arrived while it was away — the logical resume point — not the
         // physical bottom; without fresh arrivals the bottom restore
-        // stands. Decision only (this init re-runs on every parent
-        // re-evaluation); onAppear re-aims the marker once.
+        // stands. A catch-up feed resumes at its oldest unread wherever
+        // it sits, exactly as its fresh open would: parked at the bottom
+        // says nothing about what was skipped on the way there. Decision
+        // only (this init re-runs on every parent re-evaluation);
+        // onAppear re-aims the marker once.
         var reaimId: Int?
         if case .bottom(let newestId) = restored,
-           let unreadId = model.firstUnreadId(after: newestId)
+           let unreadId = model.firstUnreadId(after: marksReadOnView ? nil : newestId)
         {
             reaimId = unreadId
             restored = nil

@@ -98,6 +98,7 @@ private struct GeneralSettings: View {
     @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
     @AppStorage("recentSearchLimit") private var recentSearchLimit = 5
     @AppStorage("channelsAboveDMs") private var channelsAboveDMs = true
+    @AppStorage("combinedShowsMuted") private var combinedShowsMuted = false
     @AppStorage("serverNameInTitles") private var serverNameInTitles =
         serverNameInTitlesDefault
     @State private var notificationIssue: SystemNotificationIssue?
@@ -188,6 +189,7 @@ private struct GeneralSettings: View {
             Divider()
                 .padding(.vertical, 4)
             Toggle("Channels above direct messages", isOn: $channelsAboveDMs)
+            Toggle("Muted channels and topics in Combined", isOn: $combinedShowsMuted)
             Toggle("Server name in window titles", isOn: $serverNameInTitles)
             Picker("Sort direct messages by:", selection: $dmSortOrder) {
                 ForEach(DmSortOrder.allCases) { order in
@@ -233,6 +235,7 @@ private struct GeneralSettings: View {
             }
             Section {
                 Toggle("Channels above direct messages", isOn: $channelsAboveDMs)
+                Toggle("Muted channels and topics in Combined", isOn: $combinedShowsMuted)
                 Toggle("Server name in window titles", isOn: $serverNameInTitles)
                 Picker("Sort direct messages by", selection: $dmSortOrder) {
                     ForEach(DmSortOrder.allCases) { order in

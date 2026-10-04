@@ -248,6 +248,19 @@ public final class MessageDatabase: Sendable {
         }
     }
 
+    /// The newest stored message sent before `cutoff`. Ids ascend with
+    /// send time, so every id at or below this one is older than the
+    /// cutoff too — a date turned into an id floor. Walks the primary key
+    /// down from the newest row and stops at the first match.
+    public func newestId(sentBefore cutoff: Date) throws -> Int? {
+        try queue.read { db in
+            try Int.fetchOne(
+                db,
+                sql: "SELECT id FROM message WHERE timestamp < ? ORDER BY id DESC LIMIT 1",
+                arguments: [Int(cutoff.timeIntervalSince1970)])
+        }
+    }
+
     public func messageCount() throws -> Int {
         try queue.read { db in
             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM message") ?? 0

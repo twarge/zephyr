@@ -970,8 +970,10 @@ public final class PerAccountStore {
     public func setChannelMuted(_ streamId: Int, muted: Bool) {
         // Optimistic; the subscription/update event confirms.
         if var subscription = subscriptions[streamId] {
+            let wasMuted = subscription.muted
             subscription.isMuted = muted
             subscriptions[streamId] = subscription
+            if wasMuted != muted { homeVisibilityDidChange(revealed: !muted) }
         }
         let connection = connection
         Task {
@@ -1057,6 +1059,87 @@ public final class PerAccountStore {
         }
     }
 
+    /// Whether the home view (a Combined feed that hides muted
+    /// conversations) shows this conversation — the client-side mirror of
+    /// the server's `in:home` narrow, for what no fetch filters: live
+    /// events and cached transcripts.
+    public func isShownInHome(_ key: ConversationKey) -> Bool {
+        switch key {
+        case .dm:
+            return true
+        case .topic(let streamId, let topic):
+            let policy = topicVisibility(streamId: streamId, topic: topic)
+            if policy == .muted { return false }
+            guard let subscription = subscriptions[streamId], subscription.muted
+            else { return true }
+            return policy == .unmuted || policy == .followed
+        }
+    }
+
+    public func isShownInHome(_ message: Message) -> Bool {
+        Unreads.conversationKey(for: message, selfUserId: selfUserId)
+            .map(isShownInHome) ?? true
+    }
+
+    /// Unreads a Combined feed can resume at, and so the ones its badge
+    /// should promise: surfaced in the UI, and actually in the feed.
+    public func isCombinedUnread(_ key: ConversationKey, includesMuted: Bool) -> Bool {
+        isUnreadVisible(key) && (includesMuted || isShownInHome(key))
+    }
+
+    public func combinedUnreadCount(includesMuted: Bool) -> Int {
+        unreads.unreadIds.reduce(0) { total, entry in
+            isCombinedUnread(entry.key, includesMuted: includesMuted)
+                ? total + entry.value.count : total
+        }
+    }
+
+    /// Mute state moved under the open home views: what became hidden
+    /// leaves them, and a reveal refetches (only the server knows what
+    /// belongs between the rows already there).
+    private func homeVisibilityDidChange(revealed: Bool) {
+        forEachMessageList { $0.handleHomeVisibilityChange(revealed: revealed) }
+    }
+
+    /// Where a catch-up feed (Combined, a channel) opens: the oldest unread
+    /// the UI surfaces in that narrow that is still recent enough to catch
+    /// up on linearly — the same unreads the narrow's badge counts, so the
+    /// badge and the opening position always agree. The server's
+    /// `first_unread` can't answer this: across conversations it is nearly
+    /// always something muted away or years stale.
+    ///
+    /// Unread ids carry no dates; the local message cache turns the
+    /// staleness cutoff into an id floor (ids ascend with send time). A
+    /// cache with nothing that old yields no floor — the caller verifies
+    /// the fetched message's date.
+    func resumeUnreadId(for narrow: Narrow, staleAfter age: TimeInterval) async -> Int? {
+        var candidates: [Int] = []
+        for (key, ids) in unreads.unreadIds {
+            switch (narrow, key) {
+            case (.combinedFeed(let includesMuted), _):
+                guard isCombinedUnread(key, includesMuted: includesMuted) else { continue }
+            case (.channel(let streamId), .topic(let keyStreamId, _)):
+                guard keyStreamId == streamId else { continue }
+            default:
+                continue
+            }
+            candidates.append(contentsOf: ids)
+        }
+        guard !candidates.isEmpty else { return nil }
+        let cutoff = Date.now.addingTimeInterval(-age)
+        let cutoffTimestamp = Int(cutoff.timeIntervalSince1970)
+        var floor = messages.values.lazy
+            .filter { $0.timestamp < cutoffTimestamp }
+            .map(\.id).max()
+        if let database {
+            let stored = await Task.detached {
+                try? database.newestId(sentBefore: cutoff)
+            }.value
+            if let stored, stored > floor ?? .min { floor = stored }
+        }
+        return candidates.lazy.filter { $0 > floor ?? .min }.min()
+    }
+
     /// The unread total the UI presents: `Unreads.totalCount` minus
     /// conversations hidden by muting or a dropped subscription.
     public var visibleUnreadCount: Int {
@@ -1071,10 +1154,15 @@ public final class PerAccountStore {
         streamId: Int, topic: String, policy: TopicVisibilityPolicy
     ) {
         let key = TopicKey(streamId: streamId, topic: topic)
+        let conversation = ConversationKey.topic(streamId: streamId, topic: topic)
+        let wasShown = isShownInHome(conversation)
         if policy == .none {
             topicVisibility.removeValue(forKey: key)
         } else {
             topicVisibility[key] = policy
+        }
+        if isShownInHome(conversation) != wasShown {
+            homeVisibilityDidChange(revealed: !wasShown)
         }
         let connection = connection
         Task {
@@ -1563,6 +1651,14 @@ public final class PerAccountStore {
 
         case .subscriptionUpdate(let e):
             guard var subscription = subscriptions[e.streamId] else { break }
+            let wasMuted = subscription.muted
+            defer {
+                // After the write-back below. (The confirmation of an
+                // optimistic mute finds no change, and stays quiet.)
+                if let isMuted = subscriptions[e.streamId]?.muted, isMuted != wasMuted {
+                    homeVisibilityDidChange(revealed: wasMuted)
+                }
+            }
             switch e.property {
             case "is_muted":
                 subscription.isMuted = e.boolValue ?? subscription.isMuted
@@ -1649,10 +1745,16 @@ public final class PerAccountStore {
         case .userTopic(let item):
             let key = TopicKey(streamId: item.streamId, topic: item.topicName)
             let policy = TopicVisibilityPolicy(rawValue: item.visibilityPolicy) ?? .none
+            let conversation = ConversationKey.topic(
+                streamId: item.streamId, topic: item.topicName)
+            let wasShown = isShownInHome(conversation)
             if policy == .none {
                 topicVisibility.removeValue(forKey: key)
             } else {
                 topicVisibility[key] = policy
+            }
+            if isShownInHome(conversation) != wasShown {
+                homeVisibilityDidChange(revealed: !wasShown)
             }
 
         case .unexpected(let type, let op):
