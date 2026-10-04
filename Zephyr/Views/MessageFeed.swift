@@ -1083,13 +1083,6 @@ struct MessageFeedList: View {
                                 store: store, conversationKey: key,
                                 includeChannel: headerMode == .channelAndTopic,
                                 onTap: onHeaderTap)
-                                // Opaque backing while pinned: the header's
-                                // own tint is translucent, and rows would
-                                // ghost through it. The feed's own
-                                // background, so the backing (top padding,
-                                // around the pill's corners) is invisible —
-                                // a material like .bar reads as a gray band.
-                                .background(.background)
                                 .id("hdr-\(firstMessageId)")
                         }
                     }
@@ -1466,6 +1459,10 @@ private struct ConversationHeaderRow: View {
                     ? AnyShapeStyle(.quaternary.opacity(0.45))
                     : AnyShapeStyle(channelColor.opacity(0.16)),
                 in: RoundedRectangle(cornerRadius: 6))
+            // Opaque under the translucent tint so rows don't ghost through
+            // a pinned header — clipped to the pill, so the top padding and
+            // the corners stay clear and scrolled rows show around it.
+            .background(.background, in: RoundedRectangle(cornerRadius: 6))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
