@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import TipKit
 #if canImport(Translation)
@@ -68,6 +69,16 @@ struct MessageFeedList: View {
     @State private var quickLook = FeedQuickLook()
     @State private var pendingReadIds: Set<Int> = []
     @State private var readFlushTask: Task<Void, Never>?
+    /// Mark-on-view feeds: the reader stepped away (inactive window,
+    /// backgrounded app, sleeping or locked screen) with the feed parked
+    /// at the bottom — `newestId` is the window's newest message at that
+    /// moment. The feed keeps following arrivals unseen; the return
+    /// re-aims at the first of them. Nil while present, or away
+    /// mid-history (that viewport doesn't move).
+    @State private var awayAtBottom: (newestId: Int?, since: Date)?
+    /// Bumped when the reader returns to unreads that arrived while away;
+    /// the scroll reader responds by opening at the re-aimed NEW marker.
+    @State private var returnReaimNonce = 0
     /// Bumped when the viewport is detected outside the content bounds;
     /// the reader responds with an imperative rescue scroll.
     @State private var recoverNonce = 0
@@ -465,6 +476,33 @@ struct MessageFeedList: View {
                                 // server has since cleared (read elsewhere):
                                 // the true open is the bottom.
                                 scrollToBottomSettled(proxy)
+                            }
+                        }
+                        // Back from being away (readerReturned re-aimed the
+                        // NEW marker at the first unseen arrival): open
+                        // there, like a fresh open — upper quarter, with
+                        // the unreads below it.
+                        .onChange(of: returnReaimNonce) {
+                            anchorId = "unread-marker"
+                            openingMarkerId = model.firstUnreadMarkerId
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(50))
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    proxy.scrollTo(
+                                        "unread-marker",
+                                        anchor: UnitPoint(x: 0.5, y: 0.25))
+                                }
+                                // A short run of arrivals leaves the
+                                // viewport where it was (already at the
+                                // bottom) — no visibility change will
+                                // report those rows, so note them here.
+                                try? await Task.sleep(for: .milliseconds(400))
+                                for (id, frame) in rowFrames.frames
+                                where frame.maxY > 0 && frame.minY < viewportHeight {
+                                    if let message = model.messages.first(where: { $0.id == id }) {
+                                        noteSeen(message)
+                                    }
+                                }
                             }
                         }
                         .overlay(alignment: .bottomTrailing) {
@@ -964,6 +1002,31 @@ struct MessageFeedList: View {
         }
     }
 
+    /// Nobody is looking any more: rows noted in the last beat were never
+    /// really seen, and a feed at the bottom is about to follow arrivals
+    /// unattended — remember where the reader's reading actually ended.
+    private func readerWentAway() {
+        readFlushTask?.cancel()
+        pendingReadIds = []
+        awayAtBottom = nearBottom ? (model.messages.last?.id, .now) : nil
+    }
+
+    /// The reader is back. Arrivals the feed followed while they were
+    /// gone are still unread, but scrolled past: reopen at the first of
+    /// them, as a fresh open would. A glance away is not a departure —
+    /// the feed stays put, and what's on screen marks read as usual.
+    private func readerReturned() -> Bool {
+        defer { awayAtBottom = nil }
+        guard let away = awayAtBottom,
+              Date.now.timeIntervalSince(away.since) > 20,
+              keys.highlightMessageId == nil, keys.selectedMessageId == nil,
+              let unreadId = model.firstUnreadId(after: away.newestId)
+        else { return false }
+        model.reaimUnreadMarker(to: unreadId)
+        returnReaimNonce &+= 1
+        return true
+    }
+
     /// The message-link flash fades after a beat.
     private func scheduleHighlightClear() {
         guard let target = keys.highlightMessageId else { return }
@@ -1085,9 +1148,11 @@ struct MessageFeedList: View {
         // container instead of installing a visibility observer on every
         // message row. Transcripts that mark the whole conversation read
         // install no visibility tracking at all.
-        .modifier(VisibleMessageTargets(enabled: marksReadOnView) { identifiers in
-            noteSeen(identifiers)
-        })
+        .modifier(VisibleMessageTargets(
+            enabled: marksReadOnView,
+            action: { identifiers in noteSeen(identifiers) },
+            onReaderAway: { readerWentAway() },
+            onReaderReturn: { readerReturned() }))
         .onScrollPhaseChange { _, newPhase in
             // User-driven phases only — programmatic scrolls (anchor
             // binding, settle passes) report `.animating`.
@@ -1190,17 +1255,113 @@ struct MessageFeedList: View {
 private struct VisibleMessageTargets: ViewModifier {
     let enabled: Bool
     let action: ([String]) -> Void
+    let onReaderAway: () -> Void
+    /// True when the return is about to move the viewport (what's in
+    /// view now is on its way out, and must not be reported as seen).
+    let onReaderReturn: () -> Bool
 
     @ViewBuilder
     func body(content: Content) -> some View {
         if enabled {
-            content.onScrollTargetVisibilityChange(
-                idType: String.self, threshold: 0.2, action)
+            content.modifier(PresentReaderTargets(
+                action: action, onReaderAway: onReaderAway,
+                onReaderReturn: onReaderReturn))
         } else {
             content
         }
     }
 }
+
+/// Reports the visible scroll targets only while someone can be reading
+/// them. Visibility is a layout fact, not an attention one: a feed left
+/// open at the bottom keeps following arrivals in an inactive window, a
+/// backgrounded app, or behind a sleeping or locked screen — and marking
+/// those read erases the reader's resume point. The targets in view when
+/// the reader returns are reported then.
+private struct PresentReaderTargets: ViewModifier {
+    let action: ([String]) -> Void
+    let onReaderAway: () -> Void
+    /// True when the return is about to move the viewport (what's in
+    /// view now is on its way out, and must not be reported as seen).
+    let onReaderReturn: () -> Bool
+
+    @Environment(\.appearsActive) private var appearsActive
+    @Environment(\.scenePhase) private var scenePhase
+    /// A reference box, not observed state: the visible set changes on
+    /// every scroll tick and must not re-render anything.
+    private final class Visible {
+        var identifiers: [String] = []
+    }
+    @State private var visible = Visible()
+    /// Why the screen itself can't be seen (macOS) — the window stays key,
+    /// and `appearsActive`, through all of these.
+    @State private var screenAway: Set<ScreenAwayReason> = []
+
+    private var readerIsPresent: Bool {
+        #if os(macOS)
+        // scenePhase is per-window and unreliable on the Mac; the window's
+        // active appearance is the focus signal there.
+        appearsActive && screenAway.isEmpty
+        #else
+        appearsActive && scenePhase == .active
+        #endif
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.2) { identifiers in
+                visible.identifiers = identifiers
+                if readerIsPresent { action(identifiers) }
+            }
+            .onChange(of: readerIsPresent) { _, isPresent in
+                if isPresent {
+                    if !onReaderReturn() { action(visible.identifiers) }
+                } else {
+                    onReaderAway()
+                }
+            }
+            #if os(macOS)
+            .onReceive(ScreenAwayReason.events) { reason, isAway in
+                if isAway {
+                    screenAway.insert(reason)
+                } else {
+                    screenAway.remove(reason)
+                }
+            }
+            #endif
+    }
+}
+
+#if os(macOS)
+/// The ways a Mac's screen stops being watched without any window losing
+/// focus. Tracked separately: displays wake before the session unlocks.
+private enum ScreenAwayReason: Hashable {
+    case displaysAsleep, sessionLocked, sessionSwitchedOut
+
+    static let events: AnyPublisher<(ScreenAwayReason, Bool), Never> = {
+        let workspace = NSWorkspace.shared.notificationCenter
+        let distributed = DistributedNotificationCenter.default()
+        let sources: [(NotificationCenter, Notification.Name, ScreenAwayReason, Bool)] = [
+            (workspace, NSWorkspace.screensDidSleepNotification, .displaysAsleep, true),
+            (workspace, NSWorkspace.screensDidWakeNotification, .displaysAsleep, false),
+            (workspace, NSWorkspace.sessionDidResignActiveNotification, .sessionSwitchedOut, true),
+            (workspace, NSWorkspace.sessionDidBecomeActiveNotification, .sessionSwitchedOut, false),
+            (distributed, Notification.Name("com.apple.screenIsLocked"), .sessionLocked, true),
+            (distributed, Notification.Name("com.apple.screenIsUnlocked"), .sessionLocked, false),
+        ]
+        // Hop to main before any closure runs: these closures are
+        // main-actor isolated, and the posting thread isn't promised.
+        return Publishers.MergeMany(sources.map { center, name, reason, isAway in
+            center.publisher(for: name)
+                .receive(on: DispatchQueue.main)
+                .map { _ in (reason, isAway) }
+        })
+        .eraseToAnyPublisher()
+    }()
+}
+#else
+private enum ScreenAwayReason: Hashable {}
+#endif
 
 /// translationPresentation where the framework exists; a no-op elsewhere
 /// (e.g. visionOS).
