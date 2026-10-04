@@ -35,6 +35,10 @@ struct MainSplitView: View {
     @State private var showOpenQuickly = false
     @State private var dropTargeted = false
     @State private var columnVisibility = NavigationSplitViewVisibility.automatic
+    /// The column a collapsed split shows (iPhone, a folded Duo, a narrow
+    /// iPad window): the root list at launch, then whatever is open — so
+    /// folding a Duo mid-conversation keeps the conversation on screen.
+    @State private var preferredCompactColumn = NavigationSplitViewColumn.sidebar
     /// Live sidebar column width — gates the realm logo, which hides
     /// entirely when it wouldn't fit (never the overflow menu).
     @State private var sidebarWidth: CGFloat = 300
@@ -122,7 +126,10 @@ struct MainSplitView: View {
 
     private var stageOne: some View {
         let _ = PerfLog.render("MainSplit")
-        return NavigationSplitView(columnVisibility: $columnVisibility) {
+        return NavigationSplitView(
+            columnVisibility: $columnVisibility,
+            preferredCompactColumn: $preferredCompactColumn
+        ) {
             SidebarView(
                 store: store, search: search, selection: $selection,
                 selectedAccount: $selectedAccount,
@@ -576,6 +583,9 @@ struct MainSplitView: View {
         #if os(iOS)
         detailFocused = true
         #endif
+        // Collapsed, the split tracks this itself; expanded it doesn't, so
+        // a selection made at full width must say where a collapse lands.
+        preferredCompactColumn = selection == nil ? .sidebar : .detail
         // Open Quickly's recency: any channel-scoped destination counts
         // as a visit.
         if let visitedChannel = visitedChannelId(for: selection) {
