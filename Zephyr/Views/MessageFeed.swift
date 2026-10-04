@@ -1085,8 +1085,11 @@ struct MessageFeedList: View {
                                 onTap: onHeaderTap)
                                 // Opaque backing while pinned: the header's
                                 // own tint is translucent, and rows would
-                                // ghost through it.
-                                .background(.bar)
+                                // ghost through it. The feed's own
+                                // background, so the backing (top padding,
+                                // around the pill's corners) is invisible —
+                                // a material like .bar reads as a gray band.
+                                .background(.background)
                                 .id("hdr-\(firstMessageId)")
                         }
                     }
