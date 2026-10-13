@@ -106,6 +106,10 @@ private struct GeneralSettings: View {
     @AppStorage("combinedShowsMuted") private var combinedShowsMuted = false
     @AppStorage("serverNameInTitles") private var serverNameInTitles =
         serverNameInTitlesDefault
+    #if os(macOS)
+    /// Read at click time by DetachedWindowTabs (same key and default).
+    @AppStorage("commandClickOpensTab") private var commandClickOpensTab = true
+    #endif
     @State private var notificationIssue: SystemNotificationIssue?
 
     var body: some View {
@@ -208,6 +212,16 @@ private struct GeneralSettings: View {
                     .monospacedDigit()
             }
             Text("0 hides the Recent Searches section.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Divider()
+                .padding(.vertical, 4)
+            Picker("⌘-click opens:", selection: $commandClickOpensTab) {
+                Text("New tab").tag(true)
+                Text("New window").tag(false)
+            }
+            .pickerStyle(.radioGroup)
+            Text("Applies to a message's Go to Message arrow.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Divider()

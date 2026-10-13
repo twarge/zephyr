@@ -136,6 +136,13 @@ private struct MessageWindowContent: View {
         ) {
             goToConversation(message)
         }
+        Button("Go to Message in New Window", systemImage: "macwindow.badge.plus") {
+            guard let key = Unreads.conversationKey(
+                for: message, selfUserId: store.selfUserId) else { return }
+            openWindow(value: DetachedWindow(
+                accountId: store.accountId, destination: .conversation(key),
+                near: message.id))
+        }
     }
 
     /// Lands an account window on the message in its own conversation by the

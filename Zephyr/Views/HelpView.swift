@@ -18,6 +18,7 @@ struct HelpView: View {
                 helpSection("Windows and Navigation", bullets: [
                     "Open Quickly (⌘⇧O) jumps to any channel or view — start typing, or pick from the special views and your recent channels.",
                     "New Window (⌘⇧N) opens another window; double-clicking a sidebar item opens that conversation in its own window.",
+                ] + Self.commandClickBullets + [
                     "In a topic, the window title is a menu: click it to reach the channel's full feed or its topic list.",
                     "In a channel's feed, the current topic pins to the top; click any topic header to focus that topic.",
                     "Narrow windows tuck the sidebar away automatically; widen the window to bring it back.",
@@ -26,7 +27,7 @@ struct HelpView: View {
                 keyboardSection
 
                 helpSection("Messages and Composing", bullets: [
-                    "Hover a message for the react and star controls; right-click for Reply Quoting Message, Copy Message Reference, Move, Edit, and Delete — and, anywhere but the message's own topic, Go to Message in Topic.",
+                    "Hover a message for the react and star controls; right-click for Reply Quoting Message, Copy Message Reference, Move, Edit, and Delete — and, anywhere but the message's own topic, Go to Message in Topic (or in New Window).",
                     "Select an image and press Space for Quick Look; the arrow keys step through every image in the view.",
                     "Drag files anywhere into a conversation, or paste an image (⌘V), to upload — Send waits until uploads finish.",
                     "The chevron beside the message field opens long-form compose: a resizable editor with a rendered preview (the eye); there, Return makes a new line and ⇧Return sends.",
@@ -97,6 +98,15 @@ struct HelpView: View {
             }
         }
     }
+
+    /// Window tabs (and the hover arrow's ⌘-click) are Mac-only.
+    #if os(macOS)
+    private static let commandClickBullets = [
+        "⌘-click a message's Go to Message arrow to open its conversation in a new tab (or a new window — Settings → General).",
+    ]
+    #else
+    private static let commandClickBullets: [String] = []
+    #endif
 
     private func helpSection(_ title: String, bullets: [String]) -> some View {
         VStack(alignment: .leading, spacing: 8) {

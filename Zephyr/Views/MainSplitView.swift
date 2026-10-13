@@ -30,6 +30,8 @@ struct MainSplitView: View {
     /// writes here, changing only this window.
     @Binding var selectedAccount: Account.ID?
     @State private var selection: Destination?
+    /// One-shot: the message a freshly opened window lands on.
+    @State private var initialNear: Int?
     @State private var search: SidebarSearchModel
     @State private var newConversation: NewConversationMode?
     @State private var showOpenQuickly = false
@@ -116,10 +118,12 @@ struct MainSplitView: View {
 
     /// `initialSelection`/`startsWithSidebarClosed` configure secondary
     /// windows (double-clicked sidebar entries): same window, sidebar
-    /// collapsed until reopened.
+    /// collapsed until reopened. `initialNear` lands a conversation
+    /// selection on a message (a jump opened in a new window).
     init(
         store: PerAccountStore, selectedAccount: Binding<Account.ID?>,
         initialSelection: Destination? = nil,
+        initialNear: Int? = nil,
         startsWithSidebarClosed: Bool = false
     ) {
         self.store = store
@@ -127,6 +131,7 @@ struct MainSplitView: View {
         _search = State(initialValue: SidebarSearchModel(store: store))
         _selection = State(
             initialValue: initialSelection ?? AppStateStore.selection(for: store.accountId) ?? .summary)
+        _initialNear = State(initialValue: initialNear)
         _columnVisibility = State(
             initialValue: startsWithSidebarClosed ? .detailOnly : .automatic)
     }
@@ -500,7 +505,11 @@ struct MainSplitView: View {
                let stored = try? JSONDecoder().decode(StoredWindowState.self, from: data),
                stored.account == store.accountId {
                 selection = stored.destination
+            } else if let near = initialNear, case .conversation(let key) = selection {
+                keys.highlightMessageId = near
+                keys.pendingNear = (key, near)
             }
+            initialNear = nil
             keys.store = store
             keys.currentDestination = selection
             keys.navigate = { destination in selection = destination }

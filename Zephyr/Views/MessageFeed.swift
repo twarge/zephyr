@@ -1863,8 +1863,18 @@ struct MessageRow: View {
             HStack(alignment: .top, spacing: 2) {
                 if showsConversationJump {
                     // Cross-conversation feeds swap quoted reply for a
-                    // jump to the message's own conversation.
+                    // jump to the message's own conversation (⌘-click: in
+                    // a new tab or window, per Settings).
                     Button {
+                        #if os(macOS)
+                        if supportsMultipleWindows,
+                           NSApp.currentEvent?.modifierFlags.contains(.command) == true {
+                            ConversationJumpTabTip().invalidate(reason: .actionPerformed)
+                            openConversationWindow(
+                                asTab: DetachedWindowTabs.commandClickOpensTab)
+                            return
+                        }
+                        #endif
                         goToConversation()
                     } label: {
                         Image(systemName: "arrow.turn.down.right")
@@ -1875,6 +1885,11 @@ struct MessageRow: View {
                     }
                     .buttonStyle(.plain)
                     .help(conversationJumpTitle)
+                    #if os(macOS)
+                    // On the clicked (selected) row only — the pointer is
+                    // still over it, so its arrow is showing.
+                    .popoverTip(isKeySelected ? ConversationJumpTabTip() : nil)
+                    #endif
                     .opacity(controlsActive ? 1 : 0)
                     .allowsHitTesting(controlsActive)
                 } else {
@@ -2109,6 +2124,11 @@ struct MessageRow: View {
             Button(conversationJumpTitle, systemImage: "arrow.turn.down.right") {
                 goToConversation()
             }
+            if supportsMultipleWindows {
+                Button("Go to Message in New Window", systemImage: "macwindow.badge.plus") {
+                    openConversationWindow()
+                }
+            }
             Divider()
         }
         #if os(macOS)
@@ -2232,9 +2252,26 @@ struct MessageRow: View {
     private func goToConversation() {
         guard let key = Unreads.conversationKey(
             for: message, selfUserId: store.selfUserId) else { return }
+        #if os(macOS)
+        ConversationJumpTabTip.jumped.sendDonation()
+        #endif
         keys.highlightMessageId = message.id
         keys.pendingNear = (key, message.id)
         keys.navigate?(.conversation(key))
+    }
+
+    /// The same jump in a window of its own (the sidebar's detached
+    /// window), landing on the message — on macOS optionally as a tab of
+    /// this window instead.
+    private func openConversationWindow(asTab: Bool = false) {
+        guard let key = Unreads.conversationKey(
+            for: message, selfUserId: store.selfUserId) else { return }
+        let window = DetachedWindow(
+            accountId: store.accountId, destination: .conversation(key), near: message.id)
+        #if os(macOS)
+        DetachedWindowTabs.request(window, joining: asTab ? keys.hostWindow : nil)
+        #endif
+        openWindow(value: window)
     }
 
     private func quoteAndReply(selectionOnly: Bool = false) {

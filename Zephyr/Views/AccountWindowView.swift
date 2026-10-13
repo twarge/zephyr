@@ -17,6 +17,9 @@ struct AccountWindowView: View {
     /// and fall back to the account last used anywhere.
     var defaultAccount: Account.ID?
     var initialSelection: Destination?
+    /// A message for `initialSelection` to open on (a jump opened in a new
+    /// window).
+    var initialNear: Int?
     var startsWithSidebarClosed = false
 
     /// Restored with the window, so every window comes back on its server.
@@ -35,6 +38,7 @@ struct AccountWindowView: View {
                     // The pinned destination belongs to the original
                     // account; it doesn't survive a server switch.
                     initialSelection: accountId == defaultAccount ? initialSelection : nil,
+                    initialNear: accountId == defaultAccount ? initialNear : nil,
                     startsWithSidebarClosed: startsWithSidebarClosed)
                     .id(accountId)
             } else if model.global.enabledAccounts.isEmpty {

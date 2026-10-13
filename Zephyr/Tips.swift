@@ -80,6 +80,24 @@ struct MessageWindowTip: Tip {
     var image: Image? { Image(systemName: "macwindow.on.rectangle") }
 }
 
+#if os(macOS)
+/// After a plain jump out of a cross-conversation feed, anchored to the
+/// selected message's arrow: ⌘-click jumps without losing the feed.
+struct ConversationJumpTabTip: Tip {
+    static let jumped = Tips.Event(id: "conversationJumped")
+
+    var rules: [Rule] {
+        #Rule(Self.jumped) { $0.donations.count >= 1 }
+    }
+
+    var title: Text { Text("Keep Your Place") }
+    var message: Text? {
+        Text("⌘-click the arrow to open the message's conversation in a new \(DetachedWindowTabs.commandClickOpensTab ? "tab" : "window"), leaving this view as it is.")
+    }
+    var image: Image? { Image(systemName: "macwindow.badge.plus") }
+}
+#endif
+
 /// After the first image selection: Space + arrows drive Quick Look.
 struct QuickLookNavigationTip: Tip {
     static let imageSelected = Tips.Event(id: "imageSelected")
