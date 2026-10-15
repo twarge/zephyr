@@ -338,6 +338,10 @@ struct SidebarView: View {
     /// the unfiltered list that replaces the filtered one may have that
     /// row folded away, so it's brought back into view.
     @State private var revealOnFilterEnd = false
+    /// The channel picked while filtering: it lists all its topics, not
+    /// just the filter's matches, for as long as the selection stays in
+    /// it (picking one of those topics keeps the list open).
+    @State private var filterPickedChannel: Int?
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -345,9 +349,18 @@ struct SidebarView: View {
                 .onChange(of: selection) {
                     if isFiltering {
                         revealOnFilterEnd = true
+                        updateFilterPickedChannel()
                     }
                 }
                 .onChange(of: isFiltering) { _, filtering in
+                    // Still the selection's channel as the filter ends: the
+                    // unfiltered list keeps it expanded rather than folding
+                    // away the topics just shown.
+                    if !filtering, let streamId = filterPickedChannel,
+                       streamId == selectedStreamId {
+                        expandedChannels.insert(streamId)
+                    }
+                    filterPickedChannel = nil
                     if filtering {
                         revealOnFilterEnd = false
                     } else if revealOnFilterEnd {
@@ -837,7 +850,9 @@ struct SidebarView: View {
                                 archiveChannelId = streamId
                             }
                         }
-                    if isFiltering {
+                    if streamId == filterPickedChannel {
+                        topicRows(for: streamId)
+                    } else if isFiltering {
                         // Same rail as the unfiltered list; dotted when the
                         // 8-row cap hides further matches ("more below").
                         let matches = Array(topicMatches.prefix(8))
@@ -961,6 +976,21 @@ struct SidebarView: View {
     private func channelColor(_ streamId: Int) -> Color {
         store.subscriptions[streamId]?.color.flatMap(Color.init(zulipHex:))
             ?? .stableColor(for: streamId)
+    }
+
+    /// Picking a channel while filtering opens its topic list; the
+    /// selection leaving that channel closes it again.
+    private func updateFilterPickedChannel() {
+        switch selection {
+        case .channel(let streamId), .channelTopics(let streamId):
+            guard streamId != filterPickedChannel else { return }
+            withAnimation(.snappy) { filterPickedChannel = streamId }
+            search.refreshTopics(streamId)
+        default:
+            if selectedStreamId != filterPickedChannel {
+                withAnimation(.snappy) { filterPickedChannel = nil }
+            }
+        }
     }
 
     private func toggleChannel(_ streamId: Int) {
