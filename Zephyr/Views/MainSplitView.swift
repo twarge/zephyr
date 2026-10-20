@@ -1104,7 +1104,7 @@ struct MainSplitView: View {
                 for attachment in attachments {
                     if let url = await downloadMediaFile(
                         path: attachment.path, connection: store.connection) {
-                        urls.append(url)
+                        urls.append(mediaHandoffCopy(of: url))
                     }
                 }
                 guard !urls.isEmpty else { return }
@@ -1141,6 +1141,7 @@ struct MainSplitView: View {
                         let destination = Self.uniqueDestination(
                             for: url.lastPathComponent, in: folder)
                         try? FileManager.default.copyItem(at: url, to: destination)
+                        unlockMediaFile(destination)
                     }
                 }
             }
@@ -1154,6 +1155,7 @@ struct MainSplitView: View {
                         try? FileManager.default.removeItem(at: destination)
                     }
                     try? FileManager.default.copyItem(at: url, to: destination)
+                    unlockMediaFile(destination)
                 }
             }
         } else {

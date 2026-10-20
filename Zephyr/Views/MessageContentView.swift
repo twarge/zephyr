@@ -609,7 +609,7 @@ func mediaDragProvider(path: String, connection: ApiConnection) -> NSItemProvide
         nonisolated(unsafe) let complete = completion
         Task.detached {
             if let url = await downloadMediaFile(path: path, connection: connection) {
-                complete(url, false, nil)
+                complete(mediaHandoffCopy(of: url), false, nil)
             } else {
                 complete(nil, false, CocoaError(.fileNoSuchFile))
             }
@@ -623,9 +623,34 @@ func mediaDragProvider(path: String, connection: ApiConnection) -> NSItemProvide
 /// previews don't re-fetch.
 private let mediaFileCache = Mutex<[String: URL]>([:])
 
+/// Where downloaded media lands, one UUID folder per file. The .noindex
+/// extension keeps Spotlight out: these are a cache, not the user's files.
+nonisolated private let mediaFileRoot = FileManager.default.temporaryDirectory
+    .appendingPathComponent("ZephyrPreviews.noindex", isDirectory: true)
+
+/// The root before .noindex, swept until it's empty and then removed.
+nonisolated private let legacyMediaFileRoot = FileManager.default.temporaryDirectory
+    .appendingPathComponent("ZephyrPreviews", isDirectory: true)
+
+private var didSweepMediaFiles = false
+
 /// Downloads media to a temp file with its real filename (so Preview/Quick
-/// Look title it sensibly). Cached per source path.
+/// Look title it sensibly). Cached per source path. On macOS the file is
+/// Locked (Finder's flag): Open, and Quick Look's Open with Preview, hand
+/// Preview the cached file itself, which it would otherwise rename, move,
+/// or autosave markup into in place — locked, Preview offers Duplicate.
+/// Copies keep the flag, so files handed onward go through
+/// `mediaHandoffCopy(of:)` or `unlockMediaFile(_:)`.
 func downloadMediaFile(path: String, connection: ApiConnection) async -> URL? {
+    if !didSweepMediaFiles {
+        didSweepMediaFiles = true
+        Task.detached(priority: .background) {
+            sweepMediaFiles(in: mediaFileRoot, olderThan: 3 * 86_400)
+            sweepMediaFiles(in: legacyMediaFileRoot, olderThan: 3 * 86_400)
+            // rmdir, not removeItem: only once the sweep has emptied it.
+            rmdir(legacyMediaFileRoot.path)
+        }
+    }
     if let cached = mediaFileCache.withLock({ $0[path] }),
        FileManager.default.fileExists(atPath: cached.path) {
         return cached
@@ -633,17 +658,69 @@ func downloadMediaFile(path: String, connection: ApiConnection) async -> URL? {
     guard let (data, _) = await fetchMedia(path: path, connection: connection) else { return nil }
     let filename = (path as NSString).lastPathComponent.removingPercentEncoding
         .flatMap { $0.isEmpty ? nil : $0 } ?? "file"
-    let directory = FileManager.default.temporaryDirectory
-        .appendingPathComponent("ZephyrPreviews", isDirectory: true)
-        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let directory = mediaFileRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
     do {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let fileURL = directory.appendingPathComponent(filename)
+        var fileURL = directory.appendingPathComponent(filename)
         try data.write(to: fileURL)
+        #if os(macOS)
+        var locked = URLResourceValues()
+        locked.isUserImmutable = true
+        try? fileURL.setResourceValues(locked)
+        #endif
         mediaFileCache.withLock { $0[path] = fileURL }
         return fileURL
     } catch {
         return nil
+    }
+}
+
+/// An unlocked copy of a downloaded media file, for drag receivers and
+/// share services: what lands in Finder or another app is the user's to
+/// edit, and a plain copy would arrive Locked.
+nonisolated func mediaHandoffCopy(of url: URL) -> URL {
+    #if os(macOS)
+    let directory = mediaFileRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let copy = directory.appendingPathComponent(url.lastPathComponent)
+    do {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: url, to: copy)
+        unlockMediaFile(copy)
+        return copy
+    } catch {
+        return url
+    }
+    #else
+    return url
+    #endif
+}
+
+/// Clears the Locked flag `downloadMediaFile` sets.
+nonisolated func unlockMediaFile(_ url: URL) {
+    var url = url
+    var unlocked = URLResourceValues()
+    unlocked.isUserImmutable = false
+    try? url.setResourceValues(unlocked)
+}
+
+/// Removes media folders under `root` older than `age` — earlier
+/// launches' (the cache index lives in memory, so nothing reuses them) —
+/// unlocking their files first, since nothing can remove a Locked file,
+/// the system's temp cleanup included.
+nonisolated private func sweepMediaFiles(in root: URL, olderThan age: TimeInterval) {
+    let fileManager = FileManager.default
+    guard let folders = try? fileManager.contentsOfDirectory(
+        at: root, includingPropertiesForKeys: [.creationDateKey]) else { return }
+    let cutoff = Date.now.addingTimeInterval(-age)
+    for folder in folders {
+        guard let created = try? folder.resourceValues(forKeys: [.creationDateKey]).creationDate,
+              created < cutoff else { continue }
+        if let files = fileManager.enumerator(at: folder, includingPropertiesForKeys: nil) {
+            for case let file as URL in files {
+                unlockMediaFile(file)
+            }
+        }
+        try? fileManager.removeItem(at: folder)
     }
 }
 
