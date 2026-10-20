@@ -73,6 +73,7 @@
 		CAFDE08EBB3B372F2C6AA2B1 /* DetachedWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */; };
 		D98ABC4211B58928C55BB7B0 /* MediaDropTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFE3DF32C25009CB60756EAD /* MediaDropTarget.swift */; };
 		E100D2C195474421ED98A3B1 /* WebAuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5410F479FB8AE6E80F4866 /* WebAuthSession.swift */; };
+		ED860DCE61FD7AFB0395FE8A /* MediaFileCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1864E59236F8BF8DE841EEAE /* MediaFileCache.swift */; };
 		F33ED1EE8D08E1F58540F09B /* Tips.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AB37CBF3789C6E2854F3632 /* Tips.swift */; };
 		F6C17F7A2914098D59DE30AB /* AllChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C28BE5A0DA537D6EB9C97A /* AllChannelsView.swift */; };
 /* End PBXBuildFile section */
@@ -119,6 +120,7 @@
 		149499DA07B92E143F965C6C /* OpenQuicklyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenQuicklyView.swift; sourceTree = "<group>"; };
 		14B376B2915109D9F3810E20 /* ZephyrIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZephyrIntents.swift; sourceTree = "<group>"; };
 		1758438236E9536CC8336895 /* ChannelFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelFeedView.swift; sourceTree = "<group>"; };
+		1864E59236F8BF8DE841EEAE /* MediaFileCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaFileCache.swift; sourceTree = "<group>"; };
 		1BFA44C0924355E456163217 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityMonitor.swift; sourceTree = "<group>"; };
 		232E47A83B732D68F7D53F8A /* AppStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateStore.swift; sourceTree = "<group>"; };
 		246E2A99D0BD63D5209BD33B /* ZulipKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ZulipKit; path = Packages/ZulipKit; sourceTree = SOURCE_ROOT; };
@@ -298,6 +300,7 @@
 				1BFA44C0924355E456163217 /* ConnectivityMonitor.swift */,
 				3F4611B74F89FA03A6C524C9 /* DraftSync.swift */,
 				43C09E2CE84013DBCE92521D /* KeyboardRouter.swift */,
+				1864E59236F8BF8DE841EEAE /* MediaFileCache.swift */,
 				C391C25A76B13BD0D05B8706 /* NotificationManager.swift */,
 				37E26CC20F2298B58C015538 /* PerfLog.swift */,
 				4D9C40C777893FC7275F955B /* Platform.swift */,
@@ -530,6 +533,7 @@
 				A82A7771694C25DF30CA4009 /* LoginView.swift in Sources */,
 				9C2971F9C1F755CB722B43E8 /* MainSplitView.swift in Sources */,
 				D98ABC4211B58928C55BB7B0 /* MediaDropTarget.swift in Sources */,
+				ED860DCE61FD7AFB0395FE8A /* MediaFileCache.swift in Sources */,
 				7E536CB80BBA16C3965B52CF /* MessageActionSheets.swift in Sources */,
 				685FD431FA29FEA255D3FBC1 /* MessageContentView.swift in Sources */,
 				BB931F8230B45BC90B104176 /* MessageFeed.swift in Sources */,

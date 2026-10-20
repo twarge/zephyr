@@ -38,6 +38,7 @@ struct HelpView: View {
                 helpSection("Offline and History", bullets: [
                     "Messages you've seen are kept in a local archive: scroll back and search even while offline; sends queue and deliver on reconnect.",
                     "Settings → General controls how long the archive keeps history (starred messages are always kept). The server's history is never affected.",
+                    "Attachments you open stay on this device too, for as long as history is kept and up to the size set in Settings → General; past it, the least recently used go first. On a Mac they open in Preview locked: to edit one, Duplicate it.",
                 ])
             }
             .padding(24)

@@ -152,8 +152,7 @@ final class AppModel {
         DraftStore.shared.onLocalChange = { [weak self] account, destination, text in
             self?.draftSyncers[account]?.localEdited(destination, text: text)
         }
-        global.messageRetentionDays = Self.retentionDays(
-            forYears: UserDefaults.standard.object(forKey: "messageRetentionYears") as? Int ?? 5)
+        global.messageRetentionDays = Self.storedRetentionDays
     }
 
     /// Retention picker semantics: 0 means keep forever.
@@ -161,10 +160,17 @@ final class AppModel {
         years <= 0 ? nil : years * 365
     }
 
+    /// The retention picker's stored choice, in days (nil = forever).
+    static var storedRetentionDays: Int? {
+        retentionDays(
+            forYears: UserDefaults.standard.object(forKey: "messageRetentionYears") as? Int ?? 5)
+    }
+
     func start() async {
         guard case .launching = phase else { return }
         UnreadMirror.shared.activate(global: global)
         DetachWindowTip.appOpened.sendDonation()
+        MediaFileCache.scheduleSweep()
         connectivity = ConnectivityMonitor { [weak self] in
             self?.networkRestored()
         }

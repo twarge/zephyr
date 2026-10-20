@@ -100,6 +100,8 @@ private struct GeneralSettings: View {
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
     @AppStorage("messageRetentionYears") private var messageRetentionYears = 5
+    @AppStorage(MediaFileCache.sizeLimitKey) private var mediaCacheLimitMB =
+        MediaFileCache.defaultSizeLimitMB
     @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
     @AppStorage("recentSearchLimit") private var recentSearchLimit = 5
     @AppStorage("channelsAboveDMs") private var channelsAboveDMs = true
@@ -169,6 +171,7 @@ private struct GeneralSettings: View {
     private func applyRetention() {
         model.global.messageRetentionDays =
             AppModel.retentionDays(forYears: messageRetentionYears)
+        MediaFileCache.scheduleSweep()
     }
 
     @ViewBuilder
@@ -178,6 +181,20 @@ private struct GeneralSettings: View {
         Text("5 years").tag(5)
         Text("10 years").tag(10)
         Text("Forever").tag(0)
+    }
+
+    @ViewBuilder
+    private var cacheLimitOptions: some View {
+        Text("100 MB").tag(100)
+        Text("250 MB").tag(250)
+        Text("500 MB").tag(500)
+        Text("1 GB").tag(1000)
+        Text("2 GB").tag(2000)
+        Text("5 GB").tag(5000)
+    }
+
+    private var cacheLimitCaption: Text {
+        Text("Attachments you open, share, or drag out stay on this device as long as message history is kept, up to this size; past it, the least recently used go first.")
     }
 
     #if os(macOS)
@@ -232,9 +249,16 @@ private struct GeneralSettings: View {
             Text("Older messages are pruned from the offline archive on this device; starred messages are always kept. History on the server is unaffected.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Picker("Keep opened attachments up to:", selection: $mediaCacheLimitMB) {
+                cacheLimitOptions
+            }
+            cacheLimitCaption
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding(20)
         .onChange(of: messageRetentionYears) { applyRetention() }
+        .onChange(of: mediaCacheLimitMB) { MediaFileCache.scheduleSweep() }
     }
     #else
     // Native grouped form: captions are section footers (the loose
@@ -275,8 +299,16 @@ private struct GeneralSettings: View {
             } footer: {
                 Text("Older messages are pruned from the offline archive on this device; starred messages are always kept. History on the server is unaffected.")
             }
+            Section {
+                Picker("Keep opened attachments up to", selection: $mediaCacheLimitMB) {
+                    cacheLimitOptions
+                }
+            } footer: {
+                cacheLimitCaption
+            }
         }
         .onChange(of: messageRetentionYears) { applyRetention() }
+        .onChange(of: mediaCacheLimitMB) { MediaFileCache.scheduleSweep() }
     }
     #endif
 }
