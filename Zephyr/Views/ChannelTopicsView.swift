@@ -9,8 +9,14 @@ struct ChannelTopicsView: View {
     let streamId: Int
     @Binding var selection: Destination?
 
-    @State private var topics: [ChannelTopic]?
-    @State private var errorText: String?
+    /// Settles the loading state: past it, no list means unreachable.
+    @State private var loadFinished = false
+
+    /// The account's cached list (last session's, or the message
+    /// database's offline), replaced by the server's when it lands.
+    private var topics: [ChannelTopic]? {
+        store.channelTopics.lists[streamId]
+    }
 
     private var channelName: String {
         store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel"
@@ -18,7 +24,9 @@ struct ChannelTopicsView: View {
 
     var body: some View {
         Group {
-            if let topics {
+            // An empty list is only an answer once the server gave it;
+            // offline it just means the database knows no topics here.
+            if let topics, !topics.isEmpty || store.channelTopics.isFresh(streamId) {
                 List(topics, id: \.name) { topic in
                     Button {
                         selection = .conversation(.topic(streamId: streamId, topic: topic.name))
@@ -27,10 +35,10 @@ struct ChannelTopicsView: View {
                     }
                     .buttonStyle(.plain)
                 }
-            } else if let errorText {
+            } else if loadFinished {
                 ContentUnavailableView(
                     "Couldn't Load Topics", systemImage: "exclamationmark.triangle",
-                    description: Text(errorText))
+                    description: Text("This channel's topics appear once the server can be reached."))
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -39,22 +47,9 @@ struct ChannelTopicsView: View {
         .serverTitled("#\(channelName)", store: store)
         .subtitled { unreadSubtitle(store.unreads.unreadCount(inChannel: streamId)) }
         .task {
-            // Offline-first: the local database's recent topics render
-            // immediately; the server list replaces them when it lands
-            // (and a failure leaves them showing).
-            if topics == nil {
-                let cached = await store.recentTopicsFromCache(streamId: streamId)
-                if topics == nil, !cached.isEmpty {
-                    topics = cached
-                }
-            }
-            do {
-                topics = try await store.connection.getTopics(streamId: streamId)
-            } catch {
-                if topics == nil {
-                    errorText = error.localizedDescription
-                }
-            }
+            // The cached list shows meanwhile; topics move fast.
+            await store.channelTopics.load(streamId, refetch: true)
+            loadFinished = true
         }
     }
 }

@@ -439,6 +439,65 @@ extension ConversationKey {
         }
     }
 
+    /// Zulip markup referencing a channel — `#**name**`, which a message
+    /// renders as a channel link ("Copy Channel Reference", # autocomplete).
+    @MainActor
+    static func channelReference(streamId: Int, in store: PerAccountStore) -> String {
+        let name = store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? ""
+        guard !breaksReferenceSyntax(name) else {
+            return "[#\(escapeReferenceText(name))](\(channelLink(streamId: streamId, in: store)))"
+        }
+        return "#**\(name)**"
+    }
+
+    /// Zulip markup referencing this conversation: `#**channel>topic**`
+    /// for a topic; a DM has no reference syntax, so its web link.
+    @MainActor
+    func reference(in store: PerAccountStore) -> String {
+        guard case .topic(let streamId, let topic) = self else { return link(in: store) }
+        let channel = store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? ""
+        guard !Self.breaksReferenceSyntax(channel), !Self.breaksReferenceSyntax(topic) else {
+            let text = "#\(Self.escapeReferenceText(channel)) > \(Self.escapeReferenceText(topic))"
+            return "[\(text)](\(link(in: store)))"
+        }
+        return "#**\(channel)>\(topic)**"
+    }
+
+    /// Characters that end or corrupt the `#**…**` syntax, as the web
+    /// app's topic_link_util checks them: those names get a markdown link
+    /// instead.
+    private static func breaksReferenceSyntax(_ name: String) -> Bool {
+        name.contains { "`>*&[]".contains($0) } || name.contains("$$")
+    }
+
+    /// The web app's escapes for a fallback link's text.
+    private static func escapeReferenceText(_ text: String) -> String {
+        var result = ""
+        var pendingDollar = false
+        for character in text {
+            if pendingDollar {
+                pendingDollar = false
+                if character == "$" {
+                    result += "&#36;&#36;"
+                    continue
+                }
+                result.append("$")
+            }
+            switch character {
+            case "`": result += "&#96;"
+            case ">": result += "&gt;"
+            case "*": result += "&#42;"
+            case "&": result += "&amp;"
+            case "[": result += "&#91;"
+            case "]": result += "&#93;"
+            case "$": pendingDollar = true
+            default: result.append(character)
+            }
+        }
+        if pendingDollar { result.append("$") }
+        return result
+    }
+
     func displayTitle(in store: PerAccountStore) -> String {
         switch self {
         case .dm(let joined):

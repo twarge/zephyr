@@ -535,6 +535,7 @@ struct MainSplitView: View {
         // by account id) survives; keep the router pointed at the live one.
         .onChange(of: ObjectIdentifier(store)) {
             keys.store = store
+            search.store = store
             model.ensureDraftSync(store.accountId)
         }
         // Single-call closures: inline bodies here pushed the whole body

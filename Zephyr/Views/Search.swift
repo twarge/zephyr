@@ -70,21 +70,31 @@ nonisolated enum SearchToken: Identifiable, Hashable, Codable {
     }
 }
 
-/// Shared state for the window's dual-role search field: filter text,
-/// committed token bubbles, and the lazily-loaded per-channel topic cache
-/// that both filtering and suggestions draw on. Owned by MainSplitView so
-/// detail views (All Channels, Recent) can filter on the same state as the
+/// Shared state for the window's dual-role search field: filter text and
+/// committed token bubbles, over the account's topic cache that both
+/// filtering and suggestions draw on. Owned by MainSplitView so detail
+/// views (All Channels, Recent) can filter on the same state as the
 /// sidebar.
 @MainActor
 @Observable
 final class SidebarSearchModel {
-    let store: PerAccountStore
+    /// Repointed by MainSplitView when the store is replaced (provisional
+    /// → live, queue rebuild) under the surviving window.
+    var store: PerAccountStore
     var filterText = ""
     var tokens: [SearchToken] = []
-    private(set) var channelTopics: [Int: [ChannelTopic]] = [:]
-    private(set) var loadingAllTopics = false
-    private var allTopicsLoaded = false
     private(set) var recentSearches: [SearchQuery] = []
+
+    /// Per-channel topics, recency-ordered (cached across launches).
+    var channelTopics: [Int: [ChannelTopic]] {
+        store.channelTopics.lists
+    }
+
+    /// Only a pass with channels that have no cached list yet shows as
+    /// searching: everything else already matches from the cache.
+    var loadingAllTopics: Bool {
+        store.channelTopics.isLoadingUncached
+    }
 
     private static let recentSearchesKey = "recentSearches"
 
@@ -148,49 +158,21 @@ final class SidebarSearchModel {
         filterText = ""
     }
 
-    @ObservationIgnored private var refreshingTopics: Set<Int> = []
-
     /// Refreshes one channel's topics (sidebar disclosure expands, or a
-    /// session-restored expansion appears). A failed fetch resolves to an
-    /// empty list rather than leaving the disclosure spinning forever.
+    /// session-restored expansion appears). Offline the cached list stays,
+    /// or the message database's topics stand in.
     func refreshTopics(_ streamId: Int) {
-        guard !refreshingTopics.contains(streamId) else { return }
-        refreshingTopics.insert(streamId)
-        let connection = store.connection
-        Task {
-            defer { refreshingTopics.remove(streamId) }
-            if let topics = try? await connection.getTopics(streamId: streamId) {
-                channelTopics[streamId] = topics
-            } else if channelTopics[streamId] == nil {
-                channelTopics[streamId] = []
-            }
-        }
+        store.channelTopics.refresh(streamId)
     }
 
     /// The filter/suggestions match against topics of every subscribed
-    /// channel, so the first filter use fetches them all (bounded
-    /// concurrency, cached for the session).
+    /// channel: cached lists match at once, and the first filter use each
+    /// session refreshes them all (bounded concurrency, retried after an
+    /// offline pass).
     func loadAllTopicsIfNeeded() {
-        guard isFiltering, !allTopicsLoaded, !loadingAllTopics else { return }
-        loadingAllTopics = true
-        let connection = store.connection
-        let ids = store.subscriptions.keys.filter { channelTopics[$0] == nil }
-        Task {
-            for chunk in ids.chunks(of: 5) {
-                await withTaskGroup(of: (Int, [ChannelTopic]).self) { group in
-                    for streamId in chunk {
-                        group.addTask {
-                            (streamId, (try? await connection.getTopics(streamId: streamId)) ?? [])
-                        }
-                    }
-                    for await (streamId, topics) in group {
-                        channelTopics[streamId] = topics
-                    }
-                }
-            }
-            allTopicsLoaded = true
-            loadingAllTopics = false
-        }
+        guard isFiltering else { return }
+        let topics = store.channelTopics
+        Task { await topics.loadAll() }
     }
 
     /// Typeahead: channels, topics, people, and flag filters matching the
@@ -349,14 +331,6 @@ struct SearchReturnCapture: View {
             self.keyMonitor = nil
         }
         #endif
-    }
-}
-
-extension Array {
-    func chunks(of size: Int) -> [[Element]] {
-        stride(from: 0, to: count, by: size).map {
-            Array(self[$0..<Swift.min($0 + size, count)])
-        }
     }
 }
 

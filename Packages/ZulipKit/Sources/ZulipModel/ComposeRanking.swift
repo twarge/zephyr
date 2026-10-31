@@ -99,6 +99,32 @@ public enum ComposeRanking {
         }.map(\.0)
     }
 
+    /// Topics across channels whose name matches `query`, most relevant
+    /// first: match quality on the displayed name (a resolved topic's ✔
+    /// doesn't count), the channel being composed to, then recency. The
+    /// empty topic ("general chat") has no name to match.
+    public static func topTopics(
+        _ lists: [Int: [ChannelTopic]], matching query: String, limit: Int,
+        currentStreamId: Int?
+    ) -> [(streamId: Int, topic: ChannelTopic)] {
+        let candidates = lists.lazy.flatMap { streamId, topics in
+            topics.lazy.compactMap { topic -> (Int, ChannelTopic, MatchQuality)? in
+                let name = TopicName.displayName(topic.name)
+                guard !name.isEmpty, let quality = quality(of: name, query: query)
+                else { return nil }
+                return (streamId, topic, quality)
+            }
+        }
+        return top(limit, of: candidates) { a, b in
+            if a.2 != b.2 { return a.2 < b.2 }
+            if (a.0 == currentStreamId) != (b.0 == currentStreamId) {
+                return a.0 == currentStreamId
+            }
+            // Message ids are unique, so this settles every tie.
+            return a.1.maxId > b.1.maxId
+        }.map { (streamId: $0.0, topic: $0.1) }
+    }
+
     /// The k best elements in ranking order — O(n·log k), no full sort.
     /// Stable: among equals, earlier elements rank first.
     static func top<T>(

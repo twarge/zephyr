@@ -2,7 +2,7 @@ import Foundation
 
 /// One topic in a channel, from GET /users/me/{stream_id}/topics
 /// (recency-ordered; `maxId` is the newest message id in the topic).
-public struct ChannelTopic: Decodable, Sendable, Hashable {
+public struct ChannelTopic: Codable, Sendable, Hashable {
     public var name: String
     public var maxId: Int
 

@@ -59,6 +59,8 @@ public final class PerAccountStore {
     /// The unified sidebar model.
     public let conversations: ConversationList
     public let topicActivity: TopicActivityStore
+    /// Per-channel topic lists, persisted for offline use.
+    public let channelTopics: ChannelTopicCache
 
     private struct WeakMessageList {
         weak var value: MessageListModel?
@@ -171,6 +173,7 @@ public final class PerAccountStore {
         unreads = Unreads(snapshot: snapshot.unreadMsgs, selfUserId: account.userId)
         conversations = ConversationList(snapshot: snapshot, selfUserId: account.userId)
         topicActivity = TopicActivityStore(selfUserId: account.userId, offline: offline)
+        channelTopics = ChannelTopicCache(offline: offline)
         channelFolders = (snapshot.channelFolders ?? []).sorted { $0.order < $1.order }
         realmEmoji = snapshot.realmEmoji ?? [:]
         for draft in snapshot.drafts ?? [] {
@@ -204,6 +207,7 @@ public final class PerAccountStore {
             reapplyPendingActionsLocally()
         }
         topicActivity.attach(to: self)
+        channelTopics.attach(to: self)
     }
 
     /// Carries a replaced store instance's cached-message hydration across
@@ -217,6 +221,7 @@ public final class PerAccountStore {
         conversations.seed(
             messages: Array(previous.messages.values), selfUserId: selfUserId)
         topicActivity.seedMissing(Array(previous.messages.values))
+        channelTopics.adopt(from: previous.channelTopics)
         // Mark-unread refiles skipped at init (no messages yet) land now.
         reapplyPendingActionsLocally()
     }
@@ -226,6 +231,9 @@ public final class PerAccountStore {
     /// hundred cached conversations) runs off the main actor; only the
     /// dictionary merge happens here.
     public func restoreOfflineCache() async {
+        // Topic lists restore alongside, not after: a small file the
+        // sidebar's expanded channels are waiting on.
+        Task { await channelTopics.restore() }
         guard let offline, let database else { return }
         let selfId = selfUserId
         let clock = ContinuousClock()
@@ -749,15 +757,6 @@ public final class PerAccountStore {
 
     public nonisolated func saveBrandImageData(_ data: Data, key: String) {
         offline?.saveBrandImage(data, key: key)
-    }
-
-    /// A channel's recent topics from the local database — the offline
-    /// seed the topics view renders while GET /topics is in flight.
-    public func recentTopicsFromCache(streamId: Int) async -> [ChannelTopic] {
-        guard let database else { return [] }
-        return await Task.detached {
-            (try? database.recentTopics(streamId: streamId)) ?? []
-        }.value
     }
 
     // MARK: Sending
@@ -1500,7 +1499,10 @@ public final class PerAccountStore {
     }
 
     private func apply(_ event: Event) {
-        defer { topicActivity.handleEvent(event) }
+        defer {
+            topicActivity.handleEvent(event)
+            channelTopics.handleEvent(event)
+        }
         switch event.kind {
         case .heartbeat:
             break

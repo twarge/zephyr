@@ -819,6 +819,11 @@ struct SidebarView: View {
                                 Platform.copyToPasteboard(
                                     ConversationKey.channelLink(streamId: streamId, in: store))
                             }
+                            // #**channel**: pasted into a message, a link.
+                            Button("Copy Channel Reference") {
+                                Platform.copyToPasteboard(
+                                    ConversationKey.channelReference(streamId: streamId, in: store))
+                            }
                             Button("Mark All Messages as Read") {
                                 store.markChannelAllRead(streamId)
                             }
@@ -1537,6 +1542,14 @@ private struct SidebarTopicRow: View {
             }
             Button("Move Topic…") {
                 showMove = true
+            }
+            Divider()
+            Button("Copy Link to Topic") {
+                Platform.copyToPasteboard(key.link(in: store))
+            }
+            // #**channel>topic**: pasted into a message, a link.
+            Button("Copy Topic Reference") {
+                Platform.copyToPasteboard(key.reference(in: store))
             }
         }
         .alert("Rename Topic", isPresented: $showRename) {

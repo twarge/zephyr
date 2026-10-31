@@ -90,6 +90,26 @@ public struct OfflineStore: Sendable {
         save(summaries, to: "home-summaries.json")
     }
 
+    // MARK: Channel topics
+
+    /// The last fetched topic list per channel (see `ChannelTopicCache`).
+    func loadChannelTopics() -> [Int: [ChannelTopic]] {
+        let saved = load([SavedChannelTopics].self, from: "channel-topics.json") ?? []
+        return Dictionary(
+            saved.map { ($0.streamId, $0.topics) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    func saveChannelTopics(_ lists: [Int: [ChannelTopic]]) {
+        save(
+            lists.map { SavedChannelTopics(streamId: $0.key, topics: $0.value) },
+            to: "channel-topics.json")
+    }
+
+    private struct SavedChannelTopics: Codable {
+        var streamId: Int
+        var topics: [ChannelTopic]
+    }
+
     // MARK: Realm branding
 
     /// Realm branding images (logo/icon variants) by stable key, so the

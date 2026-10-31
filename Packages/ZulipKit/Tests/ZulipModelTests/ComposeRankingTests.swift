@@ -59,6 +59,27 @@ struct ComposeRankingTests {
         #expect(ranked.map(\.streamId) == [3, 4, 2, 1])
     }
 
+    @Test func topicsRankByQualityThenCurrentChannelThenRecency() {
+        let lists: [Int: [ChannelTopic]] = [
+            10: [ChannelTopic(name: "release notes", maxId: 50),
+                 ChannelTopic(name: "✔ Release", maxId: 40)],
+            11: [ChannelTopic(name: "the release", maxId: 90),
+                 ChannelTopic(name: "release plan", maxId: 60),
+                 ChannelTopic(name: "", maxId: 99)],
+        ]
+        let ranked = ComposeRanking.topTopics(
+            lists, matching: "release", limit: 5, currentStreamId: 10)
+        #expect(ranked.map(\.topic.name) == [
+            // Exact (on the display name), then prefixes with the current
+            // channel first, then the word-start match.
+            "✔ Release", "release notes", "release plan", "the release",
+        ])
+        #expect(ranked.first?.streamId == 10)
+        #expect(ComposeRanking.topTopics(
+            lists, matching: "release", limit: 2, currentStreamId: nil
+        ).map(\.topic.name) == ["✔ Release", "release plan"])
+    }
+
     @Test func topKMatchesFullSortAndIsStable() {
         let values = [5, 1, 4, 1, 3, 2, 9, 1]
         #expect(ComposeRanking.top(3, of: values, by: <) == [1, 1, 1])

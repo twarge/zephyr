@@ -136,7 +136,7 @@ private enum ComposeSuggestion: Identifiable {
     case mention(User)
     case emoji(EmojiEntry)
     case channel(Subscription)
-    case topicLink(channel: String, topic: String)
+    case topicLink(streamId: Int, channel: String, topic: String)
     case command(SlashCommand)
 
     var id: String {
@@ -144,18 +144,21 @@ private enum ComposeSuggestion: Identifiable {
         case .mention(let user): "m\(user.userId)"
         case .emoji(let entry): "e\(entry.id)"
         case .channel(let sub): "c\(sub.streamId)"
-        case .topicLink(let channel, let topic): "t\(channel)>\(topic)"
+        case .topicLink(let streamId, _, let topic): "t\(streamId)>\(topic)"
         case .command(let command): "s\(command.name)"
         }
     }
 
     /// The Zulip markdown inserted on accept.
-    var completion: String {
+    @MainActor
+    func completion(in store: PerAccountStore) -> String {
         switch self {
         case .mention(let user): "@**\(user.fullName)** "
         case .emoji(let entry): ":\(entry.name): "
-        case .channel(let sub): "#**\(sub.name)** "
-        case .topicLink(let channel, let topic): "#**\(channel)>\(topic)** "
+        case .channel(let sub):
+            ConversationKey.channelReference(streamId: sub.streamId, in: store) + " "
+        case .topicLink(let streamId, _, let topic):
+            ConversationKey.topic(streamId: streamId, topic: topic).reference(in: store) + " "
         case .command(let command): "/\(command.name) "
         }
     }
@@ -210,8 +213,9 @@ struct ComposeBar: View {
         var progress: Double = 0
     }
     @State private var uploads: [UploadItem] = []
-    @State private var linkTopics: [Int: [ChannelTopic]] = [:]
+    /// Channels whose topics this bar asked the cache to refresh.
     @State private var linkTopicsLoading: Set<Int> = []
+    @State private var loadingAllLinkTopics = false
     @FocusState private var messageFocused: Bool
     @Environment(KeyboardRouter.self) private var keys
     @Environment(AppModel.self) private var model
@@ -864,9 +868,10 @@ struct ComposeBar: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-        case .topicLink(let channel, let topic):
+        case .topicLink(_, let channel, let topic):
             HStack(spacing: 6) {
-                Image(systemName: "number")
+                // Apart from the channel rows they now share a card with.
+                Image(systemName: "text.bubble")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text("\(channel) › \(TopicName.displayName(topic))")
@@ -946,11 +951,27 @@ struct ComposeBar: View {
             }
             suggestions = (prefixMatches + containsMatches).prefix(8).map { .emoji($0) }
         case .channel(let query):
+            // Two typed characters bring in topics too, from every
+            // subscribed channel's cached list: a conversation links
+            // without "#channel>" first.
+            let matchTopics = query.count >= 2
             let channels = ComposeRanking.topChannels(
-                store.subscriptions.values, matching: query, limit: 6,
+                store.subscriptions.values, matching: query, limit: matchTopics ? 4 : 6,
                 currentStreamId: currentStreamId,
                 recency: store.conversations.channelRecency)
             suggestions = channels.map { .channel($0) }
+            if matchTopics {
+                loadAllLinkTopics()
+                let lists = store.channelTopics.lists.filter { store.subscriptions[$0.key] != nil }
+                suggestions += ComposeRanking.topTopics(
+                    lists, matching: query, limit: 8 - channels.count,
+                    currentStreamId: currentStreamId
+                ).compactMap { match in
+                    store.subscriptions[match.streamId].map {
+                        .topicLink(streamId: match.streamId, channel: $0.name, topic: match.topic.name)
+                    }
+                }
+            }
         case .command(let query):
             suggestions = SlashCommand.all
                 .filter { query.isEmpty || $0.name.hasPrefix(query.lowercased()) }
@@ -969,8 +990,11 @@ struct ComposeBar: View {
                 suggestions = []
                 return
             }
-            guard let topics = linkTopics[channel.streamId] else {
+            // The cached list answers now; a refresh lands in the card.
+            if !store.channelTopics.isFresh(channel.streamId) {
                 loadLinkTopics(streamId: channel.streamId)
+            }
+            guard let topics = store.channelTopics.lists[channel.streamId] else {
                 suggestions = []
                 return
             }
@@ -979,25 +1003,43 @@ struct ComposeBar: View {
                 .filter { !$0.isEmpty }
                 .filter { topicQuery.isEmpty || $0.localizedCaseInsensitiveContains(topicQuery) }
                 .prefix(6)
-                .map { .topicLink(channel: channel.name, topic: $0) }
+                .map { .topicLink(streamId: channel.streamId, channel: channel.name, topic: $0) }
         }
     }
 
-    /// Topic lists for link autocomplete, fetched once per channel and
-    /// refreshed into the open suggestion card when they arrive.
+    /// One channel's topics for "#channel>topic", refreshed once per bar
+    /// and rescanned into the suggestion card when they arrive.
     private func loadLinkTopics(streamId: Int) {
         guard !linkTopicsLoading.contains(streamId) else { return }
         linkTopicsLoading.insert(streamId)
-        let connection = store.connection
+        let topics = store.channelTopics
         Task {
-            linkTopics[streamId] = (try? await connection.getTopics(streamId: streamId)) ?? []
+            await topics.load(streamId)
             // New data for an already-scanned state: rescan, and let the
             // arriving topics open the (empty-while-loading) card.
-            lastTokenScan = nil
-            textJustEdited = true
-            updateSuggestions()
-            textJustEdited = false
+            rescanSuggestions()
         }
+    }
+
+    /// Every channel's topics for "#topic" matches. Only an open card
+    /// takes them in when they land — one closed by Escape stays closed,
+    /// and the next keystroke scans the fuller cache anyway.
+    private func loadAllLinkTopics() {
+        guard !loadingAllLinkTopics else { return }
+        loadingAllLinkTopics = true
+        let topics = store.channelTopics
+        Task {
+            await topics.loadAll()
+            loadingAllLinkTopics = false
+            if !suggestions.isEmpty { rescanSuggestions() }
+        }
+    }
+
+    private func rescanSuggestions() {
+        lastTokenScan = nil
+        textJustEdited = true
+        updateSuggestions()
+        textJustEdited = false
     }
 
     private func moveSelection(_ delta: Int) -> KeyPress.Result {
@@ -1019,7 +1061,7 @@ struct ComposeBar: View {
             suggestions = []
             return
         }
-        let completion = suggestion.completion
+        let completion = suggestion.completion(in: store)
         let caretOffset = text.distance(from: text.startIndex, to: tokenRange.lowerBound)
             + completion.count
         text.replaceSubrange(tokenRange, with: completion)

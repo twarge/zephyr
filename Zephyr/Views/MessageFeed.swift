@@ -1528,6 +1528,9 @@ private struct ConversationHeaderRow: View {
         Button("Copy Link to Topic", systemImage: "link") {
             Platform.copyToPasteboard(conversationKey.link(in: store))
         }
+        Button("Copy Topic Reference", systemImage: "number") {
+            Platform.copyToPasteboard(conversationKey.reference(in: store))
+        }
         if includeChannel {
             Divider()
             Button("Open Channel") {

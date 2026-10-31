@@ -30,7 +30,6 @@ struct TopicAutocompleteField: View {
     /// navigation while any of its inputs are active).
     var onFocusChange: ((Bool) -> Void)?
 
-    @State private var topics: [ChannelTopic]?
     @State private var loadedStreamId: Int?
     @State private var selection = -1
     @State private var dismissed = false
@@ -40,6 +39,11 @@ struct TopicAutocompleteField: View {
     @State private var cardHeight: CGFloat = 0
     @State private var listHeight: CGFloat = 0
     @FocusState private var focused: Bool
+
+    /// The account's cached list, refreshed on first focus per channel.
+    private var topics: [ChannelTopic]? {
+        streamId.flatMap { store.channelTopics.lists[$0] }
+    }
 
     /// No selection is the default so Return keeps a freshly typed new
     /// topic instead of grabbing the first match.
@@ -100,7 +104,6 @@ struct TopicAutocompleteField: View {
                 onFocusChange?(focused)
             }
             .onChange(of: streamId) {
-                topics = nil
                 loadedStreamId = nil
                 if focused { loadIfNeeded() }
             }
@@ -232,11 +235,8 @@ struct TopicAutocompleteField: View {
     private func loadIfNeeded() {
         guard let streamId, loadedStreamId != streamId else { return }
         loadedStreamId = streamId
-        let connection = store.connection
-        Task {
-            let fetched = (try? await connection.getTopics(streamId: streamId)) ?? []
-            guard loadedStreamId == streamId else { return }
-            topics = fetched
+        if !store.channelTopics.isFresh(streamId) {
+            store.channelTopics.refresh(streamId)
         }
     }
 }
