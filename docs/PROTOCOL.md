@@ -143,7 +143,7 @@ used unconditionally; features above 277 note their FL gate.
 | 483 | 12.0 | E2EE push registration (mobile-only; not used) |
 | 498 | 12.0 | 12.0 release |
 | 510 | 13.0 | `hide_link_previews` message flag |
-| 513 | 13.0 | `populate_url_embed_data` on /messages/render + `url_embed_data` event (not yet used) |
+| 513 | 13.0 | `populate_url_embed_data` on /messages/render + `url_embed_data` event: compose previews gain link previews (the event is best-effort; applied only while the preview shows the same markdown) |
 
 Current head was FL 513 (13.0-rc1, 2026-10-30) at last check (2026-11-03). Gate with
 `connection.featureLevel >= N`; treat `zulip_merge_base` as the real level on forks.

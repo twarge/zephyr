@@ -42,6 +42,7 @@ struct NewConversationSheet: View {
     @State private var activeUploads = 0
     @State private var showPreview = false
     @State private var previewContent: MessageContent?
+    @State private var previewRequest: PerAccountStore.PreviewRequest?
     @State private var previewTask: Task<Void, Never>?
 
     // The compose bar's control metrics (touch-sized on iOS); the
@@ -294,6 +295,7 @@ struct NewConversationSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
                 }
+                .onChange(of: store.previewEmbeds) { applyPreviewEmbeds() }
                 // Tapping the preview returns to editing.
                 .contentShape(.rect)
                 .onTapGesture { togglePreview() }
@@ -406,15 +408,26 @@ struct NewConversationSheet: View {
         previewTask?.cancel()
         guard showPreview else { return }
         previewContent = nil
-        let content = messageText
+        let request = store.previewRequest(for: messageText)
+        previewRequest = request
         let connection = store.connection
         previewTask = Task {
-            let html = (try? await connection.renderMessage(content: content)) ?? ""
+            let html = (try? await connection.renderMessage(content: request.content)) ?? ""
             guard !Task.isCancelled else { return }
+            // Link previews fetched meanwhile can beat the reply.
             previewContent = ContentParser.parse(
-                html: html.isEmpty
-                    ? "<p><em>Preview unavailable (offline?)</em></p>" : html)
+                html: store.previewEmbedsHTML(for: request)
+                    ?? (html.isEmpty ? "<p><em>Preview unavailable (offline?)</em></p>" : html))
         }
+    }
+
+    /// Link previews the server fetched after rendering (Zulip 13+) swap in
+    /// while the preview still shows that draft.
+    private func applyPreviewEmbeds() {
+        guard showPreview, let previewRequest,
+              let html = store.previewEmbedsHTML(for: previewRequest)
+        else { return }
+        previewContent = ContentParser.parse(html: html)
     }
 
     private func send() {

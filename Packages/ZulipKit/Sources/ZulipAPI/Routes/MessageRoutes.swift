@@ -229,16 +229,24 @@ extension ApiConnection {
         return result.message.content
     }
 
+    /// Link previews in rendered drafts (`populate_url_embed_data`, and the
+    /// `url_embed_data` event that follows) arrived with Zulip Server 13.
+    public static let previewEmbedsFeatureLevel = 513
+
     /// POST /messages/render — the server-rendered HTML for draft markdown
-    /// (compose preview through the production renderer).
+    /// (compose preview through the production renderer). On Zulip 13+ it
+    /// includes the link previews the server already has; the rest arrive
+    /// later as a `url_embed_data` event, when the server gets to them.
     public func renderMessage(content: String) async throws -> String {
         struct RenderResult: Decodable {
             var rendered: String
         }
+        var params = [Param("content", content)]
+        if (featureLevel ?? 0) >= Self.previewEmbedsFeatureLevel {
+            params.append(Param("populate_url_embed_data", "true"))
+        }
         let result: RenderResult = try await request(
-            ApiRequest(
-                method: .post, path: "/api/v1/messages/render",
-                params: [Param("content", content)]))
+            ApiRequest(method: .post, path: "/api/v1/messages/render", params: params))
         return result.rendered
     }
 }

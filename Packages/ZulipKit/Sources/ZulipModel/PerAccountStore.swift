@@ -119,6 +119,19 @@ public final class PerAccountStore {
     /// "connecting" banner.
     public var isRecoveringEventStream = false
 
+    /// The newest compose preview re-rendered with link previews
+    /// (`url_embed_data`, Zulip 13+). Only the latest is kept, as the server
+    /// keeps only each user's latest render; `previewEmbedsHTML(for:)`
+    /// matches it to a preview.
+    public private(set) var previewEmbeds: PreviewEmbeds?
+
+    public struct PreviewEmbeds: Equatable, Sendable {
+        public var eventId: Int
+        /// The draft markdown that was re-rendered.
+        public var content: String
+        public var renderedContent: String
+    }
+
     /// A bulk "mark all messages as read" sweep: non-nil while one runs,
     /// or while its outcome lingers for the sidebar's status footer.
     public enum MarkReadSweep: Equatable, Sendable {
@@ -825,6 +838,31 @@ public final class PerAccountStore {
             }
             persistOutbox()
         }
+    }
+
+    // MARK: Compose preview
+
+    /// One compose preview's draft, and where the event stream stood when
+    /// its render was requested: link previews that arrived before then
+    /// belong to an earlier preview of the same text.
+    public struct PreviewRequest: Equatable, Sendable {
+        public var content: String
+        public var sinceEventId: Int
+    }
+
+    /// Call as the preview's /messages/render goes out.
+    public func previewRequest(for content: String) -> PreviewRequest {
+        PreviewRequest(content: content, sinceEventId: lastEventId)
+    }
+
+    /// The draft re-rendered with the link previews the server fetched after
+    /// its /messages/render reply (Zulip 13+), when the newest such rendering
+    /// is this request's. It can arrive before the reply, or never.
+    public func previewEmbedsHTML(for request: PreviewRequest) -> String? {
+        guard let previewEmbeds, previewEmbeds.eventId > request.sinceEventId,
+              previewEmbeds.content == request.content
+        else { return nil }
+        return previewEmbeds.renderedContent
     }
 
     // MARK: Typing (send side)
@@ -1778,6 +1816,10 @@ public final class PerAccountStore {
             if isShownInHome(conversation) != wasShown {
                 homeVisibilityDidChange(revealed: !wasShown)
             }
+
+        case .urlEmbedData(let e):
+            previewEmbeds = PreviewEmbeds(
+                eventId: event.id, content: e.content, renderedContent: e.renderedContent)
 
         case .unexpected(let type, let op):
             logger.debug(

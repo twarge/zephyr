@@ -566,6 +566,28 @@ struct StoreEventTests {
         #expect(store.unreads.totalCount == 1)
     }
 
+    @Test func previewEmbedsMatchOnlyTheirOwnPreview() throws {
+        func embedEvent(id: Int, content: String) -> String {
+            #"{"id": \#(id), "type": "url_embed_data", "content": "\#(content)", "rendered_content": "<p>\#(content) (embedded)</p>"}"#
+        }
+        let store = try makeStore()
+        store.lastEventId = 20
+        let request = store.previewRequest(for: "see https://example.com")
+        #expect(store.previewEmbedsHTML(for: request) == nil)
+        // Another draft's rendering (another device, say) doesn't apply.
+        try store.handleEvent(decodeEvent(embedEvent(id: 21, content: "other")))
+        #expect(store.previewEmbedsHTML(for: request) == nil)
+        try store.handleEvent(
+            decodeEvent(embedEvent(id: 22, content: "see https://example.com")))
+        #expect(
+            store.previewEmbedsHTML(for: request) == "<p>see https://example.com (embedded)</p>")
+        // Previewing the same text again: that rendering was the last
+        // preview's.
+        store.lastEventId = 22
+        let again = store.previewRequest(for: "see https://example.com")
+        #expect(store.previewEmbedsHTML(for: again) == nil)
+    }
+
     @Test func markMessageUnreadFlipsFlagAndRefiles() throws {
         let store = try makeStore()
         try store.handleEvent(

@@ -229,6 +229,7 @@ struct ComposeBar: View {
     @State private var editorSelection: TextSelection?
     @State private var showPreview = false
     @State private var previewContent: MessageContent?
+    @State private var previewRequest: PerAccountStore.PreviewRequest?
     @State private var previewTask: Task<Void, Never>?
 
     private var destination: SendDestination? {
@@ -694,6 +695,7 @@ struct ComposeBar: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
                 }
+                .onChange(of: store.previewEmbeds) { applyPreviewEmbeds() }
                 // Tapping the preview returns to editing (links inside
                 // still win their own taps).
                 .contentShape(.rect)
@@ -766,15 +768,26 @@ struct ComposeBar: View {
         previewTask?.cancel()
         guard showPreview else { return }
         previewContent = nil
-        let content = text
+        let request = store.previewRequest(for: text)
+        previewRequest = request
         let connection = store.connection
         previewTask = Task {
-            let html = (try? await connection.renderMessage(content: content)) ?? ""
+            let html = (try? await connection.renderMessage(content: request.content)) ?? ""
             guard !Task.isCancelled else { return }
+            // Link previews fetched meanwhile can beat the reply.
             previewContent = ContentParser.parse(
-                html: html.isEmpty
-                    ? "<p><em>Preview unavailable (offline?)</em></p>" : html)
+                html: store.previewEmbedsHTML(for: request)
+                    ?? (html.isEmpty ? "<p><em>Preview unavailable (offline?)</em></p>" : html))
         }
+    }
+
+    /// Link previews the server fetched after rendering (Zulip 13+) swap in
+    /// while the preview still shows that draft.
+    private func applyPreviewEmbeds() {
+        guard showPreview, let previewRequest,
+              let html = store.previewEmbedsHTML(for: previewRequest)
+        else { return }
+        previewContent = ContentParser.parse(html: html)
     }
 
     /// ⌘B/⌘I/⌘K: wraps the active input's selection in markdown, or

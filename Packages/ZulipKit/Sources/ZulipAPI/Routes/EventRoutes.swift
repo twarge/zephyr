@@ -34,6 +34,8 @@ extension ApiConnection {
     static let reminderEventTypes = ["reminder", "reminders"]
     /// Reminders arrived with Zulip Server 11.
     public static let remindersFeatureLevel = 344
+    /// Compose-preview link previews (`previewEmbedsFeatureLevel`).
+    static let previewEmbedEventTypes = ["url_embed_data"]
     public static let fetchedEventTypes = [
         "realm", "realm_user", "stream", "subscription", "message",
         "update_message_flags", "recent_private_conversations", "channel_folders",
@@ -51,6 +53,9 @@ extension ApiConnection {
         var eventTypes = Self.subscribedEventTypes
         if (featureLevel ?? 0) >= Self.remindersFeatureLevel {
             eventTypes += Self.reminderEventTypes
+        }
+        if (featureLevel ?? 0) >= Self.previewEmbedsFeatureLevel {
+            eventTypes += Self.previewEmbedEventTypes
         }
         var params: [Param] = [
             Param("apply_markdown", "true"),

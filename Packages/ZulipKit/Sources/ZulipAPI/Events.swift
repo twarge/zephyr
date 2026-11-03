@@ -36,6 +36,9 @@ public struct Event: Sendable {
         case draftsRemove(draftId: Int)
         case streamCreate([ZulipStream])
         case streamDelete(streamIds: [Int])
+        /// A compose preview re-rendered with link previews the server
+        /// fetched after answering /messages/render (Zulip 13+).
+        case urlEmbedData(UrlEmbedDataEvent)
         case unexpected(type: String, op: String?)
     }
 }
@@ -225,6 +228,8 @@ extension Event: Decodable {
             kind = .draftsUpdate(try DraftEnvelope(from: decoder).draft)
         case ("drafts", "remove"):
             kind = .draftsRemove(draftId: try DraftIdEnvelope(from: decoder).draftId)
+        case ("url_embed_data", _):
+            kind = .urlEmbedData(try UrlEmbedDataEvent(from: decoder))
         default:
             kind = .unexpected(type: type, op: op)
         }
@@ -238,6 +243,16 @@ public struct SubmessageEvent: Decodable, Sendable {
     public var content: String
     public var messageId: Int
     public var senderId: Int
+}
+
+/// `url_embed_data`: sent to all the user's clients, and not guaranteed —
+/// the server drops it when the rendering didn't change, when a newer
+/// render request superseded it, or when it waited too long to run.
+public struct UrlEmbedDataEvent: Decodable, Sendable, Equatable {
+    /// The draft markdown that was re-rendered; apply only to a preview
+    /// still showing exactly this.
+    public var content: String
+    public var renderedContent: String
 }
 
 private struct DraftsEnvelope: Decodable {

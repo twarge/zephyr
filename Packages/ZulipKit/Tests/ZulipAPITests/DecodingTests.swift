@@ -109,6 +109,19 @@ struct EventDecodingTests {
         #expect(user.userId == 5)
     }
 
+    @Test func urlEmbedDataEvent() throws {
+        let events = try decodeEvents(
+            Fixtures.eventsJSON([
+                #"{"id": 12, "type": "url_embed_data", "content": "see https://example.com", "rendered_content": "<p>see</p><div class=\"message_embed\"></div>"}"#,
+            ]))
+        guard case .urlEmbedData(let e) = events[0].kind else {
+            Issue.record("expected url_embed_data event")
+            return
+        }
+        #expect(e.content == "see https://example.com")
+        #expect(e.renderedContent == #"<p>see</p><div class="message_embed"></div>"#)
+    }
+
     @Test func malformedKnownEventThrows() {
         // A known type with a broken payload must throw (crunchy shell):
         // the sync layer turns this into a store rebuild.
@@ -160,6 +173,41 @@ struct RouteRequestTests {
         connection.featureLevel = 481
         _ = try await connection.registerQueue(idleQueueTimeoutSeconds: 3600)
         #expect(transport.requests.first?.formValue("idle_queue_timeout") == "3600")
+    }
+
+    @Test func urlEmbedDataEventsGatedByFeatureLevel() async throws {
+        let transport = FakeTransport(script: [
+            .json(Fixtures.registerJSON(queueId: "q1")),
+            .json(Fixtures.registerJSON(queueId: "q2")),
+        ])
+        let connection = ApiConnection(
+            realmURL: URL(string: "https://test.example")!,
+            email: "self@example.com", apiKey: "key", transport: transport)
+        connection.featureLevel = ApiConnection.previewEmbedsFeatureLevel - 1
+        _ = try await connection.registerQueue()
+        connection.featureLevel = ApiConnection.previewEmbedsFeatureLevel
+        _ = try await connection.registerQueue()
+        let older = try #require(transport.requests[0].formValue("event_types"))
+        let newer = try #require(transport.requests[1].formValue("event_types"))
+        #expect(!older.contains("url_embed_data"))
+        #expect(newer.contains(#""url_embed_data""#))
+        #expect(newer.contains(#""message""#))
+    }
+
+    @Test func renderMessageAsksForLinkPreviewsOnZulip13() async throws {
+        let rendered = #"{"result": "success", "msg": "", "rendered": "<p>hi</p>"}"#
+        let transport = FakeTransport(script: [.json(rendered), .json(rendered)])
+        let connection = ApiConnection(
+            realmURL: URL(string: "https://test.example")!,
+            email: "self@example.com", apiKey: "key", transport: transport)
+        connection.featureLevel = ApiConnection.previewEmbedsFeatureLevel - 1
+        #expect(try await connection.renderMessage(content: "hi") == "<p>hi</p>")
+        connection.featureLevel = ApiConnection.previewEmbedsFeatureLevel
+        _ = try await connection.renderMessage(content: "hi")
+        #expect(transport.requests[0].path == "/api/v1/messages/render")
+        #expect(transport.requests[0].formValue("content") == "hi")
+        #expect(transport.requests[0].formValue("populate_url_embed_data") == nil)
+        #expect(transport.requests[1].formValue("populate_url_embed_data") == "true")
     }
 
     @Test func getEventsRequest() async throws {
