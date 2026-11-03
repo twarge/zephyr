@@ -948,15 +948,35 @@ public final class PerAccountStore {
         } else {
             starredMessageIds.remove(messageId)
         }
-        if var message = messages[messageId] {
-            var flags = Set(message.flags ?? [])
-            if starred { flags.insert("starred") } else { flags.remove("starred") }
-            message.flags = Array(flags)
-            messages[messageId] = message
-            forEachMessageList { $0.handleChangedMessages(ids: [messageId]) }
-            scheduleMessageCacheSave([messageId])
-        }
+        setFlagLocally("starred", starred, messageId: messageId)
         performOrQueue(.updateFlags(messageIds: [messageId], add: starred, flag: "starred"))
+    }
+
+    /// Whether this realm's server has the per-message `hide_link_previews`
+    /// flag (Zulip 13+).
+    public var supportsHidingLinkPreviews: Bool {
+        zulipFeatureLevel >= ApiConnection.hideLinkPreviewsFeatureLevel
+    }
+
+    /// Hides or restores one message's website cards and video embeds, for
+    /// this user on every client (web parity: Shift+L).
+    public func setLinkPreviewsHidden(_ hidden: Bool, messageId: Int) {
+        guard supportsHidingLinkPreviews else { return }
+        // Optimistic; the flags event confirms.
+        setFlagLocally(Message.hideLinkPreviewsFlag, hidden, messageId: messageId)
+        performOrQueue(
+            .updateFlags(
+                messageIds: [messageId], add: hidden, flag: Message.hideLinkPreviewsFlag))
+    }
+
+    private func setFlagLocally(_ flag: String, _ isSet: Bool, messageId: Int) {
+        guard var message = messages[messageId] else { return }
+        var flags = Set(message.flags ?? [])
+        if isSet { flags.insert(flag) } else { flags.remove(flag) }
+        message.flags = Array(flags)
+        messages[messageId] = message
+        forEachMessageList { $0.handleChangedMessages(ids: [messageId]) }
+        scheduleMessageCacheSave([messageId])
     }
 
     public func deleteMessage(_ messageId: Int) {

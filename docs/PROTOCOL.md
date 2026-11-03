@@ -88,10 +88,16 @@ used unconditionally; features above 277 note their FL gate.
   optimistic concurrency. **Delete**: `DELETE /messages/{id}`. Both are permission-gated
   by realm/channel settings from the snapshot.
 - **Flags**: `POST /messages/flags` (`messages[]`, `op: add|remove`,
-  `flag: read|starred|collapsed`). Ranged: `POST /messages/flags/narrow` (FL 155) —
+  `flag: read|starred|collapsed|hide_link_previews`). Ranged: `POST /messages/flags/narrow` (FL 155) —
   narrow + anchor range; the canonical mark-as-read mechanism (the old
   `mark_*_as_read` endpoints are deprecated). Read receipts:
   `GET /messages/{id}/read_receipts` (FL 137).
+- **Hidden link previews** (FL 510): per-user `hide_link_previews` flag, settable
+  on any message. Flagged messages drop `div.message_embed` cards and external
+  video embeds (`.youtube-video`, `.embed-video`, `.vimeo-video`) at any depth;
+  inline image previews and uploaded videos stay (a bare image URL renders as its
+  preview alone). The web offers the toggle (message menu, Shift+L) only on
+  messages that have something to hide.
 
 ## 4. Presence, typing, reactions, emoji, uploads, misc
 
@@ -135,8 +141,11 @@ used unconditionally; features above 277 note their FL gate.
 | 445 | 12.0 | `anchor_date` fetching |
 | 481 | 12.0 | `idle_queue_timeout` on /register |
 | 483 | 12.0 | E2EE push registration (mobile-only; not used) |
+| 498 | 12.0 | 12.0 release |
+| 510 | 13.0 | `hide_link_previews` message flag |
+| 513 | 13.0 | `populate_url_embed_data` on /messages/render + `url_embed_data` event (not yet used) |
 
-Current head was FL ~506 (13.0-dev) at research time. Gate with
+Current head was FL 513 (13.0-rc1, 2026-10-30) at last check (2026-11-03). Gate with
 `connection.featureLevel >= N`; treat `zulip_merge_base` as the real level on forks.
 
 ## 6. Notifications reality-check

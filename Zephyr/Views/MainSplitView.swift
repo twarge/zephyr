@@ -981,6 +981,8 @@ struct MainSplitView: View {
             _ = keys.handleCharacter("e")
         case .toggleStar:
             _ = keys.handleCharacter("*")
+        case .toggleLinkPreviews:
+            _ = keys.handleCharacter("L")
         case .find:
             _ = keys.handleCharacter("/")
         case .replyQuoting:

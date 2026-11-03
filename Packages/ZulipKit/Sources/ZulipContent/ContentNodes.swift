@@ -170,6 +170,66 @@ extension MessageContent {
     }
 }
 
+// MARK: - Hidden link previews
+
+/// What a message flagged `hide_link_previews` drops, as the web app does:
+/// website cards and external video embeds (YouTube, Vimeo), at any depth.
+/// Inline image previews and uploaded videos stay — a bare image URL
+/// renders as its preview alone, so hiding it would blank the message.
+extension MessageContent {
+    public var hasHideableLinkPreviews: Bool {
+        blocks.contains(where: \.containsHideableLinkPreview)
+    }
+
+    public func withoutLinkPreviews() -> MessageContent {
+        MessageContent(blocks: blocks.withoutLinkPreviews)
+    }
+}
+
+extension BlockNode {
+    var isHideableLinkPreview: Bool {
+        switch self {
+        case .linkPreview: true
+        case .video(let video): video.isEmbed
+        default: false
+        }
+    }
+
+    var containsHideableLinkPreview: Bool {
+        switch self {
+        case .blockquote(let blocks), .spoiler(_, let blocks), .collapsible(_, let blocks):
+            blocks.contains(where: \.containsHideableLinkPreview)
+        case .unorderedList(let items), .orderedList(_, let items):
+            items.contains { $0.contains(where: \.containsHideableLinkPreview) }
+        default:
+            isHideableLinkPreview
+        }
+    }
+}
+
+extension [BlockNode] {
+    var withoutLinkPreviews: [BlockNode] {
+        compactMap { block in
+            switch block {
+            case _ where block.isHideableLinkPreview:
+                nil
+            case .blockquote(let blocks):
+                .blockquote(blocks.withoutLinkPreviews)
+            case .spoiler(let header, let blocks):
+                .spoiler(header: header, content: blocks.withoutLinkPreviews)
+            case .collapsible(let summary, let blocks):
+                .collapsible(summary: summary, content: blocks.withoutLinkPreviews)
+            case .unorderedList(let items):
+                .unorderedList(items: items.map(\.withoutLinkPreviews))
+            case .orderedList(let start, let items):
+                .orderedList(start: start, items: items.map(\.withoutLinkPreviews))
+            default:
+                block
+            }
+        }
+    }
+}
+
 extension BlockNode {
     var plainText: String {
         switch self {

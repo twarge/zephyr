@@ -10,14 +10,32 @@ import UIKit
 /// re-parse exactly one message. One cache per open transcript.
 @MainActor
 final class MessageContentCache {
-    private var cache: [Int: (edit: Int?, content: MessageContent)] = [:]
+    private struct Entry {
+        var edit: Int?
+        var content: MessageContent
+        /// `content` minus its link previews, built when first shown.
+        var withoutPreviews: MessageContent?
+    }
+    private var cache: [Int: Entry] = [:]
 
+    /// What the message displays: its parse, minus website cards and video
+    /// embeds when the reader hid them (`hide_link_previews`).
     func content(for message: Message) -> MessageContent {
+        let parsed = parsedContent(for: message)
+        guard message.hidesLinkPreviews else { return parsed }
+        if let hidden = cache[message.id]?.withoutPreviews { return hidden }
+        let hidden = parsed.withoutLinkPreviews()
+        cache[message.id]?.withoutPreviews = hidden
+        return hidden
+    }
+
+    /// The parse as the server rendered it, link previews included.
+    func parsedContent(for message: Message) -> MessageContent {
         if let hit = cache[message.id], hit.edit == message.lastEditTimestamp {
             return hit.content
         }
         let parsed = ContentParser.parse(html: message.content)
-        cache[message.id] = (message.lastEditTimestamp, parsed)
+        cache[message.id] = Entry(edit: message.lastEditTimestamp, content: parsed)
         return parsed
     }
 }

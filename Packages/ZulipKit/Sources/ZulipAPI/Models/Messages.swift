@@ -81,6 +81,14 @@ public struct Message: Codable, Sendable, Identifiable, Equatable {
     public var submessages: [Submessage]?
 
     public var topic: String { subject }
+
+    /// The `hide_link_previews` flag (Zulip 13+, FL 510): the reader chose
+    /// to hide this message's website cards and video embeds.
+    public static let hideLinkPreviewsFlag = "hide_link_previews"
+
+    public var hidesLinkPreviews: Bool {
+        (flags ?? []).contains(Self.hideLinkPreviewsFlag)
+    }
 }
 
 /// One widget submessage: `content` is a JSON-encoded widget event.

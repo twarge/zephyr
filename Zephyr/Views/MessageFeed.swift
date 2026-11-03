@@ -1592,7 +1592,8 @@ struct MessageRow: View {
     private var content: MessageContent {
         if useMatchHighlights, let match = message.matchContent {
             // Uncached: search results are one-shot lists.
-            return ContentParser.parse(html: match)
+            let parsed = ContentParser.parse(html: match)
+            return message.hidesLinkPreviews ? parsed.withoutLinkPreviews() : parsed
         }
         return cache.content(for: message)
     }
@@ -2192,6 +2193,16 @@ struct MessageRow: View {
                     Menu("Remind Me About This") {
                         reminderMenuItems()
                     }
+                }
+            }
+            if store.supportsHidingLinkPreviews,
+               cache.parsedContent(for: message).hasHideableLinkPreviews {
+                let hidden = message.hidesLinkPreviews
+                Button(
+                    hidden ? "Show Link Previews" : "Hide Link Previews",
+                    systemImage: hidden ? "eye" : "eye.slash"
+                ) {
+                    store.setLinkPreviewsHidden(!hidden, messageId: message.id)
                 }
             }
             if message.type == .stream {

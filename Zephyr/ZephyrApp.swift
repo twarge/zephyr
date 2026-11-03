@@ -273,6 +273,9 @@ extension ZephyrApp {
                 .keyboardShortcut("e", modifiers: [.command, .shift])
                 #endif
             Button("Star / Unstar") { model.pendingCommand = .toggleStar }
+            Button("Hide / Show Link Previews") {
+                model.pendingCommand = .toggleLinkPreviews
+            }
             Divider()
             Button("Copy Message Reference") { model.pendingCommand = .copyReference }
                 .keyboardShortcut("c", modifiers: [.command, .shift])

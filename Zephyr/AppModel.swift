@@ -27,6 +27,7 @@ enum AppCommand: Equatable {
     case replyQuoting
     case editMessage
     case toggleStar
+    case toggleLinkPreviews
     case copyReference
     case translate
     case moveToTopic

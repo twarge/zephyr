@@ -33,6 +33,7 @@ import AppKit
 ///   r / Return       reply (focus compose; cross-channel feeds jump first)
 ///   e                edit selected message (own messages)
 ///   +                react 👍            *   star / unstar
+///   Shift-L          hide / show the selected message's link previews
 ///   s / Shift-S      go to topic / channel of selected message
 ///   a                combined feed
 ///   n / p            next unread topic / next unread DM conversation
@@ -459,6 +460,7 @@ final class KeyboardRouter {
         case "e": return editSelected()
         case "+": return reactToSelected()
         case "*": return starSelected()
+        case "L": return toggleLinkPreviewsOfSelected()
         case "s": return narrowToTopic()
         case "S": return narrowToChannel()
         case "a":
@@ -647,6 +649,17 @@ final class KeyboardRouter {
         guard let store, let message = selectedMessage else { return false }
         let starred = (message.flags ?? []).contains("starred")
         store.setStarred(!starred, messageId: message.id)
+        return true
+    }
+
+    /// Web parity (Shift+L): offered on the same messages as the menu item —
+    /// a Zulip 13+ server, and website cards or video embeds to hide.
+    private func toggleLinkPreviewsOfSelected() -> Bool {
+        guard let store, store.supportsHidingLinkPreviews,
+              let message = selectedMessage,
+              ContentParser.parse(html: message.content).hasHideableLinkPreviews
+        else { return false }
+        store.setLinkPreviewsHidden(!message.hidesLinkPreviews, messageId: message.id)
         return true
     }
 
@@ -921,6 +934,7 @@ struct ShortcutsHelpView: View {
         ("Actions", [
             ("+", "React 👍 to selected message"),
             ("*", "Star / unstar selected message"),
+            ("⇧L", "Hide / show link previews of selected message"),
             ("Space", "Quick Look selected message's attachments"),
             ("⌘C", "Copy selection (pastes into compose as quotes)"),
             ("⌘1…⌘9", "Switch server"),

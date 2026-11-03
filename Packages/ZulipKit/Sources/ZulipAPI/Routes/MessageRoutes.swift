@@ -244,6 +244,10 @@ extension ApiConnection {
 }
 
 extension ApiConnection {
+    /// The `hide_link_previews` flag arrived with Zulip Server 13; older
+    /// servers reject it as an invalid flag.
+    public static let hideLinkPreviewsFeatureLevel = 510
+
     /// POST /messages/flags — set/clear a flag (`read`, `starred`, …) on a
     /// set of messages.
     public func updateMessageFlags(messages: [Int], op: FlagOp, flag: String) async throws {

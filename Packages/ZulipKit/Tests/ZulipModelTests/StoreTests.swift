@@ -495,6 +495,77 @@ struct StoreEventTests {
         #expect(transport.requests[1].formValue("stream_id") == nil)
     }
 
+    private func storeAtFeatureLevel(
+        _ featureLevel: Int, transport: FakeTransport
+    ) throws -> PerAccountStore {
+        let account = Account(
+            realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self,
+            from: Data(Fixtures.registerJSON(queueId: "q1", featureLevel: featureLevel).utf8))
+        let connection = ApiConnection(
+            realmURL: account.realmURL, email: account.email, apiKey: "key",
+            transport: transport)
+        return PerAccountStore(account: account, connection: connection, snapshot: snapshot)
+    }
+
+    @Test func hidingLinkPreviewsSetsTheFlag() async throws {
+        let transport = FakeTransport(
+            defaultResponse: .json(#"{"result": "success", "msg": ""}"#))
+        let store = try storeAtFeatureLevel(510, transport: transport)
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 100),
+                    flags: ["read"])))
+        #expect(store.supportsHidingLinkPreviews)
+
+        // Optimistic, then the flag request.
+        store.setLinkPreviewsHidden(true, messageId: 100)
+        #expect(store.messages[100]?.hidesLinkPreviews == true)
+        try await eventually("flag sent") { transport.requests.count == 1 }
+        let request = transport.requests[0]
+        #expect(request.path.hasSuffix("/messages/flags"))
+        #expect(request.formValue("flag") == "hide_link_previews")
+        #expect(request.formValue("op") == "add")
+        #expect(request.formValue("messages") == "[100]")
+
+        store.setLinkPreviewsHidden(false, messageId: 100)
+        #expect(store.messages[100]?.hidesLinkPreviews == false)
+        try await eventually("unflag sent") { transport.requests.count == 2 }
+        #expect(transport.requests[1].formValue("op") == "remove")
+    }
+
+    @Test func hidingLinkPreviewsNeedsZulip13() async throws {
+        let transport = FakeTransport(
+            defaultResponse: .json(#"{"result": "success", "msg": ""}"#))
+        let store = try storeAtFeatureLevel(509, transport: transport)
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 100), flags: [])))
+        #expect(!store.supportsHidingLinkPreviews)
+        store.setLinkPreviewsHidden(true, messageId: 100)
+        #expect(store.messages[100]?.hidesLinkPreviews == false)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(transport.requests.isEmpty)
+    }
+
+    @Test func hiddenLinkPreviewsFollowFlagEvents() throws {
+        // Hidden from another client: the update_message_flags event.
+        let store = try makeStore()
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.messageEventJSON(
+                    eventId: 1, message: Fixtures.channelMessageJSON(id: 100), flags: [])))
+        try store.handleEvent(
+            decodeEvent(
+                Fixtures.flagsEventJSON(
+                    eventId: 2, op: "add", flag: "hide_link_previews", messages: [100])))
+        #expect(store.messages[100]?.hidesLinkPreviews == true)
+        #expect(store.unreads.totalCount == 1)
+    }
+
     @Test func markMessageUnreadFlipsFlagAndRefiles() throws {
         let store = try makeStore()
         try store.handleEvent(

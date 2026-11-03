@@ -103,8 +103,10 @@ private struct MessageWindowContent: View {
                 if let widget = MessageWidget.parse(message) {
                     MessageWidgetView(widget: widget, store: store, messageId: message.id)
                 } else {
+                    let parsed = ContentParser.parse(html: message.content)
                     MessageContentView(
-                        content: ContentParser.parse(html: message.content),
+                        content: message.hidesLinkPreviews
+                            ? parsed.withoutLinkPreviews() : parsed,
                         connection: store.connection)
                         // Same menu over the text: selectable Text otherwise
                         // substitutes the system edit menu on right-click,
