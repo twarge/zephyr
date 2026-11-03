@@ -120,11 +120,22 @@ public final class MessageListModel: Identifiable {
     /// A specific message to open at (message links); overrides the
     /// first-unread anchor.
     private let initialAnchorMessageId: Int?
+    /// A search's `date:` term: open at the first message sent at or
+    /// after this instant (the day's local midnight), the server's pick.
+    private let initialAnchorDate: Date?
+    /// The message a date anchor resolved to, once the server answered —
+    /// the target views land on and flash, as for a message link. Nil
+    /// when the narrow is empty or the server can't anchor by date.
+    public private(set) var dateAnchorMessageId: Int?
 
-    public init(store: PerAccountStore, narrow: Narrow, anchorMessageId: Int? = nil) {
+    public init(
+        store: PerAccountStore, narrow: Narrow,
+        anchorMessageId: Int? = nil, anchorDate: Date? = nil
+    ) {
         self.store = store
         self.narrow = narrow
         initialAnchorMessageId = anchorMessageId
+        initialAnchorDate = anchorDate
         store.register(self)
     }
 
@@ -174,17 +185,23 @@ public final class MessageListModel: Identifiable {
         defer { isFetching = false }
         // Zulip semantics: open at the first unread (or a linked message),
         // with history in both directions. Search narrows can't ask for
-        // first_unread; they open at the newest results.
+        // first_unread; they open at the newest results, or around a date.
         // Offline-first: render the cached transcript immediately, anchored
         // where the server render will land. The fetch below still runs:
         // success replaces the preview and clears the fallback flag;
-        // failure leaves it showing, and reconnect refetches.
-        populateOfflineFallback()
+        // failure leaves it showing, and reconnect refetches. Only the
+        // server can place a date, so a date search waits for its answer
+        // (and falls back to the offline matches when there is none).
+        if initialAnchorDate == nil {
+            populateOfflineFallback()
+        }
         var anchor: MessageAnchor
         var anchoredMidHistory = true
         var resumeId: Int?
         if let initialAnchorMessageId {
             anchor = .id(initialAnchorMessageId)
+        } else if let initialAnchorDate {
+            anchor = .date(initialAnchorDate)
         } else if case .custom = narrow {
             anchor = .newest
             anchoredMidHistory = false
@@ -261,6 +278,12 @@ public final class MessageListModel: Identifiable {
             messages = fetched
             haveNewest = result.foundNewest ?? !anchoredMidHistory
             haveOldest = result.foundOldest ?? false
+            // The server's pick for a date (an empty narrow, or a server
+            // that fell back to newest, answers an id not in the window).
+            if case .date = anchor, let resolved = result.anchor,
+               fetched.contains(where: { $0.id == resolved }) {
+                dateAnchorMessageId = resolved
+            }
             // The marker is the oldest fetched message still unread — in
             // a catch-up feed, the oldest one worth resuming at (its window
             // also holds muted and stale unreads, which never anchor).

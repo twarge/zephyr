@@ -5,6 +5,10 @@ public enum MessageAnchor: Sendable, Equatable {
     case oldest
     case firstUnread
     case id(Int)
+    /// The first message sent at or after this instant — the web's
+    /// `date:` search (GET /messages only, FL 445). The server falls back
+    /// to the newest message when none is that recent.
+    case date(Date)
 
     var apiValue: String {
         switch self {
@@ -12,6 +16,7 @@ public enum MessageAnchor: Sendable, Equatable {
         case .oldest: "oldest"
         case .firstUnread: "first_unread"
         case .id(let id): String(id)
+        case .date: "date"
         }
     }
 }
@@ -319,13 +324,37 @@ extension ApiConnection {
             ApiRequest(method: .delete, path: "/api/v1/reminders/\(reminderId)"))
     }
 
-    /// GET /messages — anchor-based history fetch.
+    /// `anchor: date` + `anchor_date` on GET /messages arrived with Zulip
+    /// Server 12.
+    public static let anchorDateFeatureLevel = 445
+
+    /// `anchor_date` as a full datetime with a numeric offset (the API
+    /// docs' form). Never "Z": Python before 3.11 can't parse it.
+    static func anchorDateValue(_ date: Date) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        let parts = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second], from: date)
+        return String(
+            format: "%04d-%02d-%02dT%02d:%02d:%02d+00:00",
+            parts.year ?? 0, parts.month ?? 0, parts.day ?? 0,
+            parts.hour ?? 0, parts.minute ?? 0, parts.second ?? 0)
+    }
+
+    /// GET /messages — anchor-based history fetch. The response's `anchor`
+    /// is the message a `.date` anchor resolved to.
     public func getMessages(
         anchor: MessageAnchor,
         numBefore: Int,
         numAfter: Int,
         narrow: [NarrowElement] = []
     ) async throws -> GetMessagesResult {
+        var anchor = anchor
+        if case .date = anchor, (featureLevel ?? 0) < Self.anchorDateFeatureLevel {
+            // Older servers can't place a date: the newest messages, as the
+            // server itself falls back to when nothing is that recent.
+            anchor = .newest
+        }
         var params = [
             Param("anchor", anchor.apiValue),
             Param("num_before", String(numBefore)),
@@ -337,6 +366,9 @@ extension ApiConnection {
             // empty-topic support ignore the unknown parameter.
             Param("allow_empty_topic_name", "true"),
         ]
+        if case .date(let date) = anchor {
+            params.append(Param("anchor_date", Self.anchorDateValue(date)))
+        }
         if !narrow.isEmpty {
             params.append(Param("narrow", try ZulipJSON.encodeString(narrow)))
         }

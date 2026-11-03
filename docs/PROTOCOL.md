@@ -66,11 +66,12 @@ used unconditionally; features above 277 note their FL gate.
 
 ## 3. Messages (api/get-messages, api/send-message, api/construct-narrow)
 
-- **Fetch**: `GET /messages` — `anchor` (`newest`|`oldest`|`first_unread`|id),
+- **Fetch**: `GET /messages` — `anchor` (`newest`|`oldest`|`first_unread`|id|`date`),
   `num_before`/`num_after` (≤1000 per batch recommended), `narrow`, `include_anchor`
-  (FL 155), `message_ids[]` (FL 300), `anchor_date` (FL 445). Response includes
-  `found_oldest`/`found_newest`/`history_limited`. Message fields to note:
-  `subject` = topic (legacy name), `display_recipient` (channel name or DM user array),
+  (FL 155), `message_ids[]` (FL 300), `anchor_date` (FL 445, with `anchor=date`).
+  Response includes `found_oldest`/`found_newest`/`history_limited`, and `anchor` (the
+  id the request anchored at — how a `date` anchor reports its pick). Message fields to
+  note: `subject` = topic (legacy name), `display_recipient` (channel name or DM user array),
   `flags`, `reactions`, `last_edit_timestamp`, `edit_history`.
 - **Narrow operators** (JSON `[{operator, operand, negated?}]`): `channel` (operand:
   channel **id**), `topic`, `dm` (operand: user-id array), `dm-including`, `sender`,
@@ -80,6 +81,17 @@ used unconditionally; features above 277 note their FL gate.
   user's **personal message history** (near-empty for new accounts) — add
   `{"operator": "channels", "operand": "public"}` to unscoped searches to cover shared
   history, like the web app.
+- **`date` operator** (web's `date:YYYY-MM-DD` search, FL 445; api/construct-narrow
+  "Narrow terms that don't filter messages"): never sent in `narrow`. The other terms are
+  fetched with `anchor=date` + `anchor_date` = the day's local midnight as a full datetime
+  with a numeric offset (`2025-12-01T05:00:00+00:00` — not `Z`, which Python < 3.11's
+  `fromisoformat` rejects). The server anchors at the first narrow message sent at or after
+  that instant, else the newest; an empty narrow answers a past-the-end `anchor`. The view
+  opens there like a `near` link (landed on and flashed), unfiltered in both directions.
+  Not negatable; one per search; the web treats it as incompatible with `near`. Below
+  FL 445 the suggestion is hidden and a stored date search opens at `newest`. Typeahead
+  follows web `date_util.ts`: quick picks (today, yesterday, two days ago, a week ago, a
+  month ago) by name, half-typed dates completed toward them, days 1970 through this year.
 - **Send**: `POST /messages` — `type: "direct"` (`to`: user-id array) or `"channel"`
   (`to`: channel id, `topic`). Local echo: pass `queue_id` + `local_id`; the `message`
   event echoes `local_message_id`. `read_by_sender: true` (FL 236).

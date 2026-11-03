@@ -130,11 +130,16 @@ public enum Fixtures {
         """
     }
 
-    public static func getMessagesJSON(_ messages: [String], foundNewest: Bool = true) -> String {
-        """
-        {"result": "success", "msg": "", "messages": [\(messages.joined(separator: ", "))],
-         "found_newest": \(foundNewest), "found_oldest": false, "history_limited": false}
-        """
+    /// `anchor` is the message id the server anchored at (a date anchor's
+    /// resolution), omitted when nil.
+    public static func getMessagesJSON(
+        _ messages: [String], foundNewest: Bool = true, anchor: Int? = nil
+    ) -> String {
+        let anchorField = anchor.map { #", "anchor": \#($0)"# } ?? ""
+        return """
+            {"result": "success", "msg": "", "messages": [\(messages.joined(separator: ", "))],
+             "found_newest": \(foundNewest), "found_oldest": false, "history_limited": false\(anchorField)}
+            """
     }
 
     private static func jsonStringArray(_ strings: [String]) -> String {

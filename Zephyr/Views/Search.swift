@@ -14,10 +14,19 @@ nonisolated enum SearchToken: Identifiable, Hashable, Codable {
     case dm(userId: Int, name: String)
     case starred
     case mentioned
+    /// The web's `date:` operator: not a filter — the search opens its
+    /// other terms anchored at the day (see `SearchQuery.anchorDay`).
+    case date(CalendarDay)
 
     var id: Self { self }
 
-    var narrowElement: NarrowElement {
+    var isDate: Bool {
+        if case .date = self { true } else { false }
+    }
+
+    /// The server narrow term; nil for a date, which travels as the
+    /// fetch's anchor instead.
+    var narrowElement: NarrowElement? {
         switch self {
         case .channel(let streamId, _):
             NarrowElement("channel", .int(streamId))
@@ -31,10 +40,13 @@ nonisolated enum SearchToken: Identifiable, Hashable, Codable {
             NarrowElement("is", .string("starred"))
         case .mentioned:
             NarrowElement("is", .string("mentioned"))
+        case .date:
+            nil
         }
     }
 
-    /// The bubble's text.
+    /// The bubble's text. A quick-pick day reads by name, as the web's
+    /// pill does — relative to now, so a recent search ages correctly.
     var bubbleText: String {
         switch self {
         case .channel(_, let name): "#\(name)"
@@ -43,6 +55,8 @@ nonisolated enum SearchToken: Identifiable, Hashable, Codable {
         case .dm(_, let name): "DM: \(name)"
         case .starred: "Starred"
         case .mentioned: "Mentions"
+        case .date(let day):
+            "Around \(day.relativeName() ?? day.start().formatted(date: .abbreviated, time: .omitted))"
         }
     }
 
@@ -55,6 +69,8 @@ nonisolated enum SearchToken: Identifiable, Hashable, Codable {
         case .dm(_, let name): "Direct messages with \(name)"
         case .starred: "Starred messages"
         case .mentioned: "Messages that mention you"
+        case .date(let day):
+            "Messages sent around \(day.start().formatted(date: .long, time: .omitted))"
         }
     }
 
@@ -66,6 +82,7 @@ nonisolated enum SearchToken: Identifiable, Hashable, Codable {
         case .dm: "envelope"
         case .starred: "star"
         case .mentioned: "at"
+        case .date: "calendar"
         }
     }
 }
@@ -214,6 +231,11 @@ final class SidebarSearchModel {
         }
         if text.count >= 3, "mentions".localizedCaseInsensitiveContains(text) {
             result.append(.mentioned)
+        }
+        // Dates need the server's date anchor (Zulip 12+), and a search
+        // takes one (the web treats a second as incompatible).
+        if store.supportsDateAnchor, !tokens.contains(where: \.isDate) {
+            result += CalendarDay.suggestions(for: text).map(SearchToken.date)
         }
         return result.filter { !tokens.contains($0) }
     }
@@ -380,7 +402,7 @@ nonisolated struct SearchQuery: Hashable, Codable {
     }
 
     var narrowElements: [NarrowElement] {
-        var elements = tokens.map(\.narrowElement)
+        var elements = tokens.compactMap(\.narrowElement)
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         if !trimmed.isEmpty {
             elements.append(NarrowElement("search", .string(trimmed)))
@@ -390,6 +412,14 @@ nonisolated struct SearchQuery: Hashable, Codable {
         // That matches the web app; appending `channels:public` here would
         // silently exclude private channels and DMs from every search.
         return elements
+    }
+
+    /// The `date:` term's day: the fetch opens there, the server's first
+    /// message on or after its local midnight (the newest when none is).
+    var anchorDay: CalendarDay? {
+        tokens.lazy.compactMap { token in
+            if case .date(let day) = token { day } else { nil }
+        }.first
     }
 
     var displayDescription: String {

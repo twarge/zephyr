@@ -10,11 +10,15 @@ struct NarrowFeedView: View {
     let narrow: Narrow
     var useMatchHighlights = false
     var ignoredSearchWords: [String]?
+    /// A `date:` search: the feed opens at the server's first message on
+    /// or after this instant, landed on like a message link.
+    var anchorDate: Date?
     /// The control row swaps quoted reply for a go-to-conversation jump
     /// (Combined, Mentions, Starred, Search).
     var showsConversationJump = false
     @Binding var selection: Destination?
 
+    @Environment(KeyboardRouter.self) private var keys
     @State private var model: MessageListModel?
     @State private var cache = MessageContentCache()
     @State private var scrollMemory = FeedScrollMemory()
@@ -46,6 +50,7 @@ struct NarrowFeedView: View {
         store: PerAccountStore, title: String, narrow: Narrow,
         useMatchHighlights: Bool = false,
         ignoredSearchWords: [String]? = nil,
+        anchorDate: Date? = nil,
         showsConversationJump: Bool = false,
         selection: Binding<Destination?>
     ) {
@@ -54,6 +59,7 @@ struct NarrowFeedView: View {
         self.narrow = narrow
         self.useMatchHighlights = useMatchHighlights
         self.ignoredSearchWords = ignoredSearchWords
+        self.anchorDate = anchorDate
         self.showsConversationJump = showsConversationJump
         _selection = selection
         // A recently viewed feed resumes its parked model — set before
@@ -100,6 +106,11 @@ struct NarrowFeedView: View {
         }
         .serverTitled(title, store: store)
         .subtitled { subtitle }
+        // A later answer for the date (a refetch after an offline open)
+        // lands the same way, live.
+        .onChange(of: model?.dateAnchorMessageId) { _, id in
+            if let id { keys.highlightMessageId = id }
+        }
         // Store-keyed: re-binds when the store instance is replaced
         // (warm-launch swap, queue rebuild).
         .task(id: ObjectIdentifier(store)) {
@@ -110,10 +121,17 @@ struct NarrowFeedView: View {
             {
                 return
             }
-            let list = MessageListModel(store: store, narrow: narrow)
+            let list = MessageListModel(store: store, narrow: narrow, anchorDate: anchorDate)
             if model == nil {
                 model = list
                 await list.fetchInitial(count: 100)
+                // A date search lands on the server's pick through the
+                // message-link path: highlighted before the feed's first
+                // layout (no suspension since the fetch flipped
+                // didInitialFetch), so its opening anchors there.
+                if let id = list.dateAnchorMessageId {
+                    keys.highlightMessageId = id
+                }
             } else {
                 // Store swap: keep rendering the old feed until the
                 // replacement has content.

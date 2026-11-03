@@ -1293,6 +1293,7 @@ struct MainSplitView: View {
                     narrow: .custom(query.narrowElements),
                     useMatchHighlights: true,
                     ignoredSearchWords: query.exclusivelyIgnoredSearchWords,
+                    anchorDate: query.anchorDay?.start(),
                     showsConversationJump: true,
                     selection: $selection)
                     .id(query)

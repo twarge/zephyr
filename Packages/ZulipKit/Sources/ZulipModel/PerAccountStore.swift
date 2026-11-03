@@ -478,6 +478,12 @@ public final class PerAccountStore {
         }
     }
 
+    /// Whether this realm's server can anchor a fetch at a date — the
+    /// `date:` search (Zulip 12+).
+    public var supportsDateAnchor: Bool {
+        zulipFeatureLevel >= ApiConnection.anchorDateFeatureLevel
+    }
+
     // MARK: Reminders
 
     /// Whether this realm's server has the reminders API (Zulip 11+).

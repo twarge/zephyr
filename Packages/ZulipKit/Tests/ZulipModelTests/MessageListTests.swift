@@ -7,16 +7,19 @@ import ZulipTestSupport
 @MainActor
 struct MessageListModelTests {
     private func makeStoreWithTransport(
-        script: [FakeResponse], unreadMsgs: String = Fixtures.emptyUnreadsJSON
+        script: [FakeResponse], unreadMsgs: String = Fixtures.emptyUnreadsJSON,
+        featureLevel: Int = 400
     ) throws -> (PerAccountStore, FakeTransport) {
         let transport = FakeTransport(script: script, defaultResponse: .hang)
         let account = Account(
             realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
         let snapshot = try ZulipJSON.decoder.decode(
             InitialSnapshot.self,
-            from: Data(Fixtures.registerJSON(queueId: "q1", unreadMsgs: unreadMsgs).utf8))
+            from: Data(Fixtures.registerJSON(
+                queueId: "q1", featureLevel: featureLevel, unreadMsgs: unreadMsgs).utf8))
         let connection = ApiConnection(
             realmURL: account.realmURL, email: account.email, apiKey: "key", transport: transport)
+        connection.featureLevel = featureLevel
         return (PerAccountStore(account: account, connection: connection, snapshot: snapshot), transport)
     }
 
@@ -79,6 +82,54 @@ struct MessageListModelTests {
         // An id no longer in the window is ignored.
         list.reaimUnreadMarker(to: 999)
         #expect(list.firstUnreadMarkerId == 102)
+    }
+
+    @Test func dateSearchOpensAtTheServersPick() async throws {
+        let (store, transport) = try makeStoreWithTransport(
+            script: [
+                .json(Fixtures.getMessagesJSON(
+                    [
+                        Fixtures.channelMessageJSON(id: 100, flags: ["read"]),
+                        Fixtures.channelMessageJSON(id: 101, flags: ["read"]),
+                        Fixtures.channelMessageJSON(id: 102, flags: ["read"]),
+                    ],
+                    foundNewest: false, anchor: 101))
+            ],
+            featureLevel: ApiConnection.anchorDateFeatureLevel)
+        #expect(store.supportsDateAnchor)
+        let midnight = Date(timeIntervalSince1970: 1_764_565_200)
+        let list = MessageListModel(
+            store: store, narrow: .custom([NarrowElement("channel", .int(10))]),
+            anchorDate: midnight)
+        await list.fetchInitial()
+        let request = try #require(transport.requests.first)
+        #expect(request.queryValue("anchor") == "date")
+        #expect(request.queryValue("anchor_date") == "2025-12-01T05:00:00+00:00")
+        // History both ways around the day, and the date is no narrow term.
+        #expect(request.queryValue("num_before") == "60")
+        #expect(request.queryValue("num_after") == "60")
+        #expect(request.queryValue("narrow")?.contains("date") == false)
+        #expect(list.messages.map(\.id) == [100, 101, 102])
+        #expect(list.dateAnchorMessageId == 101)
+        #expect(!list.haveNewest)
+    }
+
+    @Test func dateSearchWithoutAPickHasNoTarget() async throws {
+        // An empty narrow answers the server's past-the-end anchor; a
+        // server too old for dates answers newest. Neither lands anywhere.
+        let (store, transport) = try makeStoreWithTransport(script: [
+            .json(Fixtures.getMessagesJSON(
+                [Fixtures.channelMessageJSON(id: 100, flags: ["read"])],
+                anchor: 10_000_000_000_000_000))
+        ])
+        #expect(!store.supportsDateAnchor)
+        let list = MessageListModel(
+            store: store, narrow: .custom([]),
+            anchorDate: Date(timeIntervalSince1970: 1_764_565_200))
+        await list.fetchInitial()
+        #expect(transport.requests.first?.queryValue("anchor") == "newest")
+        #expect(list.messages.map(\.id) == [100])
+        #expect(list.dateAnchorMessageId == nil)
     }
 
     @Test func fetchOlderPrependsWithoutDuplicatingAnchor() async throws {

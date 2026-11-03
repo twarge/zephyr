@@ -240,6 +240,40 @@ struct RouteRequestTests {
         #expect(narrow.contains("hi +1"))
     }
 
+    @Test func dateAnchorSendsAnchorDate() async throws {
+        let transport = FakeTransport(script: [
+            .json(Fixtures.getMessagesJSON([], anchor: 101))
+        ])
+        let connection = ApiConnection(
+            realmURL: URL(string: "https://test.example")!,
+            email: "self@example.com", apiKey: "key", transport: transport)
+        connection.featureLevel = ApiConnection.anchorDateFeatureLevel
+        // Midnight Dec 1 in New York (UTC−5).
+        let midnight = Date(timeIntervalSince1970: 1_764_565_200)
+        let result = try await connection.getMessages(
+            anchor: .date(midnight), numBefore: 50, numAfter: 50,
+            narrow: [NarrowElement("channel", .int(10))])
+        #expect(result.anchor == 101)
+        let request = try #require(transport.requests.first)
+        #expect(request.queryValue("anchor") == "date")
+        // A numeric offset, never "Z" (older Pythons can't parse it).
+        #expect(request.queryValue("anchor_date") == "2025-12-01T05:00:00+00:00")
+    }
+
+    @Test func dateAnchorFallsBackToNewestBelowFeatureLevel() async throws {
+        let transport = FakeTransport(script: [.json(Fixtures.getMessagesJSON([]))])
+        let connection = ApiConnection(
+            realmURL: URL(string: "https://test.example")!,
+            email: "self@example.com", apiKey: "key", transport: transport)
+        connection.featureLevel = ApiConnection.anchorDateFeatureLevel - 1
+        _ = try await connection.getMessages(
+            anchor: .date(Date(timeIntervalSince1970: 1_764_565_200)),
+            numBefore: 50, numAfter: 50)
+        let request = try #require(transport.requests.first)
+        #expect(request.queryValue("anchor") == "newest")
+        #expect(request.queryValue("anchor_date") == nil)
+    }
+
     @Test func apiErrorMapping() async throws {
         let transport = FakeTransport(script: [
             .json(Fixtures.errorJSON(code: "BAD_EVENT_QUEUE_ID"), status: 400)
