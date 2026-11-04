@@ -29,6 +29,14 @@ struct TopicAutocompleteField: View {
     /// Reports focus changes (the compose bar suppresses single-key
     /// navigation while any of its inputs are active).
     var onFocusChange: ((Bool) -> Void)?
+    /// Shown atop the card while the field has focus — why the user was
+    /// sent here ("A topic must be specified.").
+    var notice: String?
+    /// Each change focuses the field.
+    var focusRequest = 0
+    /// Tab with nothing to accept, and ⇧Tab, leave the field through here
+    /// (true for ⇧Tab); without it they keep the system's meaning.
+    var onTabOut: ((_ backward: Bool) -> Void)?
 
     @State private var loadedStreamId: Int?
     @State private var selection = -1
@@ -62,6 +70,12 @@ struct TopicAutocompleteField: View {
         return Array(matches.prefix(maxSuggestions))
     }
 
+    /// Suggestions, or a notice above them. (The card is no popover: a
+    /// real one would take keyboard focus from the field.)
+    private var showsCard: Bool {
+        focused && (notice != nil || !suggestions.isEmpty)
+    }
+
     var body: some View {
         Group {
             if dropUp {
@@ -70,7 +84,7 @@ struct TopicAutocompleteField: View {
                 // (A real NSPopover would steal keyboard focus.)
                 styledField
                     .overlay(alignment: .topLeading) {
-                        if !suggestions.isEmpty {
+                        if showsCard {
                             card
                                 .onGeometryChange(for: CGFloat.self) {
                                     $0.size.height
@@ -84,7 +98,7 @@ struct TopicAutocompleteField: View {
             } else {
                 styledField
                     .overlay(alignment: .bottomLeading) {
-                        if !suggestions.isEmpty {
+                        if showsCard {
                             card
                                 .alignmentGuide(.bottom) { d in d[.top] - 6 }
                         }
@@ -103,6 +117,7 @@ struct TopicAutocompleteField: View {
                 if focused { loadIfNeeded() }
                 onFocusChange?(focused)
             }
+            .onChange(of: focusRequest) { focused = true }
             .onChange(of: streamId) {
                 loadedStreamId = nil
                 if focused { loadIfNeeded() }
@@ -131,9 +146,16 @@ struct TopicAutocompleteField: View {
             .autocorrectionDisabled()
             .onKeyPress(.downArrow) { move(1) }
             .onKeyPress(.upArrow) { move(-1) }
-            .onKeyPress(.tab) {
-                guard suggestions.indices.contains(selection) else { return .ignored }
-                accept(suggestions[selection])
+            .onKeyPress(phases: .down) { press in
+                guard press.isPlainTab else { return .ignored }
+                let backward = press.modifiers.contains(.shift)
+                if !backward, suggestions.indices.contains(selection) {
+                    accept(suggestions[selection])
+                    return .handled
+                }
+                guard let onTabOut else { return .ignored }
+                dismissed = true
+                onTabOut(backward)
                 return .handled
             }
             .onKeyPress(.return) {
@@ -159,6 +181,32 @@ struct TopicAutocompleteField: View {
     private static let cardMaxHeight: CGFloat = 248
 
     private var card: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let notice {
+                Label {
+                    Text(notice)
+                } icon: {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(.orange)
+                }
+                .font(.callout.weight(.medium))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                if !suggestions.isEmpty {
+                    Divider()
+                }
+            }
+            if !suggestions.isEmpty {
+                suggestionList
+            }
+        }
+        .frame(width: 260, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
+        .shadow(color: .black.opacity(0.18), radius: 10, y: 2)
+    }
+
+    private var suggestionList: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 1) {
@@ -207,9 +255,6 @@ struct TopicAutocompleteField: View {
                 guard selection >= 0 else { return }
                 proxy.scrollTo(selection)
             }
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
-            .shadow(color: .black.opacity(0.18), radius: 10, y: 2)
         }
     }
 
@@ -238,5 +283,14 @@ struct TopicAutocompleteField: View {
         if !store.channelTopics.isFresh(streamId) {
             store.channelTopics.refresh(streamId)
         }
+    }
+}
+
+extension KeyPress {
+    /// Tab or ⇧Tab with no other modifier (⌃Tab switches window tabs).
+    /// AppKit reports ⇧Tab as the backtab character.
+    var isPlainTab: Bool {
+        (key == .tab || key.character == "\u{19}")
+            && modifiers.subtracting([.shift, .capsLock]).isEmpty
     }
 }

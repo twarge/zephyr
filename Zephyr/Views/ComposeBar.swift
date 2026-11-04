@@ -192,6 +192,10 @@ struct ComposeBar: View {
     @State private var composeBlurredAt = Date.distantPast
     @State private var topicText = ""
     @State private var topicPrefill = ""
+    /// Why the topic field just took focus (a send with no topic); cleared
+    /// as the user types one or leaves.
+    @State private var topicNotice: String?
+    @State private var topicFocusRequest = 0
     @State private var suggestions: [ComposeSuggestion] = []
     @State private var selectedSuggestion = 0
     /// The trigger-to-caret span the accepted completion replaces.
@@ -335,9 +339,14 @@ struct ComposeBar: View {
                             onCommit: { messageFocused = true },
                             onFocusChange: { focused in
                                 topicFieldFocused = focused
+                                if !focused { topicNotice = nil }
                                 updateComposeInputFocus()
-                            })
+                            },
+                            notice: topicNotice,
+                            focusRequest: topicFocusRequest,
+                            onTabOut: { _ in messageFocused = true })
                             .frame(maxWidth: 260)
+                            .onChange(of: topicText) { topicNotice = nil }
                     }
                     if expanded {
                         expandedEditor
@@ -521,7 +530,7 @@ struct ComposeBar: View {
             .onSubmit { send() }
             .onKeyPress(.upArrow) { moveSelection(-1) }
             .onKeyPress(.downArrow) { moveSelection(1) }
-            .onKeyPress(.tab) { acceptSelection() }
+            .onKeyPress(phases: .down) { tabPress($0, longForm: false) }
             // The general form, not onKeyPress(.return, …): the keyed
             // form only fires for UNMODIFIED Return, so ⇧/⌃Return never
             // reached the newline branch and fell through to the
@@ -741,7 +750,7 @@ struct ComposeBar: View {
                         }
                         .onKeyPress(.upArrow) { moveSelection(-1) }
                         .onKeyPress(.downArrow) { moveSelection(1) }
-                        .onKeyPress(.tab) { acceptSelection() }
+                        .onKeyPress(phases: .down) { tabPress($0, longForm: true) }
                         .onKeyPress(.escape) {
                             guard !suggestions.isEmpty else { return .ignored }
                             suggestions = []
@@ -1061,6 +1070,19 @@ struct ComposeBar: View {
         return .handled
     }
 
+    /// Tab and ⇧Tab move between the topic and the message in a channel's
+    /// compose. Tab first accepts an open completion; in the long-form
+    /// editor a plain Tab is text, so only ⇧Tab leaves it.
+    private func tabPress(_ press: KeyPress, longForm: Bool) -> KeyPress.Result {
+        guard press.isPlainTab else { return .ignored }
+        let backward = press.modifiers.contains(.shift)
+        if !backward, acceptSelection() == .handled { return .handled }
+        guard case .channel = mode, backward || !longForm else { return .ignored }
+        suggestions = []
+        topicFocusRequest += 1
+        return .handled
+    }
+
     private func acceptSelection() -> KeyPress.Result {
         guard !suggestions.isEmpty, suggestions.indices.contains(selectedSuggestion) else {
             return .ignored
@@ -1246,7 +1268,22 @@ struct ComposeBar: View {
 
     private func send() {
         guard suggestions.isEmpty else { return }
-        guard canSend, let destination else { return }
+        if case .channel = mode, destination == nil,
+           !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // No topic yet: the cursor goes to the topic field, which says
+            // why, rather than Return just dropping focus.
+            let notice = "A topic must be specified."
+            topicNotice = notice
+            topicFocusRequest += 1
+            AccessibilityNotification.Announcement(notice).post()
+            return
+        }
+        guard canSend, let destination else {
+            // Nothing to send (or an upload still running): submit would
+            // otherwise resign the field.
+            messageFocused = true
+            return
+        }
         showPreview = false
         previewTask?.cancel()
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
