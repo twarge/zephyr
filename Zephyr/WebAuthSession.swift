@@ -21,9 +21,14 @@ final class WebAuthSession: NSObject, ASWebAuthenticationPresentationContextProv
         #if canImport(AppKit)
         anchor = NSApp.keyWindow ?? NSApp.windows.first ?? ASPresentationAnchor()
         #else
-        anchor = UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
-            .first ?? ASPresentationAnchor()
+        // A bare UIWindow() is deprecated (iOS/tvOS/visionOS 26) and
+        // belongs to no scene, so it could never present anyway.
+        let scenes = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+        guard let window = scenes.lazy.compactMap(\.keyWindow).first
+            ?? scenes.first.map(UIWindow.init(windowScene:))
+        else { throw ASWebAuthenticationSessionError(.presentationContextInvalid) }
+        anchor = window
         #endif
         return try await withCheckedThrowingContinuation { continuation in
             // @Sendable: without it the closure inherits this class's
