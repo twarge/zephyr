@@ -98,8 +98,12 @@ public final class MessageListModel: Identifiable {
     /// store, beyond what `Narrow.containsMessage` can see.
     private func admits(_ message: Message, in store: PerAccountStore) -> Bool {
         guard narrow.containsMessage(message, selfUserId: store.selfUserId) else { return false }
-        if case .combinedFeed(includesMuted: false) = narrow {
-            return store.isShownInHome(message)
+        if case .combinedFeed(let includesMuted) = narrow {
+            // The server's combined feed is personal history: a message
+            // never delivered to the user (`historical` — fetched by a
+            // public-channel search, say) isn't in it.
+            if (message.flags ?? []).contains("historical") { return false }
+            if !includesMuted { return store.isShownInHome(message) }
         }
         return true
     }
@@ -178,6 +182,38 @@ public final class MessageListModel: Identifiable {
 
     // MARK: Fetching
 
+    /// Off once the server refuses this list's public-channel search.
+    private var searchesSharedHistory = true
+
+    /// One page of this narrow. A search the server would answer from the
+    /// user's personal history alone also asks across public channels, and
+    /// the two answers merge (see `Narrow.sharedHistoryElements`).
+    private func fetchPage(
+        _ store: PerAccountStore, anchor: MessageAnchor, numBefore: Int, numAfter: Int
+    ) async throws -> GetMessagesResult {
+        let connection = store.connection
+        guard searchesSharedHistory, let shared = narrow.sharedHistoryElements else {
+            return try await connection.getMessages(
+                anchor: anchor, numBefore: numBefore, numAfter: numAfter,
+                narrow: narrow.apiElements)
+        }
+        async let wider = connection.getMessages(
+            anchor: anchor, numBefore: numBefore, numAfter: numAfter, narrow: shared)
+        let personal = try await connection.getMessages(
+            anchor: anchor, numBefore: numBefore, numAfter: numAfter,
+            narrow: narrow.apiElements)
+        do {
+            return .union(
+                [personal, try await wider], anchor: anchor,
+                numBefore: numBefore, numAfter: numAfter)
+        } catch let error as ApiError where error.httpStatus == 400 {
+            // A server or role that can't search public channels: this
+            // list keeps to personal history from here on.
+            searchesSharedHistory = false
+            return personal
+        }
+    }
+
     public func fetchInitial(count: Int = 60) async {
         guard let store, !isFetching else { return }
         isFetching = true
@@ -220,10 +256,9 @@ public final class MessageListModel: Identifiable {
             anchor = .firstUnread
         }
         do {
-            var result = try await store.connection.getMessages(
-                anchor: anchor, numBefore: count,
-                numAfter: anchoredMidHistory ? count : 0,
-                narrow: narrow.apiElements)
+            var result = try await fetchPage(
+                store, anchor: anchor, numBefore: count,
+                numAfter: anchoredMidHistory ? count : 0)
             guard generation == gen else { return }
             // A stale backlog (the first unread is weeks-to-years deep, as
             // in huge never-read public channels) would open the view far
@@ -235,9 +270,8 @@ public final class MessageListModel: Identifiable {
                let newestFetched = result.messages.map(\.timestamp).max(),
                Date.now.timeIntervalSince1970 - TimeInterval(newestFetched)
                    > Self.staleBacklogAge {
-                result = try await store.connection.getMessages(
-                    anchor: .newest, numBefore: count, numAfter: 0,
-                    narrow: narrow.apiElements)
+                result = try await fetchPage(
+                    store, anchor: .newest, numBefore: count, numAfter: 0)
                 guard generation == gen else { return }
                 anchoredMidHistory = false
                 // The newest window can still hold the resume point: when
@@ -259,9 +293,8 @@ public final class MessageListModel: Identifiable {
                    .min(by: { $0.id < $1.id }),
                Date.now.timeIntervalSince1970 - TimeInterval(resumed.timestamp)
                    > Self.staleBacklogAge {
-                result = try await store.connection.getMessages(
-                    anchor: .newest, numBefore: count, numAfter: 0,
-                    narrow: narrow.apiElements)
+                result = try await fetchPage(
+                    store, anchor: .newest, numBefore: count, numAfter: 0)
                 guard generation == gen else { return }
                 anchoredMidHistory = false
             }
@@ -316,9 +349,8 @@ public final class MessageListModel: Identifiable {
         let gen = generation
         defer { isFetching = false }
         do {
-            let result = try await store.connection.getMessages(
-                anchor: .id(last.id), numBefore: 0, numAfter: count,
-                narrow: narrow.apiElements)
+            let result = try await fetchPage(
+                store, anchor: .id(last.id), numBefore: 0, numAfter: count)
             guard generation == gen else { return }
             store.reconcileFetchedMessages(result.messages)
             let newer = result.messages
@@ -345,8 +377,8 @@ public final class MessageListModel: Identifiable {
         isFetching = true
         defer { isFetching = false }
         do {
-            let result = try await store.connection.getMessages(
-                anchor: .newest, numBefore: count, numAfter: 0, narrow: narrow.apiElements)
+            let result = try await fetchPage(
+                store, anchor: .newest, numBefore: count, numAfter: 0)
             guard generation == gen else { return }
             store.reconcileFetchedMessages(result.messages)
             let fetched = result.messages
@@ -489,8 +521,8 @@ public final class MessageListModel: Identifiable {
         let gen = generation
         defer { isFetching = false }
         do {
-            let result = try await store.connection.getMessages(
-                anchor: .id(first.id), numBefore: count, numAfter: 0, narrow: narrow.apiElements)
+            let result = try await fetchPage(
+                store, anchor: .id(first.id), numBefore: count, numAfter: 0)
             guard generation == gen else { return }
             store.reconcileFetchedMessages(result.messages)
             let older = result.messages

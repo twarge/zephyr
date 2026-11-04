@@ -100,6 +100,9 @@ public final class ConversationList {
     }
 
     func noteMessage(_ message: Message, selfUserId: Int) {
+        // Never delivered to the user (a public-channel search result, a
+        // channel they aren't in): not one of their conversations.
+        guard !(message.flags ?? []).contains("historical") else { return }
         guard let key = Unreads.conversationKey(for: message, selfUserId: selfUserId) else { return }
         guard (byKey[key]?.lastMessageId ?? -1) <= message.id else { return }
         byKey[key] = Conversation(

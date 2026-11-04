@@ -611,7 +611,8 @@ struct OfflineTests {
         try #require(offline.openDatabase())
             .upsert([special, try fixtureMessage(id: 4)], selfUserId: 1)
 
-        let (store, _) = try makeStore(script: [.networkError], offline: offline)
+        // The search asks personal history and public channels: both fail.
+        let (store, _) = try makeStore(script: [.networkError, .networkError], offline: offline)
         let list = MessageListModel(
             store: store, narrow: .custom([NarrowElement("search", .string("zephyr"))]))
         await list.fetchInitial()

@@ -409,8 +409,9 @@ nonisolated struct SearchQuery: Hashable, Codable {
         }
         // Narrows lacking a channel/dm operator search the user's personal
         // message history — subscribed channels (private included) plus DMs.
-        // That matches the web app; appending `channels:public` here would
-        // silently exclude private channels and DMs from every search.
+        // Appending `channels:public` here would drop private channels and
+        // DMs; the feed instead asks both ways and merges them
+        // (`Narrow.sharedHistoryElements`).
         return elements
     }
 

@@ -117,11 +117,11 @@ struct MessageListModelTests {
     @Test func dateSearchWithoutAPickHasNoTarget() async throws {
         // An empty narrow answers the server's past-the-end anchor; a
         // server too old for dates answers newest. Neither lands anywhere.
-        let (store, transport) = try makeStoreWithTransport(script: [
-            .json(Fixtures.getMessagesJSON(
-                [Fixtures.channelMessageJSON(id: 100, flags: ["read"])],
-                anchor: 10_000_000_000_000_000))
-        ])
+        // Unscoped, so the search also asks public channels: two answers.
+        let answer = FakeResponse.json(Fixtures.getMessagesJSON(
+            [Fixtures.channelMessageJSON(id: 100, flags: ["read"])],
+            anchor: 10_000_000_000_000_000))
+        let (store, transport) = try makeStoreWithTransport(script: [answer, answer])
         #expect(!store.supportsDateAnchor)
         let list = MessageListModel(
             store: store, narrow: .custom([]),

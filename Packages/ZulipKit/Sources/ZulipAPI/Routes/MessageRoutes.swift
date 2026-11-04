@@ -62,6 +62,17 @@ public struct GetMessagesResult: Decodable, Sendable {
     public var foundOldest: Bool?
     public var historyLimited: Bool?
     public var anchor: Int?
+
+    public init(
+        messages: [Message], foundNewest: Bool?, foundOldest: Bool?,
+        historyLimited: Bool? = nil, anchor: Int? = nil
+    ) {
+        self.messages = messages
+        self.foundNewest = foundNewest
+        self.foundOldest = foundOldest
+        self.historyLimited = historyLimited
+        self.anchor = anchor
+    }
 }
 
 /// A pending message reminder (Zulip Server 11+): the reminders bot DMs

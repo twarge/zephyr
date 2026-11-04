@@ -77,10 +77,14 @@ used unconditionally; features above 277 note their FL gate.
   channel **id**), `topic`, `dm` (operand: user-id array), `dm-including`, `sender`,
   `search`, `id`, `near`, `with`, `is` (`unread|mentioned|starred|followed|dm|resolved`),
   `has` (`link|image|attachment|reaction`). All modern names are < FL 277 — safe
-  unconditionally. ⚠ Narrows lacking a `channel`/`channels` operator search only the
-  user's **personal message history** (near-empty for new accounts) — add
-  `{"operator": "channels", "operand": "public"}` to unscoped searches to cover shared
-  history, like the web app.
+  unconditionally. Narrows lacking a `channel`/`channels` operator search only the
+  user's **personal message history**: messages delivered to them (near-empty for new
+  accounts). `channels:public` reaches all public-channel history but drops DMs and
+  private channels; the web offers it as "Expand search" at the end of results.
+  Zephyr fetches every page of such a search both ways (no channel/dm/`is` term other
+  than `is:resolved`) and merges them, keeping only the id range both answers fully
+  cover. Messages the user never received carry the `historical` flag and stay out
+  of the combined feed and conversation lists.
 - **`date` operator** (web's `date:YYYY-MM-DD` search, FL 445; api/construct-narrow
   "Narrow terms that don't filter messages"): never sent in `narrow`. The other terms are
   fetched with `anchor=date` + `anchor_date` = the day's local midnight as a full datetime

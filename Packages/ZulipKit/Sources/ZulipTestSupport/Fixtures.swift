@@ -133,12 +133,13 @@ public enum Fixtures {
     /// `anchor` is the message id the server anchored at (a date anchor's
     /// resolution), omitted when nil.
     public static func getMessagesJSON(
-        _ messages: [String], foundNewest: Bool = true, anchor: Int? = nil
+        _ messages: [String], foundNewest: Bool = true, foundOldest: Bool = false,
+        anchor: Int? = nil
     ) -> String {
         let anchorField = anchor.map { #", "anchor": \#($0)"# } ?? ""
         return """
             {"result": "success", "msg": "", "messages": [\(messages.joined(separator: ", "))],
-             "found_newest": \(foundNewest), "found_oldest": false, "history_limited": false\(anchorField)}
+             "found_newest": \(foundNewest), "found_oldest": \(foundOldest), "history_limited": false\(anchorField)}
             """
     }
 

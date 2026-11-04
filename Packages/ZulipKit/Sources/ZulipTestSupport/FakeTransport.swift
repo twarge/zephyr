@@ -41,8 +41,12 @@ public enum FakeResponse: Sendable {
 }
 
 /// Scripted `ApiTransport`: responses are served in FIFO order, then
-/// `defaultResponse` (if set) for any further requests.
+/// `defaultResponse` (if set) for any further requests. A `responder`
+/// answers first, by request — for concurrent requests, whose arrival
+/// order a script can't rely on; returning nil falls through to the script.
 public final class FakeTransport: ApiTransport {
+    public typealias Responder = @Sendable (RecordedRequest) -> FakeResponse?
+
     private struct State {
         var script: [FakeResponse]
         var defaultResponse: FakeResponse?
@@ -50,9 +54,14 @@ public final class FakeTransport: ApiTransport {
     }
 
     private let state: Mutex<State>
+    private let responder: Responder?
 
-    public init(script: [FakeResponse] = [], defaultResponse: FakeResponse? = nil) {
+    public init(
+        script: [FakeResponse] = [], defaultResponse: FakeResponse? = nil,
+        responder: Responder? = nil
+    ) {
         state = Mutex(State(script: script, defaultResponse: defaultResponse))
+        self.responder = responder
     }
 
     public func enqueue(_ response: FakeResponse) {
@@ -69,8 +78,10 @@ public final class FakeTransport: ApiTransport {
             url: request.url!,
             headers: request.allHTTPHeaderFields ?? [:],
             body: request.httpBody.map { String(decoding: $0, as: UTF8.self) })
+        let answered = responder?(recorded)
         let response = state.withLock { state -> FakeResponse? in
             state.recorded.append(recorded)
+            if let answered { return answered }
             if state.script.isEmpty {
                 return state.defaultResponse
             }
