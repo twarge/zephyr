@@ -433,6 +433,41 @@ final class KeyboardRouter {
     /// Format-menu actions (⌘B/⌘I/⌘K) applied by the visible compose bar.
     @ObservationIgnored var applyFormat: ((ComposeFormat) -> Void)?
 
+    /// List indenting (⌘] / ⌘[, Format → Indent / Outdent List Item):
+    /// each editor answers whether it took the step — focused, with a list
+    /// item at its caret. The compose bar's is ownership-tokened like
+    /// uploads; the new-conversation sheet sets its own while it's up.
+    @ObservationIgnored private var composeListIndent: ((Bool) -> Bool)?
+    @ObservationIgnored private var composeListIndentOwner: UUID?
+    @ObservationIgnored var sheetListIndent: ((Bool) -> Bool)?
+
+    func registerListIndent(owner: UUID, _ handler: @escaping (Bool) -> Bool) {
+        composeListIndentOwner = owner
+        composeListIndent = handler
+    }
+
+    func unregisterListIndent(owner: UUID) {
+        guard composeListIndentOwner == owner else { return }
+        composeListIndentOwner = nil
+        composeListIndent = nil
+    }
+
+    /// Indents (or outdents) at the caret of whichever editor is up front;
+    /// false when that's no list item, and the keys should navigate.
+    func indentList(_ increase: Bool) -> Bool {
+        #if canImport(AppKit)
+        // This window's compose bar, or the sheet over it. The compose bar
+        // stays focused behind a sheet, so only the sheet's editor may
+        // answer while one is key.
+        guard let keyWindow = NSApp.keyWindow, let hostWindow else { return false }
+        let handler = keyWindow == hostWindow ? composeListIndent
+            : keyWindow.sheetParent == hostWindow ? sheetListIndent : nil
+        #else
+        let handler = sheetListIndent ?? composeListIndent
+        #endif
+        return handler?(increase) ?? false
+    }
+
     /// The selected message (also the share target on iOS).
     var selectedMessage: Message? {
         guard let selectedMessageId else { return nil }
@@ -929,6 +964,7 @@ struct ShortcutsHelpView: View {
             ("x", "New direct message"),
             ("e", "Edit your selected message"),
             ("⌘Return", "Send"),
+            ("⌘] / ⌘[", "Indent / outdent list item"),
             ("⌘N", "New conversation"),
         ]),
         ("Actions", [

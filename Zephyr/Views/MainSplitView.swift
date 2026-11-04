@@ -411,6 +411,8 @@ struct MainSplitView: View {
         stageOne
         .sheet(item: $newConversation) { mode in
             NewConversationSheet(store: store, selection: $selection, mode: mode)
+                // Its editor registers for ⌘] / ⌘[ list indenting.
+                .environment(keys)
                 #if !os(macOS)
                 .presentationDragIndicator(.visible)
                 .presentationDetents([.medium, .large])
@@ -420,12 +422,7 @@ struct MainSplitView: View {
             ShortcutsHelpView()
         }
         .onChange(of: model.pendingFormat) {
-            guard let format = model.pendingFormat else { return }
-            #if os(macOS)
-            guard keys.hostWindow?.isKeyWindow != false else { return }
-            #endif
-            model.pendingFormat = nil
-            keys.applyFormat?(format)
+            consumeFormat()
         }
         // File → New Conversation (⌘N) arrives via the app commands; with
         // several main windows open, only the key window's copy takes it.
@@ -462,12 +459,7 @@ struct MainSplitView: View {
             consumeCommand()
         }
         .onChange(of: model.pendingHistoryStep) {
-            guard let step = model.pendingHistoryStep else { return }
-            #if os(macOS)
-            guard keys.hostWindow?.isKeyWindow != false else { return }
-            #endif
-            model.pendingHistoryStep = nil
-            navigateHistory(step)
+            consumeHistoryStep()
         }
         .sheet(isPresented: $showOpenQuickly) {
             OpenQuicklyView(store: store) { destination in
@@ -829,6 +821,54 @@ struct MainSplitView: View {
                 #endif
             }
     }
+
+    /// Go → Back / Forward in the key window — except that the keys, in a
+    /// compose editor whose caret is in a list item, indent it instead.
+    private func consumeHistoryStep() {
+        guard let step = model.pendingHistoryStep else { return }
+        #if os(macOS)
+        // A sheet over this window may take the keys for its editor (the
+        // new-conversation sheet's); nothing navigates behind it.
+        let inSheet = hostSheetIsKey
+        guard keys.hostWindow?.isKeyWindow != false || inSheet else { return }
+        #endif
+        model.pendingHistoryStep = nil
+        if step.byKey, keys.indentList(step.delta > 0) { return }
+        #if os(macOS)
+        if inSheet { return }
+        #endif
+        navigateHistory(step.delta)
+    }
+
+    /// Format-menu actions apply in the key window's compose bar; list
+    /// indenting goes to whichever editor is up front, as its keys do.
+    private func consumeFormat() {
+        guard let format = model.pendingFormat else { return }
+        #if os(macOS)
+        let inSheet = hostSheetIsKey
+        guard keys.hostWindow?.isKeyWindow != false || inSheet else { return }
+        #endif
+        model.pendingFormat = nil
+        switch format {
+        case .indentList, .outdentList:
+            _ = keys.indentList(format == .indentList)
+        default:
+            #if os(macOS)
+            // The sheet's editor takes no other formats.
+            if inSheet { return }
+            #endif
+            keys.applyFormat?(format)
+        }
+    }
+
+    #if os(macOS)
+    /// A sheet over this window is key: menu commands aimed at "the key
+    /// window" land here, not in another window.
+    private var hostSheetIsKey: Bool {
+        guard let hostWindow = keys.hostWindow else { return false }
+        return NSApp.keyWindow?.sheetParent == hostWindow
+    }
+    #endif
 
     private func navigateHistory(_ step: Int) {
         historyNavigation = true

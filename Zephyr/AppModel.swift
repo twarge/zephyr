@@ -18,6 +18,33 @@ enum ComposeFormat {
     case code
     case quote
     case spoiler
+    /// The list item(s) at the caret, a level in or out — what ⌘] / ⌘[
+    /// do there (see HistoryStep).
+    case indentList
+    case outdentList
+}
+
+/// A Go → Back / Forward request: -1 back, +1 forward. `byKey` marks the
+/// ⌘[ / ⌘] keys rather than a pick from the menu: in a compose editor
+/// whose caret is in a list item, the keys outdent and indent it instead
+/// (Zulip web's list shortcuts), and a pick from the menu still navigates.
+struct HistoryStep: Equatable {
+    var delta: Int
+    var byKey: Bool
+
+    /// The menu item's request. On macOS the event being handled tells
+    /// the keys from a pick (the key equivalent fires inside its keyDown);
+    /// iPadOS can't tell, so there a pick from the menu bar counts as the
+    /// keys.
+    static func fromMenu(_ delta: Int) -> HistoryStep {
+        #if os(macOS)
+        let event = NSApp.currentEvent
+        let byKey = event?.type == .keyDown && event?.modifierFlags.contains(.command) == true
+        #else
+        let byKey = true
+        #endif
+        return HistoryStep(delta: delta, byKey: byKey)
+    }
 }
 
 /// A menu-bar command routed to the key window (MainSplitView consumes).
@@ -110,9 +137,10 @@ final class AppModel {
     var pendingNewConversation = false
     /// Set by File → Open Quickly… (⌘⇧O); the key window shows the palette.
     var pendingOpenQuickly = false
-    /// View → Back (⌘[) / Forward (⌘]): the key window steps its own
-    /// navigation history (-1 back, +1 forward).
-    var pendingHistoryStep: Int?
+    /// Go → Back (⌘[) / Forward (⌘]): the key window steps its own
+    /// navigation history — or, for the keys in a compose list item,
+    /// indents it.
+    var pendingHistoryStep: HistoryStep?
     /// Share-extension items awaiting a compose bar: set when the user
     /// picks a destination; the next compose bar to appear seeds itself.
     var pendingComposeSeed: [ShareInbox.PendingItem]?

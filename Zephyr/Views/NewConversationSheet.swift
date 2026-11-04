@@ -31,12 +31,16 @@ struct NewConversationSheet: View {
     let peopleOnly: Bool
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(KeyboardRouter.self) private var keys
     @State private var query = ""
     @State private var selectedUsers: [User]
     @State private var selectedChannel: Subscription?
     @State private var topicText = ""
     @State private var messageText = ""
+    /// The editor's caret, for ⌘] / ⌘[ list indenting.
+    @State private var messageSelection: TextSelection?
     @FocusState private var queryFocused: Bool
+    @FocusState private var messageFocused: Bool
     @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var showFileImporter = false
     @State private var activeUploads = 0
@@ -270,7 +274,14 @@ struct NewConversationSheet: View {
         #if os(macOS)
         .frame(width: 460)
         #endif
-        .onAppear { queryFocused = true }
+        .onAppear {
+            queryFocused = true
+            // ⌘] / ⌘[ come here, not to the compose bar, while this is up.
+            keys.sheetListIndent = { increase in
+                indentList(increase)
+            }
+        }
+        .onDisappear { keys.sheetListIndent = nil }
         .onChange(of: photoPickerItems) {
             guard !photoPickerItems.isEmpty else { return }
             uploadPickedPhotos()
@@ -308,7 +319,7 @@ struct NewConversationSheet: View {
                         .padding(.leading, 10)
                         .allowsHitTesting(false)
                 }
-                TextEditor(text: $messageText)
+                TextEditor(text: $messageText, selection: $messageSelection)
                     .scrollContentBackground(.hidden)
                     .font(.body)
                     .padding(.horizontal, 5)
@@ -318,6 +329,7 @@ struct NewConversationSheet: View {
                     #else
                     .padding(.vertical, 1)
                     #endif
+                    .focused($messageFocused)
             }
         }
         .frame(minHeight: Self.editorMinHeight, maxHeight: .infinity)
@@ -351,6 +363,20 @@ struct NewConversationSheet: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
+    }
+
+    /// ⌘] / ⌘[ in a list item, as in the compose bar: false when the
+    /// editor isn't focused or its selection touches no list item.
+    private func indentList(_ increase: Bool) -> Bool {
+        guard messageFocused, !showPreview,
+              let edit = ComposeListIndent.edit(
+                messageText, selection: messageSelection, increase: increase)
+        else { return false }
+        if edit.text != messageText {
+            messageText = edit.text
+        }
+        messageSelection = TextSelection(range: edit.selection)
+        return true
     }
 
     // MARK: Attachments and preview (the compose bar's behavior)

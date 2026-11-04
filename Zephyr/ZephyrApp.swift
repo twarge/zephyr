@@ -148,9 +148,12 @@ struct GoCommands: Commands {
 
     var body: some Commands {
         CommandMenu("Go") {
-            Button("Back") { model.pendingHistoryStep = -1 }
+            // These own ⌘[ / ⌘] outright — nothing in a window claims the
+            // keys first, so they arrive here even from compose — and
+            // hand them to the editor when its caret is in a list item.
+            Button("Back") { model.pendingHistoryStep = .fromMenu(-1) }
                 .keyboardShortcut("[", modifiers: .command)
-            Button("Forward") { model.pendingHistoryStep = 1 }
+            Button("Forward") { model.pendingHistoryStep = .fromMenu(1) }
                 .keyboardShortcut("]", modifiers: .command)
             Divider()
             Button("Summary") { model.pendingCommand = .navigate(.summary) }
@@ -302,6 +305,12 @@ extension ZephyrApp {
             Button("Quote") { model.pendingFormat = .quote }
                 .keyboardShortcut("9", modifiers: [.command, .shift])
             Button("Spoiler") { model.pendingFormat = .spoiler }
+            Divider()
+            // No shortcut shown: ⌘] / ⌘[ are Go → Forward / Back's, which
+            // pass them on in a list item; a second binding would duplicate
+            // the key equivalent (undefined behavior on iPadOS).
+            Button("Indent List Item") { model.pendingFormat = .indentList }
+            Button("Outdent List Item") { model.pendingFormat = .outdentList }
         }
         CommandGroup(replacing: .help) {
             #if os(macOS)

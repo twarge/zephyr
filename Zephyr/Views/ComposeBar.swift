@@ -405,6 +405,10 @@ struct ComposeBar: View {
             keys.applyFormat = { format in
                 applyFormat(format)
             }
+            // ⌘] / ⌘[ in a list item indent it rather than navigate.
+            keys.registerListIndent(owner: uploadOwnerId) { increase in
+                indentList(increase)
+            }
             // Quote-and-reply appends to the draft.
             keys.registerComposeInsertion(owner: uploadOwnerId) { snippet in
                 appendToDraft(snippet)
@@ -429,6 +433,7 @@ struct ComposeBar: View {
             keys.composeInputFocused = false
             keys.unregisterUpload(owner: uploadOwnerId)
             keys.unregisterComposeInsertion(owner: uploadOwnerId)
+            keys.unregisterListIndent(owner: uploadOwnerId)
             if case .channel = mode {
                 keys.setComposeTopic = nil
             }
@@ -811,6 +816,9 @@ struct ComposeBar: View {
         case .code: wrappers = ("`", "`")
         case .quote: wrappers = ("```quote\n", "\n```")
         case .spoiler: wrappers = ("```spoiler\n", "\n```")
+        case .indentList, .outdentList:
+            _ = indentList(format == .indentList)
+            return
         }
         let selection = expanded
             ? (showPreview ? nil : editorSelection) : fieldSelection
@@ -822,6 +830,28 @@ struct ComposeBar: View {
             text += wrappers.0 + wrappers.1
         }
         messageFocused = true
+    }
+
+    /// ⌘] / ⌘[: the list item(s) at the caret, a level in or out (Zulip
+    /// web's list indenting). False when the field isn't focused or its
+    /// selection touches no list item — the keys then navigate.
+    private func indentList(_ increase: Bool) -> Bool {
+        guard messageFocused, !(expanded && showPreview),
+              let edit = ComposeListIndent.edit(
+                text, selection: expanded ? editorSelection : fieldSelection,
+                increase: increase)
+        else { return false }
+        if edit.text != text {
+            text = edit.text
+        }
+        // After the text: the binding would pin the caret at its old offset.
+        let selection = TextSelection(range: edit.selection)
+        if expanded {
+            editorSelection = selection
+        } else {
+            fieldSelection = selection
+        }
+        return true
     }
 
     // MARK: Suggestions
@@ -1298,6 +1328,19 @@ struct ComposeBar: View {
         // Keep composing: submit otherwise resigns focus (dropping the
         // keyboard on iOS) after every message.
         messageFocused = true
+    }
+}
+
+extension ComposeListIndent {
+    /// The edit for an editor's selection binding: nil without one plain
+    /// range (a multi-range selection is left to navigate, like no list).
+    static func edit(
+        _ text: String, selection: TextSelection?, increase: Bool
+    ) -> Edit? {
+        guard let selection, case .selection(let range) = selection.indices,
+              range.upperBound <= text.endIndex
+        else { return nil }
+        return edit(text, selection: range, increase: increase)
     }
 }
 

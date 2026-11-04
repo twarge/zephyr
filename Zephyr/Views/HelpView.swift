@@ -54,7 +54,7 @@ struct HelpView: View {
     /// keymap.
     private static let appShortcuts: [(String, String)] = [
         ("⌘⇧O", "Open Quickly — channel or view"),
-        ("⌘[  ⌘]", "Back / forward"),
+        ("⌘[  ⌘]", "Back / forward (in a compose list item: outdent / indent)"),
         ("⌥⌘0…6", "Go to Summary, Recent, Combined, Mentions, Starred, Drafts, Outbox"),
         ("⌘F", "Search"),
         ("⌘R", "Reply to the selected message"),
