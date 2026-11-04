@@ -14,7 +14,9 @@ public enum InternalLink: Equatable, Sendable {
     case inbox
     case combinedFeed
     case drafts
-    case search(text: String?, senderId: Int?, streamId: Int?, topic: String?)
+    /// `day` is the web's `date:` operand: the search opens around it.
+    case search(
+        text: String?, senderId: Int?, streamId: Int?, topic: String?, day: CalendarDay? = nil)
 
     public static func parse(href: String, realmURL: URL) -> InternalLink? {
         guard let hashIndex = href.firstIndex(of: "#") else { return nil }
@@ -44,6 +46,7 @@ public enum InternalLink: Equatable, Sendable {
         var senderId: Int?
         var view: InternalLink?
         var near: Int?
+        var day: CalendarDay?
         var index = 1
         while index + 1 < parts.count {
             let operatorName = parts[index]
@@ -82,18 +85,28 @@ public enum InternalLink: Equatable, Sendable {
                 senderId = id
             case "near", "with":
                 near = Int(operand)
+            case "date":
+                // Strict "YYYY-MM-DD" in the years the web searches.
+                guard let parsed = CalendarDay(iso: operand), parsed.isSearchable() else {
+                    return nil
+                }
+                day = parsed
             default:
                 return nil
             }
             index += 2
         }
-        if let view, streamId == nil, dmIds == nil, searchText == nil, senderId == nil {
+        if let view, streamId == nil, dmIds == nil, searchText == nil, senderId == nil,
+           day == nil {
             return view
         }
-        if searchText != nil || senderId != nil {
-            // A search narrow, optionally scoped by channel/topic.
+        if searchText != nil || senderId != nil || day != nil {
+            // A search narrow, optionally scoped by channel/topic. A date
+            // makes even a plain channel or topic one, and outranks a near:
+            // the web treats the two as incompatible and honors the date.
             guard dmIds == nil, view == nil else { return nil }
-            return .search(text: searchText, senderId: senderId, streamId: streamId, topic: topic)
+            return .search(
+                text: searchText, senderId: senderId, streamId: streamId, topic: topic, day: day)
         }
         if let dmIds {
             return .dm(userIds: dmIds, nearMessageId: near)

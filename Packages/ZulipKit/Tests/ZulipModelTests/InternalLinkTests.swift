@@ -131,3 +131,55 @@ struct TopicNameTests {
     }
 }
 
+@Suite struct DateLinkTests {
+    private let realm = URL(string: "https://discourse.example.com")!
+    private let day = CalendarDay(year: 2025, month: 12, day: 1)
+
+    @Test func dateOpensItsNarrowAsADateSearch() {
+        // Even a plain channel or topic: the date anchors where it opens.
+        #expect(InternalLink.parse(href: "/#narrow/channel/5-general/date/2025-12-01", realmURL: realm)
+            == .search(text: nil, senderId: nil, streamId: 5, topic: nil, day: day))
+        #expect(InternalLink.parse(
+            href: "/#narrow/channel/5-general/topic/launch.20day/date/2025-12-01", realmURL: realm)
+            == .search(text: nil, senderId: nil, streamId: 5, topic: "launch day", day: day))
+        #expect(InternalLink.parse(href: "/#narrow/date/2025-12-01", realmURL: realm)
+            == .search(text: nil, senderId: nil, streamId: nil, topic: nil, day: day))
+    }
+
+    @Test func dateKeepsSearchTextAndSender() {
+        #expect(InternalLink.parse(href: "/#narrow/search/launch/date/2025-12-01", realmURL: realm)
+            == .search(text: "launch", senderId: nil, streamId: nil, topic: nil, day: day))
+        #expect(InternalLink.parse(
+            href: "/#narrow/channel/5-general/sender/9-tom/date/2025-12-01", realmURL: realm)
+            == .search(text: nil, senderId: 9, streamId: 5, topic: nil, day: day))
+    }
+
+    @Test func invalidDatesFallThrough() {
+        for operand in ["2025-12-1", "2025-02-30", "20251201", "yesterday", "1969-12-31", "9999-01-01"] {
+            #expect(InternalLink.parse(
+                href: "/#narrow/channel/5-general/date/\(operand)", realmURL: realm) == nil)
+        }
+        // Negated dates aren't a thing on the web either.
+        #expect(InternalLink.parse(
+            href: "/#narrow/channel/5-general/-date/2025-12-01", realmURL: realm) == nil)
+    }
+
+    @Test func dateOutranksNear() {
+        // The web treats date and near as incompatible and honors the date.
+        let expected = InternalLink.search(
+            text: nil, senderId: nil, streamId: 5, topic: "launch", day: day)
+        #expect(InternalLink.parse(
+            href: "/#narrow/channel/5-general/topic/launch/near/123/date/2025-12-01", realmURL: realm)
+            == expected)
+        #expect(InternalLink.parse(
+            href: "/#narrow/channel/5-general/topic/launch/date/2025-12-01/with/123", realmURL: realm)
+            == expected)
+    }
+
+    @Test func dateWithUnscopableTermsFallsThrough() {
+        // A search can't scope to a DM or a view, so the web shows these.
+        #expect(InternalLink.parse(href: "/#narrow/dm/9-tom/date/2025-12-01", realmURL: realm) == nil)
+        #expect(InternalLink.parse(href: "/#narrow/is/starred/date/2025-12-01", realmURL: realm) == nil)
+    }
+}
+

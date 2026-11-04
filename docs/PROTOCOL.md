@@ -92,6 +92,10 @@ used unconditionally; features above 277 note their FL gate.
   FL 445 the suggestion is hidden and a stored date search opens at `newest`. Typeahead
   follows web `date_util.ts`: quick picks (today, yesterday, two days ago, a week ago, a
   month ago) by name, half-typed dates completed toward them, days 1970 through this year.
+  Web URLs carry it as a hash term (`#narrow/channel/5-general/date/2025-12-01`):
+  `InternalLink` opens any narrow with a valid date as a date search keeping its
+  channel/topic/sender/text scope (a plain channel or topic too), drops a `near`/`with`,
+  and treats a malformed or out-of-range day — or a date beside `dm`/`is` — as not ours.
 - **Send**: `POST /messages` — `type: "direct"` (`to`: user-id array) or `"channel"`
   (`to`: channel id, `topic`). Local echo: pass `queue_id` + `local_id`; the `message`
   event echoes `local_message_id`. `read_by_sender: true` (FL 236).

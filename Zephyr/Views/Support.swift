@@ -569,7 +569,7 @@ extension InternalLink {
             components.queryItems = [URLQueryItem(name: "view", value: "combined")]
         case .drafts:
             components.queryItems = [URLQueryItem(name: "view", value: "drafts")]
-        case .search(let text, let senderId, let streamId, let topic):
+        case .search(let text, let senderId, let streamId, let topic, let day):
             var items = [URLQueryItem(name: "search", value: text ?? "")]
             if let senderId {
                 items.append(URLQueryItem(name: "sender", value: String(senderId)))
@@ -579,6 +579,9 @@ extension InternalLink {
             }
             if let topic {
                 items.append(URLQueryItem(name: "topic", value: topic))
+            }
+            if let day {
+                items.append(URLQueryItem(name: "date", value: day.iso))
             }
             components.queryItems = items
         }
@@ -599,7 +602,8 @@ extension InternalLink {
                 text: text.isEmpty ? nil : text,
                 senderId: value("sender").flatMap(Int.init),
                 streamId: value("stream").flatMap(Int.init),
-                topic: value("topic"))
+                topic: value("topic"),
+                day: value("date").flatMap(CalendarDay.init(iso:)))
         } else if let view = value("view") {
             switch view {
             case "recent": self = .recent
@@ -655,7 +659,7 @@ extension InternalLink {
             return (.combinedFeed, nil)
         case .drafts:
             return (.drafts, nil)
-        case .search(let text, let senderId, let streamId, let topic):
+        case .search(let text, let senderId, let streamId, let topic, let day):
             var tokens: [SearchToken] = []
             if let streamId {
                 let name = store?.channels[streamId]?.name
@@ -668,6 +672,9 @@ extension InternalLink {
             if let senderId {
                 let name = store?.users[senderId]?.fullName ?? "User \(senderId)"
                 tokens.append(.sender(userId: senderId, name: name))
+            }
+            if let day {
+                tokens.append(.date(day))
             }
             return (.search(SearchQuery(tokens: tokens, text: text ?? "")), nil)
         }
