@@ -1450,6 +1450,7 @@ private struct SidebarTopicRow: View {
     @State private var showRename = false
     @State private var renameText = ""
     @State private var showMove = false
+    @State private var showLinks = false
 
     /// macOS's sidebar runs smaller than body; iOS keeps every row
     /// body-sized like Mail's.
@@ -1544,6 +1545,13 @@ private struct SidebarTopicRow: View {
                 showMove = true
             }
             Divider()
+            // Offered only when something links to or from the topic,
+            // as the web app does.
+            if store.topicLinks.hasLinks(streamId: streamId, topic: topic.name) {
+                Button("View Links…") {
+                    showLinks = true
+                }
+            }
             Button("Copy Link to Topic") {
                 Platform.copyToPasteboard(key.link(in: store))
             }
@@ -1564,6 +1572,9 @@ private struct SidebarTopicRow: View {
                 store: store,
                 subject: .topic(streamId: streamId, name: topic.name, maxId: topic.maxId),
                 onMoved: { onRenamed?() })
+        }
+        .sheet(isPresented: $showLinks) {
+            TopicLinksSheet(store: store, streamId: streamId, topic: topic.name)
         }
     }
 

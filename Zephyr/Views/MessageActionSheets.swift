@@ -305,3 +305,219 @@ struct EditHistoryView: View {
         }
     }
 }
+
+/// View Links (the web app's topic menu item): the conversations this
+/// topic's messages link to, and those whose messages link to it. The lists
+/// come from every message stored on this device, then the server is asked
+/// for linking messages never fetched. A row opens its conversation; a
+/// message link lands on the message.
+struct TopicLinksSheet: View {
+    let store: PerAccountStore
+    let streamId: Int
+    let topic: String
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @State private var lists: TopicLinkLists?
+    @State private var isCheckingServer = false
+
+    private var channelName: String {
+        store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "?"
+    }
+
+    private var topicName: String {
+        let display = TopicName.displayName(topic)
+        return display.isEmpty ? "general chat" : display
+    }
+
+    var body: some View {
+        #if os(macOS)
+        VStack(alignment: .leading, spacing: 12) {
+            header
+            ScrollView {
+                sections
+            }
+            .frame(maxHeight: 360)
+            footer
+        }
+        .padding(16)
+        .frame(width: 400)
+        .task { await load() }
+        #else
+        // The ChannelColorSheet layout: half height to start, the whole
+        // sheet scrolling when the lists run long.
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                header
+                sections
+                footer
+            }
+            .padding(16)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .task { await load() }
+        #endif
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Links")
+                .font(.headline)
+            Text("#\(channelName) › \(topicName)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    @ViewBuilder
+    private var sections: some View {
+        if let lists {
+            VStack(alignment: .leading, spacing: 14) {
+                if !lists.linksTo.isEmpty {
+                    section("Links to", systemImage: "arrow.up.right", rows: lists.linksTo)
+                }
+                if !lists.linkedFrom.isEmpty {
+                    section("Linked from", systemImage: "arrow.down.left", rows: lists.linkedFrom)
+                }
+                if lists.isEmpty, !isCheckingServer {
+                    Text("Nothing links to or from this topic.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func section(
+        _ title: LocalizedStringKey, systemImage: String, rows: [TopicLinkLists.Row]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Divider()
+            ForEach(rows) { row in
+                TopicLinkRow(store: store, row: row) { open(row) }
+            }
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 6) {
+            if isCheckingServer {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Checking the server…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Done") { dismiss() }
+                .keyboardShortcut(.defaultAction)
+        }
+    }
+
+    private func load() async {
+        lists = await store.topicLinks.lists(streamId: streamId, topic: topic)
+        isCheckingServer = true
+        if let filled = await store.topicLinks.listsIncludingServer(
+            streamId: streamId, topic: topic) {
+            lists = filled
+        }
+        isCheckingServer = false
+    }
+
+    private func open(_ row: TopicLinkLists.Row) {
+        let link = InternalLink.topic(
+            streamId: row.streamId, topic: row.topic, nearMessageId: row.messageId)
+        dismiss()
+        if let url = link.appURL {
+            openURL(url)
+        }
+    }
+}
+
+/// One View Links row, styled like Recent Conversations': the channel's
+/// colored glyph, channel › topic, and for a link to one message, who
+/// sent it and when.
+private struct TopicLinkRow: View {
+    let store: PerAccountStore
+    let row: TopicLinkLists.Row
+    let open: () -> Void
+
+    private var channelColor: Color {
+        store.subscriptions[row.streamId]?.color.flatMap(Color.init(zulipHex:))
+            ?? .stableColor(for: row.streamId)
+    }
+
+    private var glyph: String {
+        let channel = store.channels[row.streamId]
+        if channel?.inviteOnly == true { return "lock.fill" }
+        if channel?.isWebPublic == true { return "globe" }
+        return "number"
+    }
+
+    private var channelName: String {
+        store.channels[row.streamId]?.name ?? store.subscriptions[row.streamId]?.name ?? "?"
+    }
+
+    /// The topic as its channel's list spells it now (a link's URL keeps
+    /// whatever casing it was written with).
+    private var topic: String {
+        store.channelTopics.lists[row.streamId]?
+            .first { TopicName.matches($0.name, row.topic) }?.name ?? row.topic
+    }
+
+    /// channel › topic as one run of text, so a long name wraps onto a
+    /// second line at phone widths instead of truncating either part away.
+    private var label: Text {
+        let display = TopicName.displayName(topic)
+        let chevron = Text(Image(systemName: "chevron.right"))
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+        let resolved = TopicName.isResolved(topic)
+            ? Text("\(Text(Image(systemName: "checkmark.circle.fill")).foregroundStyle(.green)) ")
+            : Text("")
+        let name = Text(display.isEmpty ? "general chat" : display).fontWeight(.medium)
+        return Text("\(channelName) \(chevron) \(resolved)\(name)")
+    }
+
+    var body: some View {
+        Button(action: open) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                // A fixed column, so #, lock and globe rows line up.
+                Image(systemName: glyph)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(channelColor)
+                    .frame(minWidth: 14)
+                VStack(alignment: .leading, spacing: 1) {
+                    label
+                        .lineLimit(2)
+                    if let sender = row.sender, let timestamp = row.timestamp {
+                        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+                        Text("\(sender) · \(date, format: .relative(presentation: .named))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 8)
+                if row.isMessageLink {
+                    Image(systemName: "text.bubble")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 4)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help(row.isMessageLink ? "Open at this message" : "Open this conversation")
+    }
+}

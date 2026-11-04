@@ -298,7 +298,13 @@ exact offset through the row's edge sentinel — no marker nudge, no animation.
     pruning policy (Settings → General, default 5 years, "forever" available)
     deletes older rows at store creation and on setting change — starred
     messages are always kept, large prunes VACUUM, and the server's history is
-    never touched. GRDB is an
+    never touched. A `message_link` table indexes the topic and message links in
+    channel messages (written with each row, cascading with its deletes; rows from
+    before it existed are backfilled in background batches) for the topic menu's
+    View Links (`TopicLinkIndex`) — on a 200k-message, 314 MB store an indexed
+    lookup takes under a millisecond where scanning payloads took 0.4–1.8 s.
+    Edits and moves rewrite stored copies the in-memory map doesn't hold, so
+    links, search and transcripts follow them. GRDB is an
     `internal import` — its SQL string-literal extensions must not leak into
     importers' overload resolution (this bit us in tests: a `[String].joined` in
     scope with GRDB silently inferred `SQL` elements).

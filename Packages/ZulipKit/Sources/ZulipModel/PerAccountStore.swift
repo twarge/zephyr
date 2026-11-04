@@ -61,6 +61,8 @@ public final class PerAccountStore {
     public let topicActivity: TopicActivityStore
     /// Per-channel topic lists, persisted for offline use.
     public let channelTopics: ChannelTopicCache
+    /// Which conversations link to which (the topic menu's View Links).
+    public let topicLinks: TopicLinkIndex
 
     private struct WeakMessageList {
         weak var value: MessageListModel?
@@ -94,6 +96,8 @@ public final class PerAccountStore {
     @ObservationIgnored public var messageRetentionDays: Int?
     @ObservationIgnored private var dirtyMessageIds: Set<Int> = []
     @ObservationIgnored private var cacheSaveTask: Task<Void, Never>?
+    /// The latest flush's write, for readers that need it landed.
+    @ObservationIgnored private var cacheWriteTask: Task<Void, Never>?
     @ObservationIgnored private var isFlushing = false
     @ObservationIgnored private var flushRetryTask: Task<Void, Never>?
     @ObservationIgnored private var flushRetryAttempt = 0
@@ -187,6 +191,7 @@ public final class PerAccountStore {
         conversations = ConversationList(snapshot: snapshot, selfUserId: account.userId)
         topicActivity = TopicActivityStore(selfUserId: account.userId, offline: offline)
         channelTopics = ChannelTopicCache(offline: offline)
+        topicLinks = TopicLinkIndex()
         channelFolders = (snapshot.channelFolders ?? []).sorted { $0.order < $1.order }
         realmEmoji = snapshot.realmEmoji ?? [:]
         for draft in snapshot.drafts ?? [] {
@@ -207,7 +212,7 @@ public final class PerAccountStore {
         // after install — it decodes thousands of payloads and must not
         // block the main actor.
         if let offline {
-            database = offline.openDatabase()
+            database = offline.openDatabase(realmURL: connection.realmURL)
             outbox = offline.loadOutbox().map { entry in
                 var restored = entry
                 restored.state = entry.restoredState
@@ -221,6 +226,7 @@ public final class PerAccountStore {
         }
         topicActivity.attach(to: self)
         channelTopics.attach(to: self)
+        topicLinks.attach(to: self)
     }
 
     /// Carries a replaced store instance's cached-message hydration across
@@ -235,6 +241,8 @@ public final class PerAccountStore {
             messages: Array(previous.messages.values), selfUserId: selfUserId)
         topicActivity.seedMissing(Array(previous.messages.values))
         channelTopics.adopt(from: previous.channelTopics)
+        topicLinks.adopt(from: previous.topicLinks)
+        topicLinks.start()
         // Mark-unread refiles skipped at init (no messages yet) land now.
         reapplyPendingActionsLocally()
     }
@@ -278,6 +286,8 @@ public final class PerAccountStore {
         // view) found an empty map and may still be waiting on their fetch:
         // hand them the now-hydrated cache.
         forEachMessageList { $0.cacheDidRestore() }
+        // After the restore read, so the backfill doesn't compete with it.
+        topicLinks.start()
         if Self.perfLogEnabled {
             logger.info("offline restore: \(cached.count) messages in \((clock.now - start).ms, privacy: .public) ms")
         }
@@ -717,10 +727,24 @@ public final class PerAccountStore {
         if synchronously {
             try? database.upsert(batch, selfUserId: selfId)
         } else {
-            Task.detached(priority: .utility) {
+            let touchedLinks = batch.contains {
+                $0.streamId != nil && TopicLink.mentionsNarrow($0.content)
+            }
+            let write = Task.detached(priority: .utility) {
                 try? await database.upsertAsync(batch, selfUserId: selfId)
             }
+            cacheWriteTask = Task { [weak self] in
+                await write.value
+                self?.topicLinks.databaseDidChange(touchedLinks: touchedLinks)
+            }
         }
+    }
+
+    /// Writes dirty messages now and waits for the write to land — for a
+    /// database read that must see them.
+    func flushMessageCache() async {
+        persistMessageCache()
+        await cacheWriteTask?.value
     }
 
     /// Prunes on-disk history past the retention window (starred messages
@@ -1566,6 +1590,7 @@ public final class PerAccountStore {
         defer {
             topicActivity.handleEvent(event)
             channelTopics.handleEvent(event)
+            topicLinks.handleEvent(event)
         }
         switch event.kind {
         case .heartbeat:
@@ -1605,6 +1630,27 @@ public final class PerAccountStore {
             }
             forEachMessageList { $0.handleChangedMessages(ids: ids) }
             scheduleMessageCacheSave(ids)
+            // Stored copies not in memory are edited and moved too, so
+            // transcripts, search and links follow (the ones in memory
+            // save above).
+            let unloaded = ids.filter { messages[$0] == nil }
+            if let database, !unloaded.isEmpty,
+               e.renderedContent != nil || e.subject != nil || e.newStreamId != nil {
+                let selfId = selfUserId
+                Task { [weak self] in
+                    await Task.detached(priority: .utility) {
+                        if let content = e.renderedContent, unloaded.contains(e.messageId) {
+                            try? database.edit(
+                                id: e.messageId, content: content,
+                                editTimestamp: e.editTimestamp, selfUserId: selfId)
+                        }
+                        try? database.move(
+                            ids: unloaded, toStreamId: e.newStreamId, topic: e.subject,
+                            selfUserId: selfId)
+                    }.value
+                    self?.topicLinks.databaseDidChange(touchedLinks: true)
+                }
+            }
 
         case .deleteMessage(let e):
             for id in e.allIds {
@@ -1616,8 +1662,11 @@ public final class PerAccountStore {
             dirtyMessageIds.subtract(e.allIds)
             if let database {
                 let ids = e.allIds
-                Task.detached(priority: .utility) {
-                    try? database.delete(ids: ids)
+                Task { [weak self] in
+                    await Task.detached(priority: .utility) {
+                        try? database.delete(ids: ids)
+                    }.value
+                    self?.topicLinks.databaseDidChange(touchedLinks: false)
                 }
             }
 

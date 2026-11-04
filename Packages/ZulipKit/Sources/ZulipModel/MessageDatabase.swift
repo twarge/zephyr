@@ -18,12 +18,16 @@ import ZulipAPI
 /// Rows keep the full `Message` as a `ZulipJSON` payload blob (so no field
 /// mapping can drift), plus indexed columns for conversation identity and an
 /// FTS shadow table maintained by triggers. One database per account, in the
-/// account's offline directory.
+/// account's offline directory. Channel messages' conversation links are
+/// indexed as they're written, for View Links (MessageDatabase+Links).
 public final class MessageDatabase: Sendable {
-    private let queue: DatabaseQueue
+    let queue: DatabaseQueue
+    /// Absolute links count toward the link index only on this host.
+    let realmURL: URL?
 
-    public init(path: String) throws {
+    public init(path: String, realmURL: URL? = nil) throws {
         queue = try DatabaseQueue(path: path)
+        self.realmURL = realmURL
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1") { db in
             try db.execute(sql: """
@@ -58,6 +62,9 @@ public final class MessageDatabase: Sendable {
                 END;
                 """)
         }
+        migrator.registerMigration("v2-links") { db in
+            try Self.createLinkIndex(db)
+        }
         try migrator.migrate(queue)
     }
 
@@ -65,23 +72,29 @@ public final class MessageDatabase: Sendable {
 
     public func upsert(_ messages: [Message], selfUserId: Int) throws {
         guard !messages.isEmpty else { return }
+        let realmURL = realmURL
         try queue.write { db in
             for message in messages {
-                try Self.upsertRow(db, message: message, selfUserId: selfUserId)
+                try Self.upsertRow(
+                    db, message: message, selfUserId: selfUserId, realmURL: realmURL)
             }
         }
     }
 
     public func upsertAsync(_ messages: [Message], selfUserId: Int) async throws {
         guard !messages.isEmpty else { return }
+        let realmURL = realmURL
         try await queue.write { db in
             for message in messages {
-                try Self.upsertRow(db, message: message, selfUserId: selfUserId)
+                try Self.upsertRow(
+                    db, message: message, selfUserId: selfUserId, realmURL: realmURL)
             }
         }
     }
 
-    private static func upsertRow(_ db: Database, message: Message, selfUserId: Int) throws {
+    static func upsertRow(
+        _ db: Database, message: Message, selfUserId: Int, realmURL: URL?
+    ) throws {
         var streamId: Int?
         var topic: String?
         var dmKey: String?
@@ -116,6 +129,9 @@ public final class MessageDatabase: Sendable {
                 message.senderFullName, message.timestamp,
                 Self.plainText(fromHTML: message.content), payload,
             ])
+        try indexLinks(
+            db, messageId: message.id, content: streamId == nil ? "" : message.content,
+            realmURL: realmURL)
     }
 
     public func delete(ids: [Int]) throws {

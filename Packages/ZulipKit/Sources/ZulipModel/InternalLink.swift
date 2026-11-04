@@ -23,9 +23,20 @@ public enum InternalLink: Equatable, Sendable {
         if href.hasPrefix("http") {
             guard let url = URL(string: href), url.host() == realmURL.host() else { return nil }
         }
-        let parts = href[href.index(after: hashIndex)...]
-            .split(separator: "/")
-            .map(String.init)
+        // Empty components drop out, except an empty topic operand: the
+        // empty topic ("general chat") links as ".../topic/" or
+        // ".../topic//with/12". Operands sit at even indices after
+        // "narrow".
+        var parts: [String] = []
+        for part in href[href.index(after: hashIndex)...]
+            .split(separator: "/", omittingEmptySubsequences: false) {
+            if part.isEmpty {
+                guard parts.count >= 2, parts.count.isMultiple(of: 2),
+                      parts.last == "topic" || parts.last == "subject"
+                else { continue }
+            }
+            parts.append(String(part))
+        }
         // Non-narrow view hashes.
         if parts.count == 1 {
             switch parts[0] {

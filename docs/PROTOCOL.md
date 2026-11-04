@@ -85,6 +85,11 @@ used unconditionally; features above 277 note their FL gate.
   than `is:resolved`) and merges them, keeping only the id range both answers fully
   cover. Messages the user never received carry the `historical` flag and stay out
   of the combined feed and conversation lists.
+  `has:link` matches any message with an `<a>` (the server's `has_link`), internal
+  topic/message links included; full-text `search` (PostgreSQL FTS, the default
+  backend) indexes topic + rendered HTML with tags dropped, so an href is
+  unsearchable but a link's text ("#channel > topic") is — View Links' "Linked
+  from" fill relies on both.
 - **`date` operator** (web's `date:YYYY-MM-DD` search, FL 445; api/construct-narrow
   "Narrow terms that don't filter messages"): never sent in `narrow`. The other terms are
   fetched with `anchor=date` + `anchor_date` = the day's local midnight as a full datetime

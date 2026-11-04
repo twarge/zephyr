@@ -1385,6 +1385,7 @@ private struct ConversationHeaderRow: View {
     @Environment(KeyboardRouter.self) private var keys: KeyboardRouter?
     @State private var showRename = false
     @State private var renameText = ""
+    @State private var showLinks = false
 
     private var streamId: Int? {
         if case .topic(let id, _) = conversationKey { return id }
@@ -1492,6 +1493,11 @@ private struct ConversationHeaderRow: View {
         } message: {
             Text("Every message in the topic moves to the new name.")
         }
+        .sheet(isPresented: $showLinks) {
+            if case .topic(let streamId, let topic) = conversationKey {
+                TopicLinksSheet(store: store, streamId: streamId, topic: topic)
+            }
+        }
     }
 
     @ViewBuilder
@@ -1524,6 +1530,13 @@ private struct ConversationHeaderRow: View {
         Button("Mark All as Unread") {
             keys?.readMarkingPaused = true
             store.markConversationUnread(conversationKey)
+        }
+        // Offered only when something links to or from the topic, as the
+        // web app does.
+        if store.topicLinks.hasLinks(streamId: streamId, topic: topic) {
+            Button("View Links…", systemImage: "arrow.left.arrow.right") {
+                showLinks = true
+            }
         }
         Button("Copy Link to Topic", systemImage: "link") {
             Platform.copyToPasteboard(conversationKey.link(in: store))

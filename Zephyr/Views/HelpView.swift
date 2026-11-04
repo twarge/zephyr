@@ -21,6 +21,7 @@ struct HelpView: View {
                 ] + Self.commandClickBullets + [
                     "In a topic, the window title is a menu: click it to reach the channel's full feed or its topic list.",
                     "In a channel's feed, the current topic pins to the top; click any topic header to focus that topic.",
+                    "When other conversations link to a topic, or it links to them, its menu (right-click it in the sidebar, or its header) offers View Links… — both lists, from your local archive plus what the server finds. A link to a message opens at that message.",
                     "Narrow windows tuck the sidebar away automatically; widen the window to bring it back.",
                 ])
 

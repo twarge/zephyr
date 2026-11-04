@@ -56,9 +56,10 @@ public struct OfflineStore: Sendable {
     /// (The SQLite store itself retains full history.)
     public static let messagesPerConversation = 50
 
-    /// Opens (creating on first use) the account's SQLite message store.
-    public func openDatabase() -> MessageDatabase? {
-        try? MessageDatabase(path: url("messages.sqlite").path)
+    /// Opens (creating on first use) the account's SQLite message store;
+    /// `realmURL` lets its link index count absolute links to the realm.
+    public func openDatabase(realmURL: URL? = nil) -> MessageDatabase? {
+        try? MessageDatabase(path: url("messages.sqlite").path, realmURL: realmURL)
     }
 
     /// The pre-SQLite JSON cache, read once for migration then removed.
