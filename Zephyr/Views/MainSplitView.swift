@@ -42,11 +42,37 @@ struct MainSplitView: View {
     /// folding a Duo mid-conversation keeps the conversation on screen.
     @State private var preferredCompactColumn = NavigationSplitViewColumn.sidebar
     /// Live sidebar column width — gates the realm logo, which hides
-    /// entirely when it wouldn't fit (never the overflow menu). Restored
-    /// with the window: the first frame's toolbar is laid out before the
-    /// column is measured, so a fixed default could show the wide logo for
-    /// a frame before the real width swapped it for the icon.
-    @SceneStorage("sidebarWidth") private var sidebarWidth: Double = 300
+    /// entirely when it wouldn't fit (never the overflow menu). The first
+    /// frame's toolbar is laid out before the column is measured, so a
+    /// fixed default showed the wide logo for a frame before the real
+    /// width swapped it for the icon, rebuilding the toolbar. A restored
+    /// window has its own width; a new one opens at the width the last
+    /// one had, as its column does.
+    @SceneStorage("sidebarWidth") private var storedSidebarWidth: Double = 0
+    private static let lastSidebarWidthKey = "lastSidebarWidth"
+
+    private var sidebarWidth: CGFloat {
+        if storedSidebarWidth > 0 { return storedSidebarWidth }
+        let last = UserDefaults.standard.double(forKey: Self.lastSidebarWidthKey)
+        return last > 0 ? last : 300
+    }
+
+    /// The column's latest measured width. A box, applied only once the
+    /// window is up: a window's opening layout measures the column at its
+    /// minimum (144) before the restored width (223.5) lands, and taking
+    /// that pass hid the logo, then put it back.
+    private final class SidebarMeasure {
+        var width: CGFloat?
+        var windowShown = false
+    }
+    @State private var sidebarMeasure = SidebarMeasure()
+
+    private func storeSidebarWidth(_ width: CGFloat) {
+        // Edges only: a SceneStorage write re-renders.
+        guard abs(storedSidebarWidth - Double(width)) >= 0.5 else { return }
+        storedSidebarWidth = Double(width)
+        UserDefaults.standard.set(Double(width), forKey: Self.lastSidebarWidthKey)
+    }
     /// The iOS toolbar gear's Settings sheet.
     @State private var showSettingsSheet = false
     #if os(macOS)
@@ -244,7 +270,8 @@ struct MainSplitView: View {
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.width
                 } action: { width in
-                    sidebarWidth = Double(width)
+                    sidebarMeasure.width = width
+                    if sidebarMeasure.windowShown { storeSidebarWidth(width) }
                 }
                 // The realm's logo sits flush against the window controls:
                 // the system sidebar toggle (which would otherwise come
@@ -267,7 +294,7 @@ struct MainSplitView: View {
                         // drops outright — never the ">>" overflow submenu.
                         if sidebarWidth - 150 >= 20 {
                             ToolbarItem(placement: .automatic) {
-                                RealmLogoView(store: store, maxWidth: CGFloat(sidebarWidth) - 150)
+                                RealmLogoView(store: store, maxWidth: sidebarWidth - 150)
                                     // The logo is inert decoration, but a toolbar
                                     // item still swallows mouse-downs — this hands
                                     // them back to window dragging.
@@ -515,6 +542,10 @@ struct MainSplitView: View {
         #if os(macOS)
         .background(WindowReader { window in
             keys.hostWindow = window
+            if window != nil, !sidebarMeasure.windowShown {
+                sidebarMeasure.windowShown = true
+                if let width = sidebarMeasure.width { storeSidebarWidth(width) }
+            }
         })
         #endif
         .onAppear {

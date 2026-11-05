@@ -47,6 +47,10 @@ struct MessageFeedList: View {
 
     @Environment(KeyboardRouter.self) private var keys
     @State private var anchorId: String?
+    /// Where `anchorId`'s row sits in the viewport — set with every write
+    /// of it (`scroll(to:at:)`), since the scroll binding has one anchor
+    /// for both. Bottom unless an open is placing a marker or a parked row.
+    @State private var anchorPlacement: UnitPoint = .bottom
     /// A parked position being restored (nil on fresh opens): overrides
     /// the marker/bottom opening behavior, validated against the model in
     /// init (a row evicted while parked falls back to a fresh open).
@@ -67,8 +71,16 @@ struct MessageFeedList: View {
     @State private var userDidScroll = false
     @State private var nearBottom = true
     @State private var quickLook = FeedQuickLook()
-    @State private var pendingReadIds: Set<Int> = []
-    @State private var readFlushTask: Task<Void, Never>?
+    /// Rows seen but not yet flushed as read. A reference box, not
+    /// observed state: nothing draws from it, and as state every row
+    /// scrolling into view re-rendered the feed — which re-fired the
+    /// visibility observer within the frame ("tried to update multiple
+    /// times per frame").
+    private final class PendingReads {
+        var ids: Set<Int> = []
+        var flushTask: Task<Void, Never>?
+    }
+    @State private var pendingReads = PendingReads()
     /// Mark-on-view feeds: the reader stepped away (inactive window,
     /// backgrounded app, sleeping or locked screen) with the feed parked
     /// at the bottom — `newestId` is the window's newest message at that
@@ -111,7 +123,7 @@ struct MessageFeedList: View {
         // A parked viewport position resumes exactly (a remembered row
         // must still be in the window — paging may have trimmed it).
         var restored = scrollMemory?.position
-        if case .row(let id, _) = restored,
+        if case .row(let id, _, _) = restored,
            !model.messages.contains(where: { $0.id == id })
         {
             restored = nil
@@ -142,18 +154,34 @@ struct MessageFeedList: View {
         // space (a blank transcript until a resize forced re-layout).
         // The restored row is a coarse first-frame stand-in (its bottom at
         // the viewport bottom); onAppear's settle pass nails the offset.
-        let initialAnchor: String =
-            switch restored {
-            case .bottom: Self.bottomAnchorId
-            case .row(let id, _): "msg-\(id)"
-            case nil:
-                // The re-aim targets the message row itself: the marker
-                // item doesn't exist until onAppear places it.
-                if let reaimId { "msg-\(reaimId)" }
-                else if model.firstUnreadMarkerId != nil { "unread-marker" }
-                else { Self.bottomAnchorId }
+        // The anchor goes in with it, so the first layout lands where the
+        // settle passes would otherwise move it a moment later: a marker
+        // open at the upper quarter, a parked row back at its offset.
+        let initialAnchor: String
+        let initialPlacement: UnitPoint
+        switch restored {
+        case .bottom:
+            (initialAnchor, initialPlacement) = (Self.bottomAnchorId, .bottom)
+        case .row(let id, _, let anchorY):
+            (initialAnchor, initialPlacement) = ("msg-\(id)", UnitPoint(x: 0, y: anchorY))
+        case nil:
+            // The re-aim targets the message row itself: the marker
+            // item doesn't exist until onAppear places it.
+            if let reaimId {
+                (initialAnchor, initialPlacement) = ("msg-\(reaimId)", Self.markerPlacement)
+            } else if model.firstUnreadMarkerId != nil {
+                (initialAnchor, initialPlacement) = ("unread-marker", Self.markerPlacement)
+            } else {
+                (initialAnchor, initialPlacement) = (Self.bottomAnchorId, .bottom)
             }
+        }
         _anchorId = State(initialValue: initialAnchor)
+        _anchorPlacement = State(initialValue: initialPlacement)
+        _opening = State(initialValue: Opening(target: initialAnchor, placement: initialPlacement))
+        // As the open will find it: starting `true` for a mid-history open
+        // flipped on the first geometry pass, re-rendering the feed inside
+        // the frame its scroll observers were reporting.
+        _nearBottom = State(initialValue: initialPlacement == .bottom)
     }
 
     private var outboxMessages: [OutboxMessage] {
@@ -183,10 +211,23 @@ struct MessageFeedList: View {
     /// really lands at the bottom.
     private static let bottomAnchorId = "feed-bottom"
 
+    /// An unread marker (or a linked message) opens in the upper quarter,
+    /// with what follows it below.
+    private static let markerPlacement = UnitPoint(x: 0.5, y: 0.25)
+
+    /// Points the scroll binding at a row, placed as given — the only way
+    /// `anchorId` is written, so the binding's anchor always matches.
+    private func scroll(to id: String, at placement: UnitPoint = .bottom) {
+        if anchorPlacement != placement { anchorPlacement = placement }
+        anchorId = id
+    }
+
     private struct FeedGeometry: Equatable {
         var nearBottom: Bool
         var lost: Bool
         var containerHeight: CGFloat = 0
+        /// Off the very bottom at all — what a bottom open must not be.
+        var offBottom = false
     }
 
     private enum Item: Identifiable {
@@ -295,9 +336,34 @@ struct MessageFeedList: View {
     /// counted as visible and never scrolled.)
     private final class RowFrames {
         var frames: [Int: CGRect] = [:]
+        /// In the box with the frames, for the same reason: read by scroll
+        /// passes, never drawn — as state, each geometry tick re-rendered
+        /// the feed and re-fired the geometry observer within the frame.
+        var viewportHeight: CGFloat = 0
     }
     @State private var rowFrames = RowFrames()
-    @State private var viewportHeight: CGFloat = 0
+
+    private var viewportHeight: CGFloat { rowFrames.viewportHeight }
+
+    /// The open's placement, kept through the window's own opening layout
+    /// (`reassertOpening`). A box: the geometry observer reaches it
+    /// mid-frame, where a state write would re-render the feed.
+    private final class Opening {
+        /// What the open placed. The binding can't hold it: it's two-way,
+        /// and as the viewport moved SwiftUI rewrote it to whatever row
+        /// then sat at the anchor — and kept holding that one there.
+        let target: String
+        let placement: UnitPoint
+        var proxy: ScrollViewProxy?
+        var settled = false
+        var reassertPending = false
+
+        init(target: String = "", placement: UnitPoint = .bottom) {
+            self.target = target
+            self.placement = placement
+        }
+    }
+    @State private var opening = Opening()
     /// Content hit response is paused while the feed scrolls: rows
     /// crossing a stationary cursor otherwise flip their hover state —
     /// a full row re-render (the controls overlay) per crossing, which
@@ -337,6 +403,12 @@ struct MessageFeedList: View {
                 ScrollViewReader { proxy in
                     feedScrollView
                         .onAppear {
+                            opening.proxy = proxy
+                            let opening = opening
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .seconds(1.5))
+                                opening.settled = true
+                            }
                             // Warm-reopen marker re-aim, deferred out of
                             // init: place the NEW marker at the first
                             // unread that arrived while parked, so the
@@ -352,7 +424,7 @@ struct MessageFeedList: View {
                             if let highlight = keys.highlightMessageId,
                                model.messages.contains(where: { $0.id == highlight }) {
                                 target = "msg-\(highlight)"
-                            } else if case .row(let id, let fraction) = restoredPosition,
+                            } else if case .row(let id, let fraction, _) = restoredPosition,
                                       !didRestore {
                                 // Warm reopen mid-history: place the
                                 // remembered row's bottom edge back at its
@@ -458,11 +530,11 @@ struct MessageFeedList: View {
                             else { return }
                             // Rows the swept-away viewport grazed were never
                             // actually seen — they must not flush as read.
-                            readFlushTask?.cancel()
-                            pendingReadIds = []
+                            pendingReads.flushTask?.cancel()
+                            pendingReads.ids = []
                             openingMarkerId = model.firstUnreadMarkerId
                             if model.firstUnreadMarkerId != nil {
-                                anchorId = "unread-marker"
+                                scroll(to: "unread-marker", at: Self.markerPlacement)
                                 Task { @MainActor in
                                     try? await Task.sleep(for: .milliseconds(350))
                                     guard !userDidScroll else { return }
@@ -484,7 +556,7 @@ struct MessageFeedList: View {
                         // there, like a fresh open — upper quarter, with
                         // the unreads below it.
                         .onChange(of: returnReaimNonce) {
-                            anchorId = "unread-marker"
+                            scroll(to: "unread-marker", at: Self.markerPlacement)
                             openingMarkerId = model.firstUnreadMarkerId
                             Task { @MainActor in
                                 try? await Task.sleep(for: .milliseconds(50))
@@ -700,7 +772,7 @@ struct MessageFeedList: View {
     /// Bails if the user scrolls away mid-settle (the position binding
     /// leaves the sentinel).
     private func scrollToBottomSettled(_ proxy: ScrollViewProxy) {
-        anchorId = Self.bottomAnchorId
+        scroll(to: Self.bottomAnchorId)
         Task { @MainActor in
             // Same per-frame polling as selection reveals: watch the
             // geometry, re-assert sparingly, finish with one exact pass
@@ -718,6 +790,33 @@ struct MessageFeedList: View {
                 guard clock.now - lastAssert >= .milliseconds(150) else { continue }
                 proxy.scrollTo(Self.bottomAnchorId, anchor: .bottom)
                 lastAssert = clock.now
+            }
+        }
+    }
+
+    /// Puts the open back where it was placed when the window's opening
+    /// layout resizes the viewport under it: the toolbar takes its full
+    /// height a pass after the feed's first placement, and the feed
+    /// drifted with it. On the next turn — before the window is on screen
+    /// — rather than leaving it to the deferred passes, whose correction
+    /// was a visible jump just after the window opened. Only until the
+    /// open settles, and never once the reader has scrolled.
+    private func reassertOpening() {
+        guard !opening.settled, !userDidScroll, !opening.reassertPending,
+              let proxy = opening.proxy
+        else { return }
+        opening.reassertPending = true
+        let opening = opening
+        Task { @MainActor in
+            opening.reassertPending = false
+            guard !userDidScroll else { return }
+            // The binding back on the target first, or it holds the row
+            // the drift left at the anchor — undoing the scroll below.
+            scroll(to: opening.target, at: opening.placement)
+            if case .row(let id, let fraction, _) = restoredPosition {
+                proxy.scrollTo("msgbot-\(id)", anchor: UnitPoint(x: 0, y: fraction))
+            } else {
+                proxy.scrollTo(opening.target, anchor: opening.placement)
             }
         }
     }
@@ -844,7 +943,7 @@ struct MessageFeedList: View {
         }
         if anchorId != "msg-\(id)" {
             withAnimation(.easeInOut(duration: 0.2)) {
-                anchorId = "msg-\(id)"
+                scroll(to: "msg-\(id)")
             }
             return
         }
@@ -990,15 +1089,16 @@ struct MessageFeedList: View {
     private func noteSeen(_ message: Message) {
         guard marksReadOnView, !keys.readMarkingPaused,
               !(message.flags ?? []).contains("read"),
-              !pendingReadIds.contains(message.id)
+              !pendingReads.ids.contains(message.id)
         else { return }
-        pendingReadIds.insert(message.id)
-        readFlushTask?.cancel()
-        readFlushTask = Task { @MainActor in
+        let pending = pendingReads
+        pending.ids.insert(message.id)
+        pending.flushTask?.cancel()
+        pending.flushTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(700))
             guard !Task.isCancelled else { return }
-            let ids = Array(pendingReadIds)
-            pendingReadIds = []
+            let ids = Array(pending.ids)
+            pending.ids = []
             store.markMessagesRead(ids: ids)
         }
     }
@@ -1007,8 +1107,8 @@ struct MessageFeedList: View {
     /// really seen, and a feed at the bottom is about to follow arrivals
     /// unattended — remember where the reader's reading actually ended.
     private func readerWentAway() {
-        readFlushTask?.cancel()
-        pendingReadIds = []
+        pendingReads.flushTask?.cancel()
+        pendingReads.ids = []
         awayAtBottom = nearBottom ? (model.messages.last?.id, .now) : nil
     }
 
@@ -1139,7 +1239,11 @@ struct MessageFeedList: View {
             keys.clearMediaSelection()
         }
         .defaultScrollAnchor(.bottom)
-        .scrollPosition(id: $anchorId, anchor: .bottom)
+        // Explicitly for size changes too, the viewport's included: the
+        // window's opening layout shrinks it (its toolbar grows in a pass
+        // late), and kept at its top, a bottom open slid off the bottom.
+        .defaultScrollAnchor(.bottom, for: .sizeChanges)
+        .scrollPosition(id: $anchorId, anchor: anchorPlacement)
         // Read-marking feeds need actual viewport visibility, not lazy-
         // stack realization. Observe the scroll target IDs once at the
         // container instead of installing a visibility observer on every
@@ -1154,7 +1258,7 @@ struct MessageFeedList: View {
             // User-driven phases only — programmatic scrolls (anchor
             // binding, settle passes) report `.animating`.
             switch newPhase {
-            case .tracking, .interacting, .decelerating: userDidScroll = true
+            case .tracking, .interacting, .decelerating: if !userDidScroll { userDidScroll = true }
             default: break
             }
             idleDebounce.task?.cancel()
@@ -1189,12 +1293,22 @@ struct MessageFeedList: View {
             #else
             let lost = false
             #endif
+            let bottomGap = geometry.contentSize.height - geometry.visibleRect.maxY
             return FeedGeometry(
-                nearBottom: geometry.contentSize.height - geometry.visibleRect.maxY < 60,
+                nearBottom: bottomGap < 60,
                 lost: lost,
-                containerHeight: geometry.containerSize.height)
+                containerHeight: geometry.containerSize.height,
+                offBottom: bottomGap > 2)
         } action: { old, new in
-            viewportHeight = new.containerHeight
+            rowFrames.viewportHeight = new.containerHeight
+            // The window's opening layout moving the viewport (100 is its
+            // size before the first real layout), or anything else
+            // drifting a bottom open off the bottom: put the open back.
+            if (old.containerHeight > 100 && old.containerHeight != new.containerHeight)
+                || (new.offBottom && opening.target == Self.bottomAnchorId)
+            {
+                reassertOpening()
+            }
             // Distance alone misfires: the floating bar's bottom insets
             // can park the rest position right at the 60pt threshold,
             // showing the jump arrow while visually at the bottom. The
@@ -1203,7 +1317,15 @@ struct MessageFeedList: View {
             let lastRowVisible = model.messages.last
                 .flatMap { rowFrames.frames[$0.id] }
                 .map { $0.minY < new.containerHeight && $0.maxY > 0 } ?? false
-            nearBottom = new.nearBottom || lastRowVisible
+            // Edges only: a same-value write still re-renders the feed.
+            // A bottom open counts as at the bottom until it settles: the
+            // window's opening layout drifts it, `reassertOpening` puts it
+            // back, and the flip in between flashed the jump-to-latest
+            // button into the window as it appeared.
+            let holdingBottomOpen = !opening.settled && !userDidScroll
+                && opening.target == Self.bottomAnchorId
+            let isNearBottom = new.nearBottom || lastRowVisible || holdingBottomOpen
+            if nearBottom != isNearBottom { nearBottom = isNearBottom }
             // Park the viewport for a warm reopen: at the bottom the
             // restore sticks to bottom (newest); mid-history it's the
             // bottom-most row whose bottom edge is on screen, plus that
@@ -1217,8 +1339,11 @@ struct MessageFeedList: View {
                     .filter({ $0.value.maxY > 0 && $0.value.maxY <= new.containerHeight })
                     .max(by: { $0.value.maxY < $1.value.maxY })
                 {
+                    let height = new.containerHeight
                     scrollMemory.position = .row(
-                        id: id, fraction: frame.maxY / new.containerHeight)
+                        id: id, fraction: frame.maxY / height,
+                        anchorY: frame.height < height
+                            ? min(max(frame.minY / (height - frame.height), 0), 1) : 1)
                 }
             }
             if new.lost, !old.lost {
@@ -1231,13 +1356,13 @@ struct MessageFeedList: View {
             // highlight overrides here.
             if let highlight = keys.highlightMessageId,
                model.messages.contains(where: { $0.id == highlight }) {
-                anchorId = "msg-\(highlight)"
+                scroll(to: "msg-\(highlight)", at: Self.markerPlacement)
             }
         }
         .onChange(of: model.messages.last?.id) { _, newLastId in
             guard newLastId != nil else { return }
             if nearBottom {
-                anchorId = Self.bottomAnchorId
+                scroll(to: Self.bottomAnchorId)
             }
             onNewMessages?()
         }

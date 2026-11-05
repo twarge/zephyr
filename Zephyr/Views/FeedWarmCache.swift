@@ -12,8 +12,11 @@ enum FeedScrollPosition {
     /// Mid-history: the bottom-most visible row and the viewport-height
     /// fraction its bottom edge sat at — enough to reproduce the exact
     /// offset via the row's edge sentinel, independent of lazy-layout
-    /// height estimates.
-    case row(id: Int, fraction: CGFloat)
+    /// height estimates. `anchorY` is the unit anchor that lands the row
+    /// itself there (its top over viewport-minus-row height): the scroll
+    /// binding takes rows, not their sentinels, so the reopen's first
+    /// layout uses it to open where the settle pass would end.
+    case row(id: Int, fraction: CGFloat, anchorY: CGFloat)
 }
 
 /// A reference box the feed updates on every scroll tick (never observed

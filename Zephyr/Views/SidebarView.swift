@@ -489,7 +489,12 @@ struct SidebarView: View {
                 channelsSections
             }
             if isFiltering && search.loadingAllTopics {
-                Label("Searching topics…", systemImage: "ellipsis")
+                Label {
+                    Text("Searching topics…")
+                } icon: {
+                    Image(systemName: "ellipsis")
+                        .sidebarIcon(.gray)
+                }
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -1015,10 +1020,8 @@ struct SidebarView: View {
             Label {
                 Text(title)
             } icon: {
-                // Unstyled: the sidebar tints Label icons with the accent
-                // color itself, and dims them when the window is inactive
-                // (an explicit .tint would stay lit).
                 Image(systemName: icon)
+                    .sidebarIcon()
             }
             Spacer(minLength: 4)
             if badge > 0 {
@@ -1074,8 +1077,13 @@ private struct RecentSearchRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Label(query.displayDescription, systemImage: "magnifyingglass")
-                .lineLimit(1)
+            Label {
+                Text(query.displayDescription)
+                    .lineLimit(1)
+            } icon: {
+                Image(systemName: "magnifyingglass")
+                    .sidebarIcon()
+            }
             Spacer(minLength: 4)
             if isHovering {
                 Button(action: onRemove) {
@@ -1121,7 +1129,7 @@ private struct DraftRow: View {
                 }
             } icon: {
                 Image(systemName: "pencil.line")
-                    .foregroundStyle(.secondary)
+                    .sidebarIcon(.gray)
             }
             Spacer(minLength: 0)
         }
@@ -1186,7 +1194,12 @@ private struct SidebarExpanderRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Label(title, systemImage: "ellipsis.circle")
+                Label {
+                    Text(title)
+                } icon: {
+                    Image(systemName: "ellipsis.circle")
+                        .sidebarIcon(.gray)
+                }
                 Spacer(minLength: 0)
             }
             .foregroundStyle(.secondary)
@@ -1208,8 +1221,13 @@ private struct SearchSuggestionRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Label(title, systemImage: icon)
-                    .lineLimit(1)
+                Label {
+                    Text(title)
+                        .lineLimit(1)
+                } icon: {
+                    Image(systemName: icon)
+                        .sidebarIcon()
+                }
                 Spacer(minLength: 0)
             }
             .contentShape(.rect)
@@ -1649,9 +1667,32 @@ struct DimsWhenWindowInactive: ViewModifier {
     }
 }
 
+/// A sidebar icon in an explicit color, dimmed for an inactive window —
+/// what the channel rows' colored # already did. Left to the list (an
+/// unstyled Label icon, or a semantic style like .secondary), the sidebar
+/// tints icons itself, but redraws them through each change in the
+/// window's state: every window that opened (or closed) showed its rows
+/// icon-less for a few frames, twice over, while the channel #s held. A
+/// concrete color draws in the same pass as the row's text. White on a
+/// prominent (accent-filled) selection, as the list's own tint would be.
+struct SidebarIconStyle: ViewModifier {
+    var color: Color = .accentColor
+    @Environment(\.backgroundProminence) private var prominence
+
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(prominence == .increased ? .white : color)
+            .dimsWhenWindowInactive()
+    }
+}
+
 extension View {
     func dimsWhenWindowInactive() -> some View {
         modifier(DimsWhenWindowInactive())
+    }
+
+    func sidebarIcon(_ color: Color = .accentColor) -> some View {
+        modifier(SidebarIconStyle(color: color))
     }
 }
 
