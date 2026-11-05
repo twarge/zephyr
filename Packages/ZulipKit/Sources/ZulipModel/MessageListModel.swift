@@ -149,6 +149,22 @@ public final class MessageListModel: Identifiable {
         store?.unregister(id)
     }
 
+    /// Shows the cached slice of the narrow now, synchronously, as
+    /// `fetchInitial` would first — for a view's init, so a cold open's
+    /// first frame has messages instead of a spinner. `fetchInitial` still
+    /// owes the server's answer (`awaitsServer`); a narrow the in-memory
+    /// cache doesn't cover pages from SQLite asynchronously, as usual.
+    public func showCachedPreview() {
+        guard initialAnchorDate == nil else { return }
+        populateOfflineFallback()
+    }
+
+    /// The window is a cached preview the server hasn't answered yet: a
+    /// view that finds it should `fetchInitial` rather than reuse it as is.
+    public var awaitsServer: Bool {
+        isOfflineFallback && !serverDidRespond && fetchError == nil
+    }
+
     /// True while this list is fed by `store`'s event fan-out. A queue
     /// rebuild replaces the store, so a list kept warm across navigation
     /// is stale exactly when this turns false.

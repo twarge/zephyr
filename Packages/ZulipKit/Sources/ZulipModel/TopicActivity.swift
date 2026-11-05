@@ -78,8 +78,12 @@ public struct TopicActivityIndex: Sendable {
         messages[message.id] = message
         groups[key, default: []].insert(message.id)
         if old?.content != message.content {
+            // A mention of the reader carries their id (`data-user-id`):
+            // without it in the HTML, skip the parse — at launch this runs
+            // over thousands of cached messages.
             let mentionsSelf = message.senderId != selfUserId
                 && message.content.contains("user-mention")
+                && message.content.contains(String(selfUserId))
                 && ContentParser.parse(html: message.content).mentions(userId: selfUserId)
             if mentionsSelf {
                 mentionSince[message.id] = previousMention

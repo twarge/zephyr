@@ -80,6 +80,37 @@ final class FeedWarmCache {
         return (entry.model, entry.cache, entry.scrollMemory)
     }
 
+    /// Narrows a cold open found nothing cached for, per store instance,
+    /// so the view's repeated inits don't rebuild a preview that can't show.
+    private var previewMisses: [Key: ObjectIdentifier] = [:]
+
+    /// The warm state for this narrow — or, on a cold open whose narrow the
+    /// store's cached history covers, a new model already showing that
+    /// cache (`showCachedPreview`), parked here so the view's later inits
+    /// (one per parent render) find it instead of building another. Either
+    /// way the view's first frame has messages, not a spinner; a preview
+    /// still owes its server fetch (`awaitsServer`). Nil when nothing is
+    /// cached: the view's task loads it.
+    func lookupOrPreview(
+        narrow: Narrow, store: PerAccountStore, makeModel: () -> MessageListModel
+    ) -> (model: MessageListModel, cache: MessageContentCache, scrollMemory: FeedScrollMemory)? {
+        if let warm = lookup(narrow: narrow, store: store) { return warm }
+        let key = Key(account: store.accountId, narrow: narrow)
+        guard previewMisses[key] != ObjectIdentifier(store) else { return nil }
+        let model = makeModel()
+        model.showCachedPreview()
+        guard model.didInitialFetch else {
+            model.deactivate()
+            previewMisses[key] = ObjectIdentifier(store)
+            return nil
+        }
+        previewMisses[key] = nil
+        let cache = MessageContentCache()
+        let scrollMemory = FeedScrollMemory()
+        insert(model: model, cache: cache, scrollMemory: scrollMemory, narrow: narrow, store: store)
+        return (model, cache, scrollMemory)
+    }
+
     func insert(
         model: MessageListModel, cache: MessageContentCache,
         scrollMemory: FeedScrollMemory,

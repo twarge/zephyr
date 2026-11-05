@@ -14,9 +14,13 @@ struct ZephyrApp: App {
     #endif
 
     init() {
+        // First: the launch's disk reads run while SwiftUI and AppKit set
+        // up (the model, made lazily, picks them up).
+        AppModel.prefetchLaunch()
         // One tip per week at most, app-wide: discovery without fatigue.
         try? Tips.configure([.displayFrequency(.weekly)])
         PerfLog.startWatchdogIfEnabled()
+        PerfLog.mark("app init")
     }
 
     var body: some Scene {
@@ -334,6 +338,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
+        let _ = PerfLog.mark("RootView body: \(model.phase)")
         Group {
             switch model.phase {
             case .launching, .loading:
@@ -388,6 +393,15 @@ struct RootView: View {
                 AccountWindowView()
             }
         }
+        #if os(macOS)
+        .background {
+            if PerfLog.enabled {
+                WindowReader { window in
+                    if let window { PerfLog.markWhenVisible(window, "first window visible") }
+                }
+            }
+        }
+        #endif
         .task { await model.start() }
         .onChange(of: scenePhase) { _, newPhase in
             model.scenePhaseChanged(to: newPhase)

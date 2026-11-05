@@ -191,17 +191,18 @@ struct SidebarView: View {
                 title: "Channels", id: "channels", channels: sortedSubscriptions,
                 showsJoin: true)
         } else {
+            let sorted = sortedSubscriptions
             ForEach(
                 Array(store.channelFolders.enumerated()), id: \.element.id
             ) { index, folder in
                 channelSection(
                     title: folder.name, id: "folder-\(folder.id)",
-                    channels: channels(inFolder: folder.id),
+                    channels: channels(inFolder: folder.id, from: sorted),
                     showsJoin: index == 0)
             }
             channelSection(
                 title: "Other channels", id: "folder-none",
-                channels: channels(inFolder: nil))
+                channels: channels(inFolder: nil, from: sorted))
         }
     }
 
@@ -312,8 +313,8 @@ struct SidebarView: View {
         }
     }
 
-    private func channels(inFolder folderId: Int?) -> [Subscription] {
-        sortedSubscriptions.filter { store.channels[$0.streamId]?.folderId == folderId }
+    private func channels(inFolder folderId: Int?, from sorted: [Subscription]) -> [Subscription] {
+        sorted.filter { store.channels[$0.streamId]?.folderId == folderId }
     }
 
     /// The channels to show (with, while filtering, their matching topics):
@@ -374,6 +375,7 @@ struct SidebarView: View {
     @ViewBuilder
     private var sidebarList: some View {
         let _ = PerfLog.render("Sidebar")
+        let _ = PerfLog.mark("Sidebar body")
         List(selection: $selection) {
             #if os(macOS)
             // Suggestions ride in the list, not the field's native
@@ -698,21 +700,14 @@ struct SidebarView: View {
     /// the recency list, or the one being viewed (a selection hidden
     /// behind the expander would highlight nothing); the rest hide behind
     /// "Inactive channels…".
-    private func isActiveChannel(_ subscription: Subscription) -> Bool {
+    /// `recent` is `store.conversations.channelRecency`, read once per
+    /// section: built per channel (it walks every conversation), it cost
+    /// ~90 ms of main thread per sidebar pass at launch.
+    private func isActiveChannel(_ subscription: Subscription, recent: [Int: Int]) -> Bool {
         if subscription.pinToTop ?? false { return true }
         if subscription.streamId == selectedStreamId { return true }
         if store.unreads.unreadCount(inChannel: subscription.streamId) > 0 { return true }
-        return recentStreamIds.contains(subscription.streamId)
-    }
-
-    private var recentStreamIds: Set<Int> {
-        var ids = Set<Int>()
-        for conversation in store.conversations.conversations {
-            if case .topic(let streamId, _) = conversation.key {
-                ids.insert(streamId)
-            }
-        }
-        return ids
+        return recent[subscription.streamId] != nil
     }
 
     /// The channel the selection lives in, if any.
@@ -786,7 +781,8 @@ struct SidebarView: View {
     ) -> some View {
         let visible = visibleChannels(channels)
         let hideInactive = !isFiltering && !expandedInactiveSections.contains(id)
-        let shown = hideInactive ? visible.filter { isActiveChannel($0.0) } : visible
+        let recent = store.conversations.channelRecency
+        let shown = hideInactive ? visible.filter { isActiveChannel($0.0, recent: recent) } : visible
         let hiddenCount = visible.count - shown.count
         if !visible.isEmpty {
             Section(isExpanded: expansion(id)) {
@@ -881,7 +877,7 @@ struct SidebarView: View {
                         expandedInactiveSections.insert(id)
                     }
                 } else if !isFiltering && expandedInactiveSections.contains(id)
-                    && visible.contains(where: { !isActiveChannel($0.0) }) {
+                    && visible.contains(where: { !isActiveChannel($0.0, recent: recent) }) {
                     SidebarExpanderRow(title: "Hide inactive channels") {
                         expandedInactiveSections.remove(id)
                     }

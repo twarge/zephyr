@@ -62,12 +62,16 @@ struct NarrowFeedView: View {
         self.anchorDate = anchorDate
         self.showsConversationJump = showsConversationJump
         _selection = selection
-        // A recently viewed feed resumes its parked model — set before
-        // the first layout pass so there is no spinner frame. Search
-        // narrows (`.custom`) never park: they can't live-append (see
-        // Narrow.custom), so a parked one would silently go stale.
+        // A recently viewed feed resumes its parked model, and a cold one
+        // opens on its cached messages — set before the first layout pass
+        // so there is no spinner frame. Search narrows (`.custom`) never
+        // park: they can't live-append (see Narrow.custom), so a parked
+        // one would silently go stale.
         if case .custom = narrow { return }
-        if let warm = FeedWarmCache.shared.lookup(narrow: narrow, store: store) {
+        if let warm = FeedWarmCache.shared.lookupOrPreview(
+            narrow: narrow, store: store,
+            makeModel: { MessageListModel(store: store, narrow: narrow, anchorDate: anchorDate) })
+        {
             _model = State(initialValue: warm.model)
             _cache = State(initialValue: warm.cache)
             _scrollMemory = State(initialValue: warm.scrollMemory)
@@ -115,10 +119,14 @@ struct NarrowFeedView: View {
         // (warm-launch swap, queue rebuild).
         .task(id: ObjectIdentifier(store)) {
             // A healthy model bound to this store (warm start, or a
-            // reappearing live view) needs no refetch.
+            // reappearing live view) needs no refetch; a cached preview
+            // from init fetches in place, under the messages it shows.
             if let model, model.isBound(to: store),
                model.didInitialFetch, model.fetchError == nil
             {
+                if model.awaitsServer {
+                    await model.fetchInitial(count: 100)
+                }
                 return
             }
             let list = MessageListModel(store: store, narrow: narrow, anchorDate: anchorDate)

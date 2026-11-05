@@ -16,10 +16,13 @@ struct ChannelFeedView: View {
         self.store = store
         self.streamId = streamId
         _selection = selection
-        // A recently viewed channel resumes its parked model — set before
-        // the first layout pass so there is no spinner frame.
-        if let warm = FeedWarmCache.shared.lookup(
-            narrow: .channel(streamId: streamId), store: store)
+        // A recently viewed channel resumes its parked model, and a cold
+        // one opens on its cached messages — set before the first layout
+        // pass so there is no spinner frame.
+        let narrow = Narrow.channel(streamId: streamId)
+        if let warm = FeedWarmCache.shared.lookupOrPreview(
+            narrow: narrow, store: store,
+            makeModel: { MessageListModel(store: store, narrow: narrow) })
         {
             _model = State(initialValue: warm.model)
             _cache = State(initialValue: warm.cache)
@@ -58,10 +61,14 @@ struct ChannelFeedView: View {
         // (warm-launch swap, queue rebuild).
         .task(id: ObjectIdentifier(store)) {
             // A healthy model bound to this store (warm start, or a
-            // reappearing live view) needs no refetch.
+            // reappearing live view) needs no refetch; a cached preview
+            // from init fetches in place, under the messages it shows.
             if let model, model.isBound(to: store),
                model.didInitialFetch, model.fetchError == nil
             {
+                if model.awaitsServer {
+                    await model.fetchInitial(count: 100)
+                }
                 return
             }
             let narrow = Narrow.channel(streamId: streamId)

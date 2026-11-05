@@ -53,10 +53,13 @@ struct TranscriptView: View {
         self.store = store
         self.conversation = conversation
         _selection = selection
-        // A recently viewed conversation resumes its parked model — set
-        // before the first layout pass so there is no spinner frame.
-        if let warm = FeedWarmCache.shared.lookup(
-            narrow: conversation.narrow(selfUserId: store.selfUserId), store: store)
+        // A recently viewed conversation resumes its parked model, and a
+        // cold one opens on its cached messages — set before the first
+        // layout pass so there is no spinner frame.
+        let narrow = conversation.narrow(selfUserId: store.selfUserId)
+        if let warm = FeedWarmCache.shared.lookupOrPreview(
+            narrow: narrow, store: store,
+            makeModel: { MessageListModel(store: store, narrow: narrow) })
         {
             _model = State(initialValue: warm.model)
             _cache = State(initialValue: warm.cache)
@@ -126,12 +129,20 @@ struct TranscriptView: View {
             if anchor == nil, let model, model.isBound(to: store),
                model.didInitialFetch, model.fetchError == nil
             {
+                // A cached preview from init fetches in place, under the
+                // messages it shows.
+                if model.awaitsServer {
+                    await model.fetchInitial()
+                }
                 store.markConversationRead(conversation)
                 return
             }
             let list = MessageListModel(
                 store: store, narrow: narrow, anchorMessageId: anchor)
-            if model == nil {
+            // A message link replaces a cached preview outright, as a first
+            // open would: the preview sits at the first unread, not the
+            // link's target.
+            if model == nil || model?.awaitsServer == true {
                 // First open: show the fetch in progress.
                 model = list
                 await list.fetchInitial()

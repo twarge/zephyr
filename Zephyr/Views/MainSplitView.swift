@@ -42,8 +42,11 @@ struct MainSplitView: View {
     /// folding a Duo mid-conversation keeps the conversation on screen.
     @State private var preferredCompactColumn = NavigationSplitViewColumn.sidebar
     /// Live sidebar column width — gates the realm logo, which hides
-    /// entirely when it wouldn't fit (never the overflow menu).
-    @State private var sidebarWidth: CGFloat = 300
+    /// entirely when it wouldn't fit (never the overflow menu). Restored
+    /// with the window: the first frame's toolbar is laid out before the
+    /// column is measured, so a fixed default could show the wide logo for
+    /// a frame before the real width swapped it for the icon.
+    @SceneStorage("sidebarWidth") private var sidebarWidth: Double = 300
     /// The iOS toolbar gear's Settings sheet.
     @State private var showSettingsSheet = false
     #if os(macOS)
@@ -82,6 +85,18 @@ struct MainSplitView: View {
         }
     }
     #endif
+    /// The toolbar's connection-lost badge. The store is "recovering" for
+    /// the second or so every launch spends registering (the cached store
+    /// renders meanwhile) and through each queue rebuild — no reason to
+    /// flash a warning, and adding then removing the item re-laid out the
+    /// whole toolbar. It shows once recovery has lasted a while.
+    @State private var connectionLost = false
+
+    private struct ConnectionWatch: Hashable {
+        var store: ObjectIdentifier
+        var recovering: Bool
+    }
+
     /// True while the narrow-window watcher hid the sidebar (so growing
     /// the window restores it; a user's manual collapse is left alone).
     @State private var autoCollapsedSidebar = false
@@ -142,6 +157,7 @@ struct MainSplitView: View {
 
     private var stageOne: some View {
         let _ = PerfLog.render("MainSplit")
+        let _ = PerfLog.mark("MainSplit body")
         return NavigationSplitView(
             columnVisibility: $columnVisibility,
             preferredCompactColumn: $preferredCompactColumn
@@ -228,7 +244,7 @@ struct MainSplitView: View {
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.width
                 } action: { width in
-                    sidebarWidth = width
+                    sidebarWidth = Double(width)
                 }
                 // The realm's logo sits flush against the window controls:
                 // the system sidebar toggle (which would otherwise come
@@ -251,7 +267,7 @@ struct MainSplitView: View {
                         // drops outright — never the ">>" overflow submenu.
                         if sidebarWidth - 150 >= 20 {
                             ToolbarItem(placement: .automatic) {
-                                RealmLogoView(store: store, maxWidth: sidebarWidth - 150)
+                                RealmLogoView(store: store, maxWidth: CGFloat(sidebarWidth) - 150)
                                     // The logo is inert decoration, but a toolbar
                                     // item still swallows mouse-downs — this hands
                                     // them back to window dragging.
@@ -349,6 +365,16 @@ struct MainSplitView: View {
         // Reminders aren't in the register snapshot; seed them once per
         // store so message clock icons and the sidebar row can show.
         .task(id: store.accountId) { await store.refreshReminders() }
+        .task(id: ConnectionWatch(
+            store: ObjectIdentifier(store), recovering: store.isRecoveringEventStream)
+        ) {
+            guard store.isRecoveringEventStream else {
+                connectionLost = false
+                return
+            }
+            try? await Task.sleep(for: .seconds(4))
+            if !Task.isCancelled { connectionLost = true }
+        }
         .navigationTitle(store.realmName ?? "Zephyr")
         // Narrow links navigate in-app: rewritten links inside message
         // content, and pasted/clicked web-app URLs on ANY signed-in realm
@@ -802,7 +828,7 @@ struct MainSplitView: View {
                     DownloadProgressButton(downloads: downloads)
                 }
             }
-            if store.isRecoveringEventStream {
+            if connectionLost {
                 #if os(visionOS)
                 ToolbarItem(placement: .automatic) {
                     connectionLostBadge

@@ -155,9 +155,11 @@ public final class PerAccountStore {
 
     private let logger = Logger(subsystem: "com.twarge.zephyr", category: "store")
 
+    /// `database` is `offline`'s, when already opened (the launch prefetch
+    /// opens it off the main actor to start its read).
     public init(
         account: Account, connection: ApiConnection, snapshot: InitialSnapshot,
-        offline: OfflineStore? = nil
+        offline: OfflineStore? = nil, database: MessageDatabase? = nil
     ) {
         accountId = account.id
         selfUserId = account.userId
@@ -213,11 +215,11 @@ public final class PerAccountStore {
 
         // Offline restore: the unsent outbox and actions recorded offline
         // last session load here (small files); the SQLite transcript
-        // hydration is `restoreOfflineCache()`, kicked by the GlobalStore
+        // hydration is the offline restore, kicked by the GlobalStore
         // after install — it decodes thousands of payloads and must not
         // block the main actor.
         if let offline {
-            database = offline.openDatabase(realmURL: connection.realmURL)
+            self.database = database ?? offline.openDatabase(realmURL: connection.realmURL)
             outbox = offline.loadOutbox().map { entry in
                 var restored = entry
                 restored.state = entry.restoredState
@@ -257,33 +259,83 @@ public final class PerAccountStore {
     /// hundred cached conversations) runs off the main actor; only the
     /// dictionary merge happens here.
     public func restoreOfflineCache() async {
-        // Topic lists restore alongside, not after: a small file the
-        // sidebar's expanded channels are waiting on.
+        await restoreOfflineCache(reading: startOfflineRead())
+    }
+
+    /// `restoreOfflineCache()` with its disk read under way at once rather
+    /// than at the main actor's next turn — at launch that turn waits on
+    /// AppKit building the first window.
+    public func beginOfflineRestore() {
+        let read = startOfflineRead()
+        Task { await restoreOfflineCache(reading: read) }
+    }
+
+    /// The restore, its read already started elsewhere (at app init, off
+    /// the main actor, beside the snapshot decode).
+    public func beginOfflineRestore(reading read: Task<[Message], Never>) {
+        Task { await restoreOfflineCache(reading: read) }
+    }
+
+    /// The restore's merge, for messages already read — at app init, so
+    /// the window's first frame has its sidebar and feed.
+    public func restoreOfflineCache(from cached: [Message]) {
         Task { await channelTopics.restore() }
-        guard let offline, let database else { return }
+        applyOfflineRestore(cached, deferringTopicActivity: true)
+    }
+
+    /// What the launch restore reads: the newest messages of each cached
+    /// conversation (after a one-time import of the pre-SQLite cache).
+    public nonisolated static func readOfflineCache(
+        offline: OfflineStore, database: MessageDatabase, selfUserId: Int
+    ) -> [Message] {
+        let legacy = offline.loadLegacyMessages()
+        if !legacy.isEmpty {
+            try? database.upsert(legacy, selfUserId: selfUserId)
+            offline.removeLegacyMessages()
+        }
+        return (try? database.recentPerConversation(OfflineStore.messagesPerConversation)) ?? []
+    }
+
+    private func startOfflineRead() -> Task<[Message], Never>? {
+        guard let offline, let database else { return nil }
         let selfId = selfUserId
-        let clock = ContinuousClock()
-        let start = clock.now
         // Utility priority: at launch this runs alongside the live-snapshot
         // apply and first render — competing at high priority starved the
         // UI (354 ms cold vs 4.4 s measured mid-launch).
-        let cached = await Task.detached(priority: .utility) { () -> [Message] in
-            // One-time import of the pre-SQLite JSON cache.
-            let legacy = offline.loadLegacyMessages()
-            if !legacy.isEmpty {
-                try? database.upsert(legacy, selfUserId: selfId)
-                offline.removeLegacyMessages()
-            }
-            return (try? database.recentPerConversation(
-                OfflineStore.messagesPerConversation)) ?? []
-        }.value
+        return Task.detached(priority: .utility) {
+            Self.readOfflineCache(offline: offline, database: database, selfUserId: selfId)
+        }
+    }
+
+    private func restoreOfflineCache(reading read: Task<[Message], Never>?) async {
+        // Topic lists restore alongside, not after: a small file the
+        // sidebar's expanded channels are waiting on.
+        Task { await channelTopics.restore() }
+        guard let read else { return }
+        let clock = ContinuousClock()
+        let start = clock.now
+        let cached = await read.value
+        applyOfflineRestore(cached)
+        if Self.perfLogEnabled {
+            logger.info("offline restore: \(cached.count) messages in \((clock.now - start).ms, privacy: .public) ms")
+        }
+    }
+
+    /// `deferringTopicActivity` leaves Summary's seeding (tens of ms on
+    /// thousands of messages, and debounced into its rebuild anyway) for
+    /// the main actor's next turn, out of the first frame's way.
+    private func applyOfflineRestore(_ cached: [Message], deferringTopicActivity: Bool = false) {
         // Live data may have landed while we read; never clobber it.
         for message in cached where messages[message.id] == nil {
             messages[message.id] = message
             cachedMessageIds.insert(message.id)
         }
-        conversations.seed(messages: cached, selfUserId: selfId)
-        topicActivity.seedMissing(cached)
+        conversations.seed(messages: cached, selfUserId: selfUserId)
+        if deferringTopicActivity {
+            Task { topicActivity.seedMissing(cached) }
+        } else {
+            topicActivity.seedMissing(cached)
+        }
         // Mark-unread actions recorded offline refile now that their
         // messages are loadable (the init pass couldn't locate them).
         reapplyPendingActionsLocally()
@@ -293,9 +345,6 @@ public final class PerAccountStore {
         forEachMessageList { $0.cacheDidRestore() }
         // After the restore read, so the backfill doesn't compete with it.
         topicLinks.start()
-        if Self.perfLogEnabled {
-            logger.info("offline restore: \(cached.count) messages in \((clock.now - start).ms, privacy: .public) ms")
-        }
     }
 
     // MARK: Message-list fan-out

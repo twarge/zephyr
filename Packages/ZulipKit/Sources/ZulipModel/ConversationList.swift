@@ -44,9 +44,16 @@ public final class ConversationList {
     }
 
     private var byKey: [ConversationKey: Conversation] = [:]
+    /// `conversations`, sorted once per change rather than on every read:
+    /// the sidebar and Recent read it several times a render.
+    @ObservationIgnored private var sorted: [Conversation]?
 
     public var conversations: [Conversation] {
-        byKey.values.sorted { $0.lastMessageId > $1.lastMessageId }
+        let current = byKey  // Read every time: it's what observation tracks.
+        if let sorted { return sorted }
+        let result = current.values.sorted { $0.lastMessageId > $1.lastMessageId }
+        sorted = result
+        return result
     }
 
     init(snapshot: InitialSnapshot, selfUserId: Int) {
@@ -66,13 +73,24 @@ public final class ConversationList {
             key: key, lastMessageId: messageId,
             timestamp: byKey[key]?.timestamp, snippetHTML: byKey[key]?.snippetHTML,
             senderName: byKey[key]?.senderName)
+        sorted = nil
     }
 
-    /// Feed messages (from any fetch) to establish recency and snippets.
+    /// Feed messages (from any fetch) to establish recency and snippets —
+    /// as one change, not one per message (a launch restore seeds
+    /// thousands).
     public func seed(messages: [Message], selfUserId: Int) {
+        var updated = byKey
+        var changed = false
         for message in messages {
-            noteMessage(message, selfUserId: selfUserId)
+            guard let latest = Self.latest(message, selfUserId: selfUserId, in: updated)
+            else { continue }
+            updated[latest.key] = latest
+            changed = true
         }
+        guard changed else { return }
+        byKey = updated
+        sorted = nil
     }
 
     /// Latest DM message id per participant — the "recently messaged"
@@ -100,12 +118,24 @@ public final class ConversationList {
     }
 
     func noteMessage(_ message: Message, selfUserId: Int) {
+        guard let latest = Self.latest(message, selfUserId: selfUserId, in: byKey) else { return }
+        byKey[latest.key] = latest
+        sorted = nil
+    }
+
+    /// The conversation entry the message makes, when it is its
+    /// conversation's latest — nil when it's older, or not one of the
+    /// user's conversations.
+    private static func latest(
+        _ message: Message, selfUserId: Int, in byKey: [ConversationKey: Conversation]
+    ) -> Conversation? {
         // Never delivered to the user (a public-channel search result, a
         // channel they aren't in): not one of their conversations.
-        guard !(message.flags ?? []).contains("historical") else { return }
-        guard let key = Unreads.conversationKey(for: message, selfUserId: selfUserId) else { return }
-        guard (byKey[key]?.lastMessageId ?? -1) <= message.id else { return }
-        byKey[key] = Conversation(
+        guard !(message.flags ?? []).contains("historical") else { return nil }
+        guard let key = Unreads.conversationKey(for: message, selfUserId: selfUserId)
+        else { return nil }
+        guard (byKey[key]?.lastMessageId ?? -1) <= message.id else { return nil }
+        return Conversation(
             key: key, lastMessageId: message.id, timestamp: message.timestamp,
             snippetHTML: message.content, senderName: message.senderFullName)
     }

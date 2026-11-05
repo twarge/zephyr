@@ -324,6 +324,7 @@ struct MessageFeedList: View {
 
     var body: some View {
         let _ = PerfLog.render("FeedList")
+        let _ = PerfLog.mark(isEmptyFeed ? "Feed body (empty)" : "Feed body (messages)")
         Group {
             if isEmptyFeed {
                 // Outside the bottom-anchored scroll view, so it centers in

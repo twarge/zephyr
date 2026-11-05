@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import ZulipAPI
 import os
+import Synchronization
 
 extension Duration {
     /// Whole milliseconds, for timing logs.
@@ -51,6 +52,14 @@ public final class GlobalStore: UpdateMachineDelegate {
     /// Stores built from the on-disk snapshot cache: rendered while the live
     /// register runs, never polled (their queue is stale), always replaced.
     private var provisionalStores: Set<Account.ID> = []
+    /// Launch reads started ahead of `installCachedStore` (see
+    /// `LaunchPrefetch`).
+    @ObservationIgnored
+    private var snapshotPrefetches: [Account.ID: Prefetch<InitialSnapshot?>] = [:]
+    @ObservationIgnored
+    private var offlinePrefetches: [Account.ID: Prefetch<OfflineRead>] = [:]
+    @ObservationIgnored
+    private var apiKeyPrefetches: [Account.ID: Prefetch<String?>] = [:]
     private let accountsStore: any AccountsStore
     private let credentials: any CredentialStore
     private let transport: any ApiTransport
@@ -181,7 +190,10 @@ public final class GlobalStore: UpdateMachineDelegate {
     // MARK: Warm-launch snapshot cache
 
     private func snapshotCacheURL(for accountId: Account.ID) -> URL? {
-        guard persistsToDisk else { return nil }
+        persistsToDisk ? Self.snapshotCacheURL(for: accountId) : nil
+    }
+
+    fileprivate nonisolated static func snapshotCacheURL(for accountId: Account.ID) -> URL? {
         guard let base = try? FileManager.default.url(
             for: .applicationSupportDirectory, in: .userDomainMask,
             appropriateFor: nil, create: true)
@@ -194,46 +206,126 @@ public final class GlobalStore: UpdateMachineDelegate {
         return directory.appendingPathComponent("\(accountId.uuidString).json")
     }
 
+    /// Takes over launch reads the app started before this store existed
+    /// (`LaunchPrefetch`), for `installPrefetchedStore` to finish.
+    public func adopt(_ prefetch: LaunchPrefetch) {
+        let accountId = prefetch.accountId
+        guard persistsToDisk, stores[accountId] == nil,
+              snapshotPrefetches[accountId] == nil,
+              accounts.contains(where: { $0.id == accountId && $0.isEnabled })
+        else { return }
+        snapshotPrefetches[accountId] = prefetch.snapshot
+        offlinePrefetches[accountId] = prefetch.history
+        apiKeyPrefetches[accountId] = prefetch.apiKey
+    }
+
+    /// Starts the launch reads for an account here, when the app didn't
+    /// (see `LaunchPrefetch`).
+    public func prefetchCachedSnapshot(for accountId: Account.ID) {
+        guard persistsToDisk, snapshotPrefetches[accountId] == nil, stores[accountId] == nil,
+              let account = accounts.first(where: { $0.id == accountId }),
+              let prefetch = LaunchPrefetch(account: account, credentials: credentials)
+        else { return }
+        adopt(prefetch)
+    }
+
+    /// `installCachedStore` without suspending, for app init: installs only
+    /// if the prefetched decode is done within `timeout` — usually it
+    /// already is, having started at app init. A slower one (a giant
+    /// realm's) stays prefetched for the async path, so it costs launch no
+    /// more than the wait. The offline history read gets the same
+    /// deadline; if it misses, the restore lands asynchronously as it used
+    /// to.
+    public func installPrefetchedStore(for accountId: Account.ID, waitingUpTo timeout: Duration) -> Bool {
+        let clock = ContinuousClock()
+        let start = clock.now
+        let deadline = DispatchTime.now() + .milliseconds(timeout.ms)
+        guard let prefetch = snapshotPrefetches[accountId],
+              let snapshot = prefetch.wait(until: deadline)
+        else { return false }
+        snapshotPrefetches[accountId] = nil
+        guard let snapshot else { return false }
+        let decoded = clock.now
+        let history = offlinePrefetches[accountId]?.wait(until: deadline)
+        let read = clock.now
+        let installed = installProvisionalStore(
+            for: accountId, snapshot: snapshot, history: history,
+            apiKey: apiKeyPrefetches.removeValue(forKey: accountId)?.wait(until: deadline))
+        if Self.perfLogEnabled {
+            logger.info("init install: waited \((decoded - start).ms, privacy: .public) ms for the snapshot, \((read - decoded).ms, privacy: .public) ms more for history (\(history == nil ? "late" : "ready", privacy: .public)); install \((clock.now - read).ms, privacy: .public) ms")
+        }
+        return installed
+    }
+
     /// Builds a provisional store from the last register's cached snapshot,
     /// so launch renders instantly ("stale → live", zulip-mobile
     /// realtime.md). Returns false when there's nothing cached.
     public func installCachedStore(for accountId: Account.ID) async -> Bool {
-        guard stores[accountId] == nil,
-              let account = accounts.first(where: { $0.id == accountId }),
-              account.isEnabled,
-              let apiKey = try? credentials.apiKey(
-                realmURL: account.realmURL, email: account.email),
-              let url = snapshotCacheURL(for: accountId)
+        let prefetch = snapshotPrefetches.removeValue(forKey: accountId)
+        guard stores[accountId] == nil, let url = snapshotCacheURL(for: accountId)
         else { return false }
-        // The cached register payload runs to many MB on big realms
-        // (~230 ms to decode at 60k users); read + decode off the main
-        // actor so launch stays responsive.
         let clock = ContinuousClock()
         let start = clock.now
-        let snapshot = await Task.detached(priority: .userInitiated) {
+        let snapshot = await (prefetch ?? Prefetch(priority: .userInitiated) {
             (try? Data(contentsOf: url)).flatMap {
                 try? ZulipJSON.decoder.decode(InitialSnapshot.self, from: $0)
             }
-        }.value
-        // The live register may have finished while we decoded.
-        guard let snapshot, stores[accountId] == nil else { return false }
+        }).value
+        guard let snapshot else { return false }
         if Self.perfLogEnabled {
             logger.info("cached snapshot decoded in \((clock.now - start).ms, privacy: .public) ms")
         }
+        // The launch prefetch's other reads, when this is the slow path a
+        // giant realm's decode fell back to: they've had longer than it.
+        let history = await offlinePrefetches.removeValue(forKey: accountId)?.value
+        let apiKey = await apiKeyPrefetches.removeValue(forKey: accountId)?.value
+        return installProvisionalStore(
+            for: accountId, snapshot: snapshot, history: history, apiKey: apiKey)
+    }
+
+    /// `history` is the prefetched offline read and `apiKey` the
+    /// prefetched credential, when each has finished.
+    private func installProvisionalStore(
+        for accountId: Account.ID, snapshot: InitialSnapshot, history: OfflineRead?,
+        apiKey prefetchedKey: String??
+    ) -> Bool {
+        // The live register may have finished while we decoded.
+        guard stores[accountId] == nil,
+              let account = accounts.first(where: { $0.id == accountId }),
+              account.isEnabled,
+              let apiKey = prefetchedKey ?? (try? credentials.apiKey(
+                realmURL: account.realmURL, email: account.email))
+        else { return false }
         let connection = ApiConnection(
             realmURL: account.realmURL, email: account.email, apiKey: apiKey,
             transport: transport)
         connection.featureLevel = snapshot.zulipFeatureLevel
         let store = PerAccountStore(
             account: account, connection: connection, snapshot: snapshot,
-            offline: persistsToDisk ? OfflineStore.forAccount(accountId) : nil)
+            offline: persistsToDisk ? OfflineStore.forAccount(accountId) : nil,
+            database: history?.database)
         store.messageRetentionDays = messageRetentionDays
         store.isRecoveringEventStream = true
         stores[accountId] = store
         provisionalStores.insert(accountId)
         storeGeneration += 1
-        Task { await store.restoreOfflineCache() }
+        if let history {
+            offlinePrefetches[accountId] = nil
+            store.restoreOfflineCache(from: history.messages)
+        } else {
+            beginOfflineRestore(store, for: accountId)
+        }
         return true
+    }
+
+    /// The restore for a store with no history yet: from the launch
+    /// prefetch's read when one is under way, else a read of its own.
+    private func beginOfflineRestore(_ store: PerAccountStore, for accountId: Account.ID) {
+        if let prefetch = offlinePrefetches.removeValue(forKey: accountId) {
+            store.beginOfflineRestore(reading: Task { await prefetch.value.messages })
+        } else {
+            store.beginOfflineRestore()
+        }
     }
 
     private func loadStore(accountId: Account.ID) async throws -> PerAccountStore {
@@ -295,7 +387,7 @@ public final class GlobalStore: UpdateMachineDelegate {
             // and starved for seconds at background priority.
             store.adoptCachedMessages(from: previous)
         } else {
-            Task { await store.restoreOfflineCache() }
+            beginOfflineRestore(store, for: accountId)
         }
         storeInstalledObserver?(accountId, store)
     }
@@ -346,5 +438,91 @@ public final class GlobalStore: UpdateMachineDelegate {
         machines.removeAll()
         stores.removeAll()
         storeGeneration += 1
+    }
+}
+
+/// The launch's disk reads — the cached register snapshot, the offline
+/// history and the API key — started off the main actor before SwiftUI
+/// has built anything (the app starts them in its init, ahead of its
+/// model), for a `GlobalStore` to adopt. By the time the store installs
+/// the window's first store they have usually finished, so the main
+/// thread doesn't wait on them.
+public final class LaunchPrefetch: Sendable {
+    public let accountId: Account.ID
+    fileprivate let snapshot: Prefetch<InitialSnapshot?>
+    fileprivate let history: Prefetch<OfflineRead>?
+    fileprivate let apiKey: Prefetch<String?>
+
+    /// Nil when the account has no snapshot cache location.
+    public init?(account: Account, credentials: any CredentialStore) {
+        guard let url = GlobalStore.snapshotCacheURL(for: account.id) else { return nil }
+        accountId = account.id
+        snapshot = Prefetch(priority: .userInitiated) {
+            (try? Data(contentsOf: url)).flatMap {
+                try? ZulipJSON.decoder.decode(InitialSnapshot.self, from: $0)
+            }
+        }
+        // Nothing renders yet for it to starve (the restore's usual
+        // utility priority is for reads that overlap first render).
+        history = OfflineStore.forAccount(account.id).map { offline in
+            let realmURL = account.realmURL
+            let selfUserId = account.userId
+            return Prefetch(priority: .userInitiated) {
+                guard let database = offline.openDatabase(realmURL: realmURL) else {
+                    return OfflineRead(database: nil, messages: [])
+                }
+                return OfflineRead(
+                    database: database,
+                    messages: PerAccountStore.readOfflineCache(
+                        offline: offline, database: database, selfUserId: selfUserId))
+            }
+        }
+        let realmURL = account.realmURL
+        let email = account.email
+        apiKey = Prefetch(priority: .userInitiated) {
+            try? credentials.apiKey(realmURL: realmURL, email: email)
+        }
+    }
+}
+
+/// The launch prefetch's offline history: the database it opened (handed
+/// to the store, so there's one connection) and what it read.
+fileprivate struct OfflineRead: Sendable {
+    let database: MessageDatabase?
+    let messages: [Message]
+}
+
+/// Launch work running off the main actor: awaited by the async launch
+/// path, or briefly waited on at app init.
+fileprivate final class Prefetch<Value: Sendable>: Sendable {
+    /// Filled when the work finishes.
+    private final class Outcome: Sendable {
+        let value = Mutex<Value?>(nil)
+        let finished = DispatchSemaphore(value: 0)
+    }
+
+    private let outcome: Outcome
+    private let task: Task<Value, Never>
+
+    init(priority: TaskPriority, _ work: @escaping @Sendable () -> Value) {
+        let outcome = Outcome()
+        self.outcome = outcome
+        task = Task.detached(priority: priority) {
+            let value = work()
+            outcome.value.withLock { $0 = value }
+            outcome.finished.signal()
+            return value
+        }
+    }
+
+    var value: Value {
+        get async { await task.value }
+    }
+
+    /// The result if the work finishes by `deadline`, else nil.
+    func wait(until deadline: DispatchTime) -> Value? {
+        guard outcome.finished.wait(timeout: deadline) == .success else { return nil }
+        outcome.finished.signal()  // Later waits return at once too.
+        return outcome.value.withLock { $0 }
     }
 }

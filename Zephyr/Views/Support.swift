@@ -1,3 +1,4 @@
+import CryptoKit
 import SwiftUI
 import ZulipAPI
 import ZulipContent
@@ -45,29 +46,139 @@ final class MessageContentCache {
 /// Fetches and caches user avatars. Users with an `avatar_url` load directly
 /// (public paths); others go through the authenticated `/avatar/{id}`
 /// redirect via `ApiConnection.mediaSession`.
+///
+/// Fetched avatars persist in Caches. The media session is ephemeral, so
+/// before they did every launch drew initials until each avatar's round
+/// trip came back — the faces all popped in together a second after the
+/// window opened. Rows now read the cached copy synchronously
+/// (`cachedImage`), so a face draws on its row's first frame.
 @MainActor
 final class AvatarLoader {
     static let shared = AvatarLoader()
     private let cache = NSCache<NSString, PlatformImage>()
+    /// Keys already found missing on disk this run, so a face still loading
+    /// isn't looked up again on every render.
+    private var notOnDisk: Set<String> = []
+    /// Unversioned images given their one background refresh this run.
+    private var refreshed: Set<String> = []
+    private var inflight: [String: Task<PlatformImage?, Never>] = [:]
+
+    nonisolated static let diskRoot = URL.cachesDirectory
+        .appendingPathComponent("ZephyrAvatars.noindex", isDirectory: true)
+    /// Avatars nobody has shown for this long are swept at launch.
+    nonisolated private static let diskRetention: TimeInterval = 60 * 86400
+
+    /// The memory and disk identity of a user's avatar: its URL, or the
+    /// realm's `/avatar/{id}` redirect. Avatar URLs carry `?version=N`,
+    /// bumped whenever the picture changes, so a cached copy of a
+    /// versioned one never goes stale; the redirect is refreshed once a
+    /// run.
+    private func avatarKey(for userId: Int, store: PerAccountStore) -> (key: String, versioned: Bool) {
+        let realm = store.connection.realmURL
+        if let avatarUrl = store.users[userId]?.avatarUrl,
+           let url = URL(string: avatarUrl, relativeTo: realm) {
+            return (url.absoluteURL.absoluteString, avatarUrl.contains("version="))
+        }
+        return ("\(realm.absoluteString)|avatar/\(userId)", false)
+    }
+
+    private func avatarRequest(for userId: Int, store: PerAccountStore) -> URLRequest? {
+        if let avatarUrl = store.users[userId]?.avatarUrl {
+            return URL(string: avatarUrl, relativeTo: store.connection.realmURL)
+                .map { URLRequest(url: $0.absoluteURL) }
+        }
+        return try? store.connection.authorizedURLRequest(path: "/avatar/\(userId)")
+    }
+
+    /// The avatar already in memory or on disk — what a row draws on its
+    /// first frame, before its task runs.
+    func cachedImage(for userId: Int, store: PerAccountStore) -> PlatformImage? {
+        cachedImage(key: avatarKey(for: userId, store: store).key)
+    }
 
     func image(for userId: Int, store: PerAccountStore) async -> PlatformImage? {
-        let key = "\(store.connection.realmURL.absoluteString)|\(userId)" as NSString
-        if let hit = cache.object(forKey: key) {
+        let (key, versioned) = avatarKey(for: userId, store: store)
+        if let cached = cachedImage(key: key) {
+            if !versioned, refreshed.insert(key).inserted {
+                // For the next render; this one keeps the cached face.
+                Task { _ = await fetch(key: key, request: avatarRequest(for: userId, store: store)) }
+            }
+            return cached
+        }
+        return await fetch(key: key, request: avatarRequest(for: userId, store: store))
+    }
+
+    private func cachedImage(key: String) -> PlatformImage? {
+        if let hit = cache.object(forKey: key as NSString) {
             return hit
         }
-        let request: URLRequest?
-        if let avatarUrl = store.users[userId]?.avatarUrl {
-            request = URL(string: avatarUrl, relativeTo: store.connection.realmURL)
-                .map { URLRequest(url: $0.absoluteURL) }
-        } else {
-            request = try? store.connection.authorizedURLRequest(path: "/avatar/\(userId)")
+        guard !notOnDisk.contains(key) else { return nil }
+        let file = Self.diskFile(for: key)
+        guard let data = try? Data(contentsOf: file), let image = PlatformImage(data: data) else {
+            notOnDisk.insert(key)
+            return nil
         }
-        guard let request,
-              let (data, _) = try? await ApiConnection.mediaSession.data(for: request),
-              let image = PlatformImage(data: data)
-        else { return nil }
-        cache.setObject(image, forKey: key)
+        cache.setObject(image, forKey: key as NSString)
+        Self.touch(file)
         return image
+    }
+
+    /// One fetch per avatar however many rows ask (a busy sender's face is
+    /// on every one of their messages).
+    private func fetch(key: String, request: URLRequest?) async -> PlatformImage? {
+        if let running = inflight[key] {
+            return await running.value
+        }
+        guard let request else { return nil }
+        let task = Task { () -> PlatformImage? in
+            guard let (data, _) = try? await ApiConnection.mediaSession.data(for: request),
+                  let image = PlatformImage(data: data)
+            else { return nil }
+            cache.setObject(image, forKey: key as NSString)
+            notOnDisk.remove(key)
+            Self.write(data, to: Self.diskFile(for: key))
+            return image
+        }
+        inflight[key] = task
+        defer { inflight[key] = nil }
+        return await task.value
+    }
+
+    nonisolated private static func diskFile(for key: String) -> URL {
+        let digest = SHA256.hash(data: Data(key.utf8))
+        return diskRoot.appendingPathComponent(digest.map { String(format: "%02x", $0) }.joined())
+    }
+
+    nonisolated private static func write(_ data: Data, to file: URL) {
+        Task.detached(priority: .utility) {
+            try? FileManager.default.createDirectory(
+                at: diskRoot, withIntermediateDirectories: true)
+            try? data.write(to: file, options: .atomic)
+        }
+    }
+
+    /// Marks a cached avatar as just shown, so the sweep keeps it.
+    nonisolated private static func touch(_ file: URL) {
+        Task.detached(priority: .background) {
+            try? FileManager.default.setAttributes(
+                [.modificationDate: Date()], ofItemAtPath: file.path)
+        }
+    }
+
+    /// Removes avatars nobody has shown in two months, in the background.
+    nonisolated static func scheduleSweep() {
+        Task.detached(priority: .background) {
+            let cutoff = Date().addingTimeInterval(-diskRetention)
+            let files = (try? FileManager.default.contentsOfDirectory(
+                at: diskRoot, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+            for file in files {
+                let modified = (try? file.resourceValues(
+                    forKeys: [.contentModificationDateKey]))?.contentModificationDate
+                if let modified, modified < cutoff {
+                    try? FileManager.default.removeItem(at: file)
+                }
+            }
+        }
     }
 
     /// The realm's square icon (the register snapshot carries its URL).
@@ -83,13 +194,41 @@ final class AvatarLoader {
             cacheKey: dark ? "realm-logo-night" : "realm-logo", store: store)
     }
 
+    /// The icon as last persisted, for the toolbar's first frame.
+    func cachedRealmIcon(store: PerAccountStore) -> PlatformImage? {
+        cachedRealmImage(path: store.realmIconUrl, cacheKey: "realm-icon", store: store)
+    }
+
+    /// The logo as last persisted, for the toolbar's first frame.
+    func cachedRealmLogo(store: PerAccountStore, dark: Bool) -> PlatformImage? {
+        cachedRealmImage(
+            path: store.realmLogoPath(dark: dark),
+            cacheKey: dark ? "realm-logo-night" : "realm-logo", store: store)
+    }
+
+    private func cachedRealmImage(
+        path: String?, cacheKey: String, store: PerAccountStore
+    ) -> PlatformImage? {
+        guard path != nil else { return nil }
+        let key = "\(store.connection.realmURL.absoluteString)|\(cacheKey)"
+        if let hit = cache.object(forKey: key as NSString) {
+            return hit
+        }
+        guard !notOnDisk.contains(key) else { return nil }
+        guard let data = store.cachedBrandImageData(key: cacheKey),
+              let image = PlatformImage(data: data)
+        else {
+            notOnDisk.insert(key)
+            return nil
+        }
+        cache.setObject(image, forKey: key as NSString)
+        return image
+    }
+
     private func realmImage(
         path: String?, cacheKey: String, store: PerAccountStore
     ) async -> PlatformImage? {
-        let key = "\(store.connection.realmURL.absoluteString)|\(cacheKey)" as NSString
-        if let hit = cache.object(forKey: key) {
-            return hit
-        }
+        let key = "\(store.connection.realmURL.absoluteString)|\(cacheKey)"
         guard let path,
               let url = URL(string: path, relativeTo: store.connection.realmURL)
         else { return nil }
@@ -97,24 +236,27 @@ final class AvatarLoader {
         // Offline-first: the copy persisted last session renders
         // immediately; the network refreshes it in the background for the
         // next render (realm branding rarely changes).
-        if let data = store.cachedBrandImageData(key: cacheKey),
-           let image = PlatformImage(data: data) {
-            cache.setObject(image, forKey: key)
-            Task {
-                guard let (fresh, _) = try? await ApiConnection.mediaSession.data(for: request),
-                      fresh != data,
-                      let freshImage = PlatformImage(data: fresh)
-                else { return }
-                store.saveBrandImageData(fresh, key: cacheKey)
-                self.cache.setObject(freshImage, forKey: key)
+        if let cached = cachedRealmImage(path: path, cacheKey: cacheKey, store: store) {
+            if refreshed.insert(key).inserted {
+                let data = store.cachedBrandImageData(key: cacheKey)
+                Task {
+                    guard let (fresh, _) = try? await ApiConnection.mediaSession.data(for: request),
+                          fresh != data,
+                          let freshImage = PlatformImage(data: fresh)
+                    else { return }
+                    store.saveBrandImageData(fresh, key: cacheKey)
+                    self.cache.setObject(freshImage, forKey: key as NSString)
+                }
             }
-            return image
+            return cached
         }
         guard let (data, _) = try? await ApiConnection.mediaSession.data(for: request),
               let image = PlatformImage(data: data)
         else { return nil }
         store.saveBrandImageData(data, key: cacheKey)
-        cache.setObject(image, forKey: key)
+        cache.setObject(image, forKey: key as NSString)
+        notOnDisk.remove(key)
+        refreshed.insert(key)
         return image
     }
 }
@@ -209,8 +351,17 @@ struct RealmLogoView: View {
     @State private var nightLogo: PlatformImage?
     @State private var icon: PlatformImage?
 
+    // Until the tasks have run, the persisted copies: the toolbar's first
+    // frame has the brand rather than the initial (which then popped to
+    // the image a network round trip later).
     private var logo: PlatformImage? {
-        colorScheme == .dark ? nightLogo : dayLogo
+        let dark = colorScheme == .dark
+        return (dark ? nightLogo : dayLogo)
+            ?? AvatarLoader.shared.cachedRealmLogo(store: store, dark: dark)
+    }
+
+    private var shownIcon: PlatformImage? {
+        icon ?? AvatarLoader.shared.cachedRealmIcon(store: store)
     }
 
     /// The wide logo only when it fits the measured room at full size.
@@ -233,7 +384,7 @@ struct RealmLogoView: View {
                     // squeezes the width, and scaledToFit shrinks the
                     // whole mark with it.
                     .fixedSize()
-            } else if let icon {
+            } else if let icon = shownIcon {
                 Image(platform: icon)
                     .resizable()
                     .scaledToFill()
@@ -251,13 +402,18 @@ struct RealmLogoView: View {
             }
         }
         .help(store.realmName ?? store.connection.realmURL.host() ?? "")
+        // Separately: one variant still on the network mustn't hold back
+        // the ones already cached.
         .task(id: store.accountId) {
-            async let day = AvatarLoader.shared.realmLogo(store: store, dark: false)
-            async let night = AvatarLoader.shared.realmLogo(store: store, dark: true)
-            // The icon loads regardless (cached): it's the live fallback
-            // whenever a resize squeezes the wide logo out.
-            async let square = AvatarLoader.shared.realmIcon(store: store)
-            (dayLogo, nightLogo, icon) = await (day, night, square)
+            dayLogo = await AvatarLoader.shared.realmLogo(store: store, dark: false)
+        }
+        .task(id: store.accountId) {
+            nightLogo = await AvatarLoader.shared.realmLogo(store: store, dark: true)
+        }
+        // The icon loads regardless (cached): it's the live fallback
+        // whenever a resize squeezes the wide logo out.
+        .task(id: store.accountId) {
+            icon = await AvatarLoader.shared.realmIcon(store: store)
         }
     }
 }
@@ -318,9 +474,14 @@ struct AvatarView: View {
     @State private var image: PlatformImage?
 
     var body: some View {
+        // The cached face until the task has run, so a row draws it on its
+        // first frame instead of initials. Looked up here, not in init: an
+        // init runs in the parent's body, which would then re-render on
+        // every change to the user list.
+        let shown = image ?? AvatarLoader.shared.cachedImage(for: userId, store: store)
         Group {
-            if let image {
-                Image(platform: image)
+            if let shown {
+                Image(platform: shown)
                     .resizable()
                     .scaledToFill()
                     .frame(width: size, height: size)

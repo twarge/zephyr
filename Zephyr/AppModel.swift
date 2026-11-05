@@ -212,6 +212,44 @@ final class AppModel {
             self?.draftSyncers[account]?.localEdited(destination, text: text)
         }
         global.messageRetentionDays = Self.storedRetentionDays
+        // Launch starts here, not in the window's first task: the window
+        // is ordered on screen with whatever RootView first renders, and
+        // the main actor's next turn comes only after AppKit has built it.
+        // So the cached store goes in now — with its offline history, from
+        // reads the app's init started — and the window's first frame has
+        // the sidebar and feed instead of a spinner. The reads have usually
+        // finished by now; a giant realm's slower decode finishes on the
+        // async path rather than holding the window back.
+        if let launch = Self.launchAccount(in: global.enabledAccounts) {
+            if let prefetch = Self.launchPrefetch, prefetch.accountId == launch.id {
+                global.adopt(prefetch)
+            } else {
+                global.prefetchCachedSnapshot(for: launch.id)
+            }
+            Self.launchPrefetch = nil
+            if global.installPrefetchedStore(for: launch.id, waitingUpTo: .milliseconds(120)) {
+                phase = .ready(launch.id)
+                PerfLog.mark("init: cached store installed")
+            }
+        }
+        Task { await self.start() }
+    }
+
+    /// The launch's disk reads, started by the app's init — SwiftUI makes
+    /// this model lazily, ~70 ms later, and the reads run meanwhile so the
+    /// install above rarely waits.
+    private static var launchPrefetch: LaunchPrefetch?
+
+    static func prefetchLaunch() {
+        guard let accounts = try? JSONFileAccountsStore.standard().load(),
+              let account = launchAccount(in: accounts.filter(\.isEnabled))
+        else { return }
+        launchPrefetch = LaunchPrefetch(account: account, credentials: KeychainCredentialStore())
+    }
+
+    /// The server that was front last time, else the first.
+    private static func launchAccount(in accounts: [Account]) -> Account? {
+        accounts.first(where: { $0.id == AppStateStore.lastActiveAccount }) ?? accounts.first
     }
 
     /// Retention picker semantics: 0 means keep forever.
@@ -225,11 +263,21 @@ final class AppModel {
             forYears: UserDefaults.standard.object(forKey: "messageRetentionYears") as? Int ?? 5)
     }
 
+    private var launch: Task<Void, Never>?
+
+    /// Runs the launch once; later callers (RootView's task) wait on it.
     func start() async {
-        guard case .launching = phase else { return }
+        if launch == nil {
+            launch = Task { await self.runLaunch() }
+        }
+        await launch?.value
+    }
+
+    private func runLaunch() async {
         UnreadMirror.shared.activate(global: global)
         DetachWindowTip.appOpened.sendDonation()
         MediaFileCache.scheduleSweep()
+        AvatarLoader.scheduleSweep()
         connectivity = ConnectivityMonitor { [weak self] in
             self?.networkRestored()
         }
@@ -239,9 +287,7 @@ final class AppModel {
             return
         }
         NotificationManager.shared.setup(appModel: self)
-        // Restore the server that was front last time.
-        let active = accounts.first(where: { $0.id == AppStateStore.lastActiveAccount })
-            ?? accounts[0]
+        let active = Self.launchAccount(in: accounts) ?? accounts[0]
         DraftStore.shared.migrateLegacy(to: active.id)
         await load(accountId: active.id)
         // Connect the other servers in the background so their notifications
@@ -281,13 +327,19 @@ final class AppModel {
         // on big realms), and the cached-snapshot decode rides inside it;
         // the stale store renders as soon as the decode lands.
         let liveStore = Task { try await global.perAccountStore(for: accountId) }
-        if await global.installCachedStore(for: accountId) {
+        PerfLog.mark("load: register + cached decode started")
+        if global.stores[accountId] != nil {
+            // The cached store went in at app init.
+            phase = .ready(accountId)
+        } else if await global.installCachedStore(for: accountId) {
+            PerfLog.mark("load: cached store installed")
             phase = .ready(accountId)
         } else {
             phase = .loading
         }
         do {
             let store = try await liveStore.value
+            PerfLog.mark("load: live store installed")
             phase = .ready(accountId)
             AppStateStore.lastActiveAccount = accountId
             ensureDraftSync(accountId)
