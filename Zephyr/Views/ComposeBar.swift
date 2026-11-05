@@ -173,6 +173,12 @@ struct ComposeBar: View {
         case channel(streamId: Int)
     }
 
+    /// Settings › General's "Return sends messages": whether a connected
+    /// keyboard's Return sends from the compact field (off: Return makes a
+    /// new line and ⌘Return sends). Seeded from the first server's Enter
+    /// sends setting (AppModel), then the app's own.
+    nonisolated static let returnSendsKey = "composeReturnSends"
+
     let store: PerAccountStore
     let mode: Mode
 
@@ -190,6 +196,7 @@ struct ComposeBar: View {
     /// "was focused" for the editor-mode toggle means focused now OR
     /// blurred moments ago.
     @State private var composeBlurredAt = Date.distantPast
+    @AppStorage(ComposeBar.returnSendsKey) private var returnSends = true
     @State private var topicText = ""
     @State private var topicPrefill = ""
     /// Why the topic field just took focus (a send with no topic); cleared
@@ -519,7 +526,9 @@ struct ComposeBar: View {
 
     /// The input pill: no send arrow anywhere — Return IS Send (the
     /// iOS keyboard labels it so), and the expanded editor keeps its
-    /// arrow where Return means newline.
+    /// arrow where Return means newline. With Return-sends off, a
+    /// connected keyboard's Return makes a new line and ⌘Return sends;
+    /// the on-screen Send key still sends.
     private var compactField: some View {
         TextField(placeholder, text: $text, selection: $fieldSelection, axis: .vertical)
             .textFieldStyle(.plain)
@@ -557,7 +566,22 @@ struct ComposeBar: View {
                     return .ignored
                 }
                 #endif
-                return acceptSelection()
+                guard suggestions.isEmpty, !returnSends else { return acceptSelection() }
+                // Return-sends off: only a connected keyboard gets here —
+                // the on-screen Send key never reaches onKeyPress, so the
+                // detector below still sends it.
+                #if os(macOS)
+                // An input method's Return commits its marked text.
+                if let editor = NSApp.keyWindow?.firstResponder as? NSTextView,
+                   editor.hasMarkedText() {
+                    return .ignored
+                }
+                insertFieldNewline()
+                return .handled
+                #else
+                hardwareNewlineAt = .now
+                return .ignored
+                #endif
             }
             .onKeyPress(.escape) {
                 guard !suggestions.isEmpty else { return .ignored }
@@ -581,6 +605,23 @@ struct ComposeBar: View {
             }
             #endif
     }
+
+    #if os(macOS)
+    /// The newline a Return-sends-off Return makes, where the field would
+    /// otherwise submit: at the caret, over any selection.
+    private func insertFieldNewline() {
+        var range = text.endIndex..<text.endIndex
+        if let fieldSelection, case .selection(let selected) = fieldSelection.indices,
+           selected.upperBound <= text.endIndex {
+            range = selected
+        }
+        let caret = text.distance(from: text.startIndex, to: range.lowerBound) + 1
+        text.replaceSubrange(range, with: "\n")
+        // After the text: the binding would pin the caret at its old offset.
+        fieldSelection = TextSelection(
+            insertionPoint: text.index(text.startIndex, offsetBy: min(caret, text.count)))
+    }
+    #endif
 
     /// A focused field stays focused across the compact/long-form swap,
     /// and the caret carries over.
@@ -666,7 +707,9 @@ struct ComposeBar: View {
         .keyboardShortcut(.return, modifiers: .command)
         .help(expanded
             ? "Send (⇧Return; Return for a new line)"
-            : "Send (Return; ⌥Return for a new line)")
+            : returnSends
+                ? "Send (Return; ⌥Return for a new line)"
+                : "Send (⌘Return; Return for a new line)")
     }
 
     // MARK: Long-form mode

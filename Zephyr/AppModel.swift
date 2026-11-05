@@ -175,6 +175,14 @@ final class AppModel {
             NotificationManager.shared.handleMessageEvent(
                 messageEvent, accountId: accountId, store: store)
         }
+        // The compact field's Return-sends preference starts from the
+        // first server's Enter-sends setting, then is the app's own.
+        global.storeInstalledObserver = { _, store in
+            let defaults = UserDefaults.standard
+            guard defaults.object(forKey: ComposeBar.returnSendsKey) == nil,
+                  let enterSends = store.serverEnterSends else { return }
+            defaults.set(enterSends, forKey: ComposeBar.returnSendsKey)
+        }
         // Delegate + categories must exist before any notification response
         // arrives — including one that launches the app.
         NotificationManager.shared.attach(appModel: self)

@@ -108,6 +108,7 @@ private struct GeneralSettings: View {
     @AppStorage("combinedShowsMuted") private var combinedShowsMuted = false
     @AppStorage("serverNameInTitles") private var serverNameInTitles =
         serverNameInTitlesDefault
+    @AppStorage(ComposeBar.returnSendsKey) private var returnSends = true
     #if os(macOS)
     /// Read at click time by DetachedWindowTabs (same key and default).
     @AppStorage("commandClickOpensTab") private var commandClickOpensTab = true
@@ -193,6 +194,14 @@ private struct GeneralSettings: View {
         Text("5 GB").tag(5000)
     }
 
+    private var returnSendsCaption: Text {
+        #if os(macOS)
+        Text("In the message field. When off, Return starts a new line and ⌘Return sends. The long-form editor always sends with ⇧Return. Starts from your Zulip account's Enter sends setting.")
+        #else
+        Text("In the message field, with a connected keyboard. When off, Return starts a new line and ⌘Return sends; the on-screen keyboard's Send key always sends. The long-form editor always sends with ⇧Return. Starts from your Zulip account's Enter sends setting.")
+        #endif
+    }
+
     private var cacheLimitCaption: Text {
         Text("Attachments you open, share, or drag out stay on this device as long as message history is kept, up to this size; past it, the least recently used go first.")
     }
@@ -229,6 +238,12 @@ private struct GeneralSettings: View {
                     .monospacedDigit()
             }
             Text("0 hides the Recent Searches section.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Divider()
+                .padding(.vertical, 4)
+            Toggle("Return sends messages", isOn: $returnSends)
+            returnSendsCaption
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Divider()
@@ -291,6 +306,11 @@ private struct GeneralSettings: View {
                     .monospacedDigit()
             } footer: {
                 Text("0 hides the Recent Searches section.")
+            }
+            Section {
+                Toggle("Return sends messages", isOn: $returnSends)
+            } footer: {
+                returnSendsCaption
             }
             Section {
                 Picker("Keep message history for", selection: $messageRetentionYears) {

@@ -30,6 +30,9 @@ public final class GlobalStore: UpdateMachineDelegate {
 
     /// Debug/harness hook: every applied event, tagged with its account.
     public var eventObserver: ((Account.ID, Event) -> Void)?
+    /// Every live store as it's installed (first register and each
+    /// rebuild) — not the provisional ones built from the snapshot cache.
+    public var storeInstalledObserver: ((Account.ID, PerAccountStore) -> Void)?
 
     /// Message-history retention in days (nil = keep forever), applied to
     /// every store; changing it re-prunes live stores immediately.
@@ -294,6 +297,7 @@ public final class GlobalStore: UpdateMachineDelegate {
         } else {
             Task { await store.restoreOfflineCache() }
         }
+        storeInstalledObserver?(accountId, store)
     }
 
     public func updateMachineNeedsRebuild(_ machine: UpdateMachine, reason: UpdateMachine.RebuildReason) {

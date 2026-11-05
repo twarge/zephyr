@@ -68,6 +68,26 @@ struct SyncLifecycleTests {
         await global.shutdown(deleteQueues: false)
     }
 
+    @Test func storeInstalledObserverSeesLiveStore() async throws {
+        let transport = FakeTransport(
+            script: [
+                .json(Fixtures.serverSettingsJSON()),
+                .json(Fixtures.registerJSON(
+                    queueId: "q1", userSettings: #"{"enter_sends": false}"#)),
+            ],
+            defaultResponse: .hang)
+        let (global, account) = try makeGlobalStore(transport: transport)
+        var installed: [(Account.ID, Bool?)] = []
+        global.storeInstalledObserver = { id, store in
+            installed.append((id, store.serverEnterSends))
+        }
+
+        _ = try await global.perAccountStore(for: account.id)
+        #expect(installed.count == 1)
+        #expect(installed.first?.0 == account.id)
+        #expect(installed.first?.1 == false)
+    }
+
     @Test func queueExpiryRebuildsStore() async throws {
         let transport = FakeTransport(
             script: [

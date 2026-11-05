@@ -5,12 +5,15 @@ import ZulipTestSupport
 @testable import ZulipModel
 
 @MainActor
-func makeStore(unreadsJSON: String = Fixtures.emptyUnreadsJSON) throws -> PerAccountStore {
+func makeStore(
+    unreadsJSON: String = Fixtures.emptyUnreadsJSON, userSettingsJSON: String? = nil
+) throws -> PerAccountStore {
     let account = Account(
         realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
     let snapshot = try ZulipJSON.decoder.decode(
         InitialSnapshot.self,
-        from: Data(Fixtures.registerJSON(queueId: "q1", unreadMsgs: unreadsJSON).utf8))
+        from: Data(Fixtures.registerJSON(
+            queueId: "q1", unreadMsgs: unreadsJSON, userSettings: userSettingsJSON).utf8))
     let connection = ApiConnection(
         realmURL: account.realmURL, email: account.email, apiKey: "key",
         transport: FakeTransport(defaultResponse: .hang))
@@ -30,6 +33,12 @@ struct StoreEventTests {
         #expect(store.channels.count == 1)
         #expect(store.subscriptions.count == 1)
         #expect(store.unreads.totalCount == 0)
+        #expect(store.serverEnterSends == nil)
+    }
+
+    @Test func snapshotCarriesServerEnterSends() throws {
+        let store = try makeStore(userSettingsJSON: #"{"enter_sends": false}"#)
+        #expect(store.serverEnterSends == false)
     }
 
     @Test func messageEventAddsMessageAndUnread() throws {

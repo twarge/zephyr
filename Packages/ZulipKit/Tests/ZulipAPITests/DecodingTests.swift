@@ -33,6 +33,17 @@ struct MessageDecodingTests {
         #expect(snapshot.realmUsers?.count == 2)
         #expect(snapshot.streams?.first?.name == "general")
         #expect(snapshot.unreadMsgs?.count == 0)
+        #expect(snapshot.userSettings == nil)
+    }
+
+    @Test func initialSnapshotUserSettings() throws {
+        let snapshot = try ZulipJSON.decoder.decode(
+            InitialSnapshot.self,
+            from: Data(Fixtures.registerJSON(
+                queueId: "q1",
+                userSettings: #"{"enter_sends": true, "twenty_four_hour_time": false, "emojiset": "google"}"#
+            ).utf8))
+        #expect(snapshot.userSettings?.enterSends == true)
     }
 
     @Test func serverSettingsRealmURLFallback() throws {
@@ -148,6 +159,10 @@ struct RouteRequestTests {
         let capabilities = try #require(request.formValue("client_capabilities"))
         #expect(capabilities.contains("\"empty_topic_name\":true"))
         #expect(capabilities.contains("\"bulk_message_deletion\":true"))
+        #expect(capabilities.contains("\"user_settings_object\":true"))
+        // Fetched once for the Return-sends seed; changes aren't followed.
+        #expect(request.formValue("fetch_event_types")?.contains(#""user_settings""#) == true)
+        #expect(request.formValue("event_types")?.contains(#""user_settings""#) == false)
         #expect(request.headers["Authorization"]?.hasPrefix("Basic ") == true)
         // Feature level unknown (nil) → idle_queue_timeout must be omitted.
         #expect(request.formValue("idle_queue_timeout") == nil)

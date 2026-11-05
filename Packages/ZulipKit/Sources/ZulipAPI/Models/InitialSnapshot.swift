@@ -46,6 +46,16 @@ public struct InitialSnapshot: Decodable, Sendable {
     /// Custom emoji, keyed by emoji id (reaction `emoji_code` for
     /// `realm_emoji` reactions).
     public var realmEmoji: [String: RealmEmojiItem]?
+    /// The user's personal settings (the `user_settings_object` shape).
+    public var userSettings: UserSettings?
+}
+
+/// The `user_settings` register object; only the settings the app reads
+/// are modeled.
+public struct UserSettings: Decodable, Sendable {
+    /// Whether Enter sends in the web compose box. Seeds the app's own
+    /// Return-sends preference once; later changes aren't followed.
+    public var enterSends: Bool?
 }
 
 public struct RealmEmojiItem: Decodable, Sendable {

@@ -17,10 +17,12 @@ public enum Fixtures {
         lastEventId: Int = -1,
         featureLevel: Int = 400,
         unreadMsgs: String = emptyUnreadsJSON,
-        recentPrivateConversations: String = "[]"
+        recentPrivateConversations: String = "[]",
+        userSettings: String? = nil
     ) -> String {
-        """
-        {"result": "success", "msg": "",
+        let userSettingsField = userSettings.map { "\"user_settings\": \($0)," } ?? ""
+        return """
+        {"result": "success", "msg": "", \(userSettingsField)
          "recent_private_conversations": \(recentPrivateConversations),
          "queue_id": "\(queueId)", "last_event_id": \(lastEventId),
          "zulip_version": "12.0", "zulip_feature_level": \(featureLevel),

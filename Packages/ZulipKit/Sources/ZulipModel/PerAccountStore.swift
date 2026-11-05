@@ -20,6 +20,9 @@ public final class PerAccountStore {
     public var lastEventId: Int
     public let zulipFeatureLevel: Int
     public let eventQueueLongpollTimeoutSeconds: Int
+    /// The server's Enter-sends setting at register time (nil when the
+    /// snapshot predates fetching it). Only seeds the app's preference.
+    public let serverEnterSends: Bool?
 
     public private(set) var realmName: String?
     /// The realm's square icon (absolute, or relative to the realm URL).
@@ -163,6 +166,7 @@ public final class PerAccountStore {
         lastEventId = snapshot.lastEventId
         zulipFeatureLevel = snapshot.zulipFeatureLevel
         eventQueueLongpollTimeoutSeconds = snapshot.eventQueueLongpollTimeoutSeconds ?? 90
+        serverEnterSends = snapshot.userSettings?.enterSends
         realmName = snapshot.realmName
         realmIconUrl = snapshot.realmIconUrl
         starredMessageIds = Set(snapshot.starredMessages ?? [])
