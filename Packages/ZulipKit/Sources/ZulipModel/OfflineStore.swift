@@ -151,6 +151,7 @@ public enum PendingAction: Codable, Sendable, Equatable {
     case updateFlags(messageIds: [Int], add: Bool, flag: String)
     case reaction(
         messageId: Int, add: Bool, emojiName: String, emojiCode: String, reactionType: String)
+    case updateSettings(enterSends: Bool)
 }
 
 /// Whether an error means the request never reached the server (no route, no

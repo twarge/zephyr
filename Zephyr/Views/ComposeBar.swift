@@ -175,8 +175,9 @@ struct ComposeBar: View {
 
     /// Settings › General's "Return sends messages": whether a connected
     /// keyboard's Return sends from the compact field (off: Return makes a
-    /// new line and ⌘Return sends). Seeded from the first server's Enter
-    /// sends setting (AppModel), then the app's own.
+    /// new line and ⌘Return sends). With one server it is that server's
+    /// Enter sends setting; with several, the app's own, seeded from the
+    /// first (AppModel).
     nonisolated static let returnSendsKey = "composeReturnSends"
 
     let store: PerAccountStore
@@ -196,7 +197,11 @@ struct ComposeBar: View {
     /// "was focused" for the editor-mode toggle means focused now OR
     /// blurred moments ago.
     @State private var composeBlurredAt = Date.distantPast
-    @AppStorage(ComposeBar.returnSendsKey) private var returnSends = true
+    @AppStorage(ComposeBar.returnSendsKey) private var returnSendsPreference = true
+    /// A sole server's Enter-sends setting, else the app's preference.
+    private var returnSends: Bool {
+        model.returnSendsServer?.serverEnterSends ?? returnSendsPreference
+    }
     @State private var topicText = ""
     @State private var topicPrefill = ""
     /// Why the topic field just took focus (a send with no topic); cleared

@@ -74,4 +74,14 @@ extension ApiConnection {
     public func getOwnUser() async throws -> OwnUser {
         try await request(ApiRequest(method: .get, path: "/api/v1/users/me"))
     }
+
+    /// PATCH /settings — the user's Enter-sends setting (here since
+    /// feature level 81). The server echoes a `user_settings` event to all
+    /// the user's clients.
+    public func updateSettings(enterSends: Bool) async throws {
+        _ = try await send(
+            ApiRequest(
+                method: .patch, path: "/api/v1/settings",
+                params: [Param("enter_sends", enterSends ? "true" : "false")]))
+    }
 }

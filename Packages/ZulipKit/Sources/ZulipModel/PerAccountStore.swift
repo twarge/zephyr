@@ -20,9 +20,10 @@ public final class PerAccountStore {
     public var lastEventId: Int
     public let zulipFeatureLevel: Int
     public let eventQueueLongpollTimeoutSeconds: Int
-    /// The server's Enter-sends setting at register time (nil when the
-    /// snapshot predates fetching it). Only seeds the app's preference.
-    public let serverEnterSends: Bool?
+    /// The server's Enter-sends setting (nil when the snapshot predates
+    /// fetching it), kept live by `user_settings` events and reflecting a
+    /// change still queued for replay.
+    public private(set) var serverEnterSends: Bool?
 
     public private(set) var realmName: String?
     /// The realm's square icon (absolute, or relative to the realm URL).
@@ -550,6 +551,9 @@ public final class PerAccountStore {
     /// cache hydration, when mark-unread refiles can locate their messages.
     /// (Reactions need no pass: the message cache saved them optimistically.)
     private func reapplyPendingActionsLocally() {
+        for case .updateSettings(let enterSends) in pendingActions {
+            serverEnterSends = enterSends
+        }
         for case .updateFlags(let ids, let add, let flag) in pendingActions {
             switch flag {
             case "read":
@@ -566,6 +570,15 @@ public final class PerAccountStore {
                 break
             }
         }
+    }
+
+    /// Changes the server's Enter-sends setting, queued for replay when
+    /// offline. Applied locally at once; the server's echo confirms it.
+    public func setEnterSends(_ enterSends: Bool) {
+        guard serverEnterSends != enterSends else { return }
+        serverEnterSends = enterSends
+        // Queued changes replay in order, so the last one stands.
+        performOrQueue(.updateSettings(enterSends: enterSends))
     }
 
     /// Runs one idempotent server mutation, or records it for replay when the
@@ -609,6 +622,8 @@ public final class PerAccountStore {
             try await connection.updateReaction(
                 messageId: messageId, add: add,
                 emojiName: emojiName, emojiCode: emojiCode, reactionType: reactionType)
+        case .updateSettings(let enterSends):
+            try await connection.updateSettings(enterSends: enterSends)
         }
     }
 
@@ -1879,6 +1894,11 @@ public final class PerAccountStore {
         case .urlEmbedData(let e):
             previewEmbeds = PreviewEmbeds(
                 eventId: event.id, content: e.content, renderedContent: e.renderedContent)
+
+        case .userSettingsUpdate(let e):
+            if e.property == "enter_sends", let enterSends = e.boolValue {
+                serverEnterSends = enterSends
+            }
 
         case .unexpected(let type, let op):
             logger.debug(

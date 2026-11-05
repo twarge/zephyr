@@ -120,6 +120,24 @@ struct EventDecodingTests {
         #expect(user.userId == 5)
     }
 
+    @Test func userSettingsUpdateEvent() throws {
+        let events = try decodeEvents(
+            Fixtures.eventsJSON([
+                #"{"id": 13, "type": "user_settings", "op": "update", "property": "enter_sends", "value": true}"#,
+                #"{"id": 14, "type": "user_settings", "op": "update", "property": "default_language", "value": "fr", "language_name": "French"}"#,
+            ]))
+        guard case .userSettingsUpdate(let enterSends) = events[0].kind,
+              case .userSettingsUpdate(let language) = events[1].kind
+        else {
+            Issue.record("expected user_settings update events")
+            return
+        }
+        #expect(enterSends.property == "enter_sends")
+        #expect(enterSends.boolValue == true)
+        #expect(language.property == "default_language")
+        #expect(language.boolValue == nil)
+    }
+
     @Test func urlEmbedDataEvent() throws {
         let events = try decodeEvents(
             Fixtures.eventsJSON([
@@ -160,9 +178,9 @@ struct RouteRequestTests {
         #expect(capabilities.contains("\"empty_topic_name\":true"))
         #expect(capabilities.contains("\"bulk_message_deletion\":true"))
         #expect(capabilities.contains("\"user_settings_object\":true"))
-        // Fetched once for the Return-sends seed; changes aren't followed.
+        // The Return-sends preference: fetched, and followed live.
         #expect(request.formValue("fetch_event_types")?.contains(#""user_settings""#) == true)
-        #expect(request.formValue("event_types")?.contains(#""user_settings""#) == false)
+        #expect(request.formValue("event_types")?.contains(#""user_settings""#) == true)
         #expect(request.headers["Authorization"]?.hasPrefix("Basic ") == true)
         // Feature level unknown (nil) → idle_queue_timeout must be omitted.
         #expect(request.formValue("idle_queue_timeout") == nil)
@@ -188,6 +206,18 @@ struct RouteRequestTests {
         connection.featureLevel = 481
         _ = try await connection.registerQueue(idleQueueTimeoutSeconds: 3600)
         #expect(transport.requests.first?.formValue("idle_queue_timeout") == "3600")
+    }
+
+    @Test func updateSettingsRequest() async throws {
+        let transport = FakeTransport(script: [.json(#"{"result": "success", "msg": ""}"#)])
+        let connection = ApiConnection(
+            realmURL: URL(string: "https://test.example")!,
+            email: "self@example.com", apiKey: "key", transport: transport)
+        try await connection.updateSettings(enterSends: false)
+        let request = try #require(transport.requests.first)
+        #expect(request.method == "PATCH")
+        #expect(request.path == "/api/v1/settings")
+        #expect(request.formValue("enter_sends") == "false")
     }
 
     @Test func urlEmbedDataEventsGatedByFeatureLevel() async throws {

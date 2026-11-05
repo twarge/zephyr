@@ -41,6 +41,16 @@ struct StoreEventTests {
         #expect(store.serverEnterSends == false)
     }
 
+    @Test func userSettingsEventUpdatesServerEnterSends() throws {
+        let store = try makeStore(userSettingsJSON: #"{"enter_sends": true}"#)
+        try store.handleEvent(decodeEvent(
+            #"{"id": 1, "type": "user_settings", "op": "update", "property": "enter_sends", "value": false}"#))
+        #expect(store.serverEnterSends == false)
+        try store.handleEvent(decodeEvent(
+            #"{"id": 2, "type": "user_settings", "op": "update", "property": "high_contrast_mode", "value": true}"#))
+        #expect(store.serverEnterSends == false)
+    }
+
     @Test func messageEventAddsMessageAndUnread() throws {
         let store = try makeStore()
         try store.handleEvent(

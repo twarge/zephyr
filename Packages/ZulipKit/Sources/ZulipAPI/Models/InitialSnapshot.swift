@@ -53,8 +53,8 @@ public struct InitialSnapshot: Decodable, Sendable {
 /// The `user_settings` register object; only the settings the app reads
 /// are modeled.
 public struct UserSettings: Decodable, Sendable {
-    /// Whether Enter sends in the web compose box. Seeds the app's own
-    /// Return-sends preference once; later changes aren't followed.
+    /// Whether Enter sends in the web compose box: the app's Return-sends
+    /// preference while this is the only server, else just its seed.
     public var enterSends: Bool?
 }
 

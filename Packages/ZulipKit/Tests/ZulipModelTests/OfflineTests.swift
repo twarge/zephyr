@@ -14,14 +14,15 @@ struct OfflineTests {
 
     private func makeStore(
         script: [FakeResponse], offline: OfflineStore? = nil,
-        unreadMsgs: String = Fixtures.emptyUnreadsJSON
+        unreadMsgs: String = Fixtures.emptyUnreadsJSON, userSettings: String? = nil
     ) throws -> (PerAccountStore, FakeTransport) {
         let transport = FakeTransport(script: script, defaultResponse: .hang)
         let account = Account(
             realmURL: URL(string: "https://test.example")!, email: "self@example.com", userId: 1)
         let snapshot = try ZulipJSON.decoder.decode(
             InitialSnapshot.self,
-            from: Data(Fixtures.registerJSON(queueId: "q1", unreadMsgs: unreadMsgs).utf8))
+            from: Data(Fixtures.registerJSON(
+                queueId: "q1", unreadMsgs: unreadMsgs, userSettings: userSettings).utf8))
         let connection = ApiConnection(
             realmURL: account.realmURL, email: account.email, apiKey: "key", transport: transport)
         return (
@@ -329,6 +330,32 @@ struct OfflineTests {
         #expect(store.unreads.unreadIds[key] == [101])
         #expect(store.unreads.mentionIds.isEmpty)
         #expect(store.starredMessageIds.contains(42))
+    }
+
+    @Test func offlineEnterSendsIsOptimisticAndReplays() async throws {
+        let (store, transport) = try makeStore(
+            script: [.networkError, .json(#"{"result": "success"}"#)],
+            userSettings: #"{"enter_sends": true}"#)
+        store.setEnterSends(false)
+        #expect(store.serverEnterSends == false)
+        try await eventually("change queued") {
+            store.pendingActions == [.updateSettings(enterSends: false)]
+        }
+
+        store.flushPending()
+        try await eventually("change replayed") { store.pendingActions.isEmpty }
+        let replay = transport.requests.last
+        #expect(replay?.path == "/api/v1/settings")
+        #expect(replay?.formValue("enter_sends") == "false")
+    }
+
+    @Test func restoredSettingsChangeOverridesSnapshot() throws {
+        let offline = tempOfflineStore()
+        defer { try? FileManager.default.removeItem(at: offline.directory) }
+        offline.savePendingActions([.updateSettings(enterSends: false)])
+        let (store, _) = try makeStore(
+            script: [], offline: offline, userSettings: #"{"enter_sends": true}"#)
+        #expect(store.serverEnterSends == false)
     }
 
     @Test func restoredMarkUnreadRefilesAfterCacheRestore() async throws {

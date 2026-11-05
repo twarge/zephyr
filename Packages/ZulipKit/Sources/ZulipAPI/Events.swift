@@ -39,6 +39,8 @@ public struct Event: Sendable {
         /// A compose preview re-rendered with link previews the server
         /// fetched after answering /messages/render (Zulip 13+).
         case urlEmbedData(UrlEmbedDataEvent)
+        /// One of the user's own settings changed (on any of their clients).
+        case userSettingsUpdate(UserSettingsUpdateEvent)
         case unexpected(type: String, op: String?)
     }
 }
@@ -100,6 +102,23 @@ public struct SubscriptionUpdateEvent: Decodable, Sendable {
         property = try container.decode(String.self, forKey: .property)
         boolValue = try? container.decode(Bool.self, forKey: .value)
         stringValue = try? container.decode(String.self, forKey: .value)
+    }
+}
+
+/// `user_settings/update`: `value` is a bool, integer or string by setting;
+/// only the bool ones are read.
+public struct UserSettingsUpdateEvent: Decodable, Sendable {
+    public var property: String
+    public var boolValue: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case property, value
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        property = try container.decode(String.self, forKey: .property)
+        boolValue = try? container.decode(Bool.self, forKey: .value)
     }
 }
 
@@ -230,6 +249,8 @@ extension Event: Decodable {
             kind = .draftsRemove(draftId: try DraftIdEnvelope(from: decoder).draftId)
         case ("url_embed_data", _):
             kind = .urlEmbedData(try UrlEmbedDataEvent(from: decoder))
+        case ("user_settings", "update"):
+            kind = .userSettingsUpdate(try UserSettingsUpdateEvent(from: decoder))
         default:
             kind = .unexpected(type: type, op: op)
         }

@@ -194,11 +194,22 @@ private struct GeneralSettings: View {
         Text("5 GB").tag(5000)
     }
 
+    /// With one server, the toggle is that server's Enter sends setting
+    /// (written back to it); with several, the app's own preference.
+    private var returnSendsBinding: Binding<Bool> {
+        Binding(
+            get: { model.returnSendsServer?.serverEnterSends ?? returnSends },
+            set: { newValue in
+                returnSends = newValue
+                model.returnSendsServer?.setEnterSends(newValue)
+            })
+    }
+
     private var returnSendsCaption: Text {
         #if os(macOS)
-        Text("In the message field. When off, Return starts a new line and ⌘Return sends. The long-form editor always sends with ⇧Return. Starts from your Zulip account's Enter sends setting.")
+        Text("In the message field. When off, Return starts a new line and ⌘Return sends. The long-form editor always sends with ⇧Return. With one server, this is your Zulip account's Enter sends setting; with several, it starts from the first one's.")
         #else
-        Text("In the message field, with a connected keyboard. When off, Return starts a new line and ⌘Return sends; the on-screen keyboard's Send key always sends. The long-form editor always sends with ⇧Return. Starts from your Zulip account's Enter sends setting.")
+        Text("In the message field, with a connected keyboard. When off, Return starts a new line and ⌘Return sends; the on-screen keyboard's Send key always sends. The long-form editor always sends with ⇧Return. With one server, this is your Zulip account's Enter sends setting; with several, it starts from the first one's.")
         #endif
     }
 
@@ -242,7 +253,7 @@ private struct GeneralSettings: View {
                 .foregroundStyle(.secondary)
             Divider()
                 .padding(.vertical, 4)
-            Toggle("Return sends messages", isOn: $returnSends)
+            Toggle("Return sends messages", isOn: returnSendsBinding)
             returnSendsCaption
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -308,7 +319,7 @@ private struct GeneralSettings: View {
                 Text("0 hides the Recent Searches section.")
             }
             Section {
-                Toggle("Return sends messages", isOn: $returnSends)
+                Toggle("Return sends messages", isOn: returnSendsBinding)
             } footer: {
                 returnSendsCaption
             }

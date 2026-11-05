@@ -157,6 +157,29 @@ final class AppModel {
         return nil
     }
 
+    // MARK: Return-sends preference
+
+    /// The server the compact field's Return-sends preference syncs with:
+    /// the only one connected. With several, the preference is the app's.
+    var returnSendsServer: PerAccountStore? {
+        let enabled = global.enabledAccounts
+        guard enabled.count == 1 else { return nil }
+        return global.stores[enabled[0].id]
+    }
+
+    /// Keeps the app's preference in step with a server's Enter sends
+    /// setting: always while it's the only server (so the preference
+    /// carries on if another is added), otherwise only to seed one never
+    /// set.
+    private func mirrorReturnSends(from accountId: Account.ID) {
+        guard let enterSends = global.stores[accountId]?.serverEnterSends else { return }
+        let defaults = UserDefaults.standard
+        guard global.enabledAccounts.map(\.id) == [accountId]
+            || defaults.object(forKey: ComposeBar.returnSendsKey) == nil
+        else { return }
+        defaults.set(enterSends, forKey: ComposeBar.returnSendsKey)
+    }
+
     init() {
         defer { Self.shared = self }
         do {
@@ -170,18 +193,17 @@ final class AppModel {
                 credentials: KeychainCredentialStore())
         }
         global.eventObserver = { [weak self] accountId, event in
-            guard let self, case .message(let messageEvent) = event.kind,
+            guard let self else { return }
+            if case .userSettingsUpdate = event.kind {
+                self.mirrorReturnSends(from: accountId)
+            }
+            guard case .message(let messageEvent) = event.kind,
                   let store = self.global.stores[accountId] else { return }
             NotificationManager.shared.handleMessageEvent(
                 messageEvent, accountId: accountId, store: store)
         }
-        // The compact field's Return-sends preference starts from the
-        // first server's Enter-sends setting, then is the app's own.
-        global.storeInstalledObserver = { _, store in
-            let defaults = UserDefaults.standard
-            guard defaults.object(forKey: ComposeBar.returnSendsKey) == nil,
-                  let enterSends = store.serverEnterSends else { return }
-            defaults.set(enterSends, forKey: ComposeBar.returnSendsKey)
+        global.storeInstalledObserver = { [weak self] accountId, _ in
+            self?.mirrorReturnSends(from: accountId)
         }
         // Delegate + categories must exist before any notification response
         // arrives — including one that launches the app.

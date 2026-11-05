@@ -27,6 +27,7 @@ extension ApiConnection {
         "message", "update_message", "delete_message", "update_message_flags",
         "reaction", "typing", "realm_user", "subscription", "stream",
         "channel_folder", "realm_emoji", "submessage", "user_topic", "drafts", "heartbeat",
+        "user_settings",
     ]
 
     /// Event types only requested from servers new enough to know them
