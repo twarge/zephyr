@@ -541,7 +541,7 @@ struct ComposeBar: View {
             .lineLimit(1...10)
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .composeGlass(in: RoundedRectangle(cornerRadius: 17))
+            .concentricComposeGlass(minimumRadius: 17)
             #if !os(macOS)
             .submitLabel(.send)
             #endif
@@ -813,7 +813,7 @@ struct ComposeBar: View {
             }
         }
         .frame(height: editorHeight)
-        .composeGlass(in: RoundedRectangle(cornerRadius: 17))
+        .concentricComposeGlass(minimumRadius: 17)
         // macOS's send lives in the expanded icon column instead.
         #if !os(macOS)
         .overlay(alignment: .bottomTrailing) {
@@ -1407,6 +1407,19 @@ extension View {
             background(.regularMaterial, in: shape)
         }
         #endif
+    }
+
+    /// `composeGlass` in a rectangle whose corners are concentric with the
+    /// window's or display's on 26 and later — the pill sitting in an
+    /// iPhone's bottom corner follows its curve as it grows — never
+    /// tighter than `minimumRadius`.
+    @ViewBuilder
+    func concentricComposeGlass(minimumRadius: CGFloat) -> some View {
+        if #available(iOS 26, macOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
+            composeGlass(in: ConcentricRectangle(corners: .concentric(minimum: .fixed(minimumRadius))))
+        } else {
+            composeGlass(in: RoundedRectangle(cornerRadius: minimumRadius))
+        }
     }
 
     /// The HIG's 44pt minimum tap target on iOS; unchanged under a

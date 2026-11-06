@@ -578,7 +578,13 @@ struct MessageFeedList: View {
                                 }
                             }
                         }
-                        .overlay(alignment: .bottomTrailing) {
+                        // Where no compose bar sits below it, the feed's
+                        // corner is the window's (the display's on
+                        // iPhone): the button rises clear of its curve,
+                        // keeping the compose pill's 12pt trailing line.
+                        .cornerAdaptiveOverlay(
+                            alignment: .bottomTrailing, padding: 12, axis: .vertical
+                        ) {
                             if !nearBottom || !model.haveNewest {
                                 Button {
                                     if model.haveNewest {
@@ -597,7 +603,6 @@ struct MessageFeedList: View {
                                         .background(.bar, in: .circle)
                                 }
                                 .buttonStyle(.plain)
-                                .padding(12)
                                 .help("Jump to latest messages")
                             }
                         }

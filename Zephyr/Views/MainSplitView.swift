@@ -339,10 +339,8 @@ struct MainSplitView: View {
                 }
                 .overlay {
                     if dropTargeted && keys.uploadFiles != nil {
-                        RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(.tint, lineWidth: 2)
-                            .background(
-                                .tint.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+                        dropHighlightBorder
+                            .concentricBackground(.tint.opacity(0.06), minimumRadius: 10)
                             .overlay {
                                 Label("Drop files to upload", systemImage: "arrow.down.doc")
                                     .font(.headline)
@@ -1125,6 +1123,22 @@ struct MainSplitView: View {
             .foregroundStyle(.yellow)
             .font(.title3)
             .help("No connection to server")
+    }
+
+    /// The drop highlight's border. It frames the whole pane, so on 26 and
+    /// later its corners are concentric with the window's (the display's
+    /// on iPhone) — stroked half its width in, as strokeBorder strokes
+    /// the 10pt rectangle drawn before then.
+    @ViewBuilder
+    private var dropHighlightBorder: some View {
+        if #available(iOS 26, macOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
+            ConcentricRectangle(corners: .concentric(minimum: .fixed(9)))
+                .stroke(.tint, lineWidth: 2)
+                .padding(1)
+        } else {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(.tint, lineWidth: 2)
+        }
     }
 
     /// A plain function, not an inline switch expression: the latter blew

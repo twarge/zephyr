@@ -29,6 +29,7 @@
 		3D07A493DA42E4D98B0DA530 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9C40C777893FC7275F955B /* Platform.swift */; };
 		3F863C40AC99B169668E1DD0 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7106DB9D273F41FC9FE36ABF /* AppModel.swift */; };
 		428E7CBC70049F69CF04CAB5 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC85F6AA56F7EF9105F7742E /* HelpView.swift */; };
+		4CB078D2395814437BD064A9 /* CornerAdaptation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EBF1C83FB7EF7CB75AFC33C /* CornerAdaptation.swift */; };
 		52EC40B9399E8AA2D4F65331 /* ZulipAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 5D28EB29BBDF0D08CC778000 /* ZulipAPI */; };
 		53D49ACBC473F8B9F2B5BD5E /* SharePickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DBB2BFB3C180FACDCB32F82 /* SharePickerSheet.swift */; };
 		54BFB8373908F2BE25281ECF /* ZulipModel in Frameworks */ = {isa = PBXBuildFile; productRef = E4D870E5241B561551F2791A /* ZulipModel */; };
@@ -142,6 +143,7 @@
 		48877EEA1FAFF61902860BD0 /* ComposeBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeBar.swift; sourceTree = "<group>"; };
 		4CD0F4E9EE27675541C64AB3 /* AttachmentDownloadProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentDownloadProgress.swift; sourceTree = "<group>"; };
 		4D9C40C777893FC7275F955B /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
+		4EBF1C83FB7EF7CB75AFC33C /* CornerAdaptation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CornerAdaptation.swift; sourceTree = "<group>"; };
 		52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadSummary.swift; sourceTree = "<group>"; };
 		68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWidgetView.swift; sourceTree = "<group>"; };
 		6948BF0E49980622700ED102 /* OutboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxView.swift; sourceTree = "<group>"; };
@@ -220,6 +222,7 @@
 				1758438236E9536CC8336895 /* ChannelFeedView.swift */,
 				FB37E72A9961DF2EB9503B4D /* ChannelTopicsView.swift */,
 				48877EEA1FAFF61902860BD0 /* ComposeBar.swift */,
+				4EBF1C83FB7EF7CB75AFC33C /* CornerAdaptation.swift */,
 				DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */,
 				9BABEF92E892ACE3DBCEF0E5 /* DraftsView.swift */,
 				A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */,
@@ -523,6 +526,7 @@
 				A395FC333148C3BE66791CC5 /* ChannelTopicsView.swift in Sources */,
 				BCBA356FC8FA69612CEAE5DA /* ComposeBar.swift in Sources */,
 				15238C1DCBB889813D725E14 /* ConnectivityMonitor.swift in Sources */,
+				4CB078D2395814437BD064A9 /* CornerAdaptation.swift in Sources */,
 				CAFDE08EBB3B372F2C6AA2B1 /* DetachedWindow.swift in Sources */,
 				9890C37B9865F39B29EDF88D /* DraftSync.swift in Sources */,
 				25FE3BFD9203521A1B8E2231 /* DraftsView.swift in Sources */,
