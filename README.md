@@ -10,7 +10,8 @@ aims for. Zephyr is an independent project, not affiliated with the Zulip organi
 **Status: feature-complete through M4** (minus scheduled messages, deferred
 deliberately). Everything in M2's messaging core plus: notifications with
 inline reply (DMs + mentions, while running — Zulip has no desktop push), dock badge and
-send sounds (configurable in Settings ⌘,), multi-account with switching, a channel
+sounds — Zulip's own, louder for DMs and mentions (configurable in Settings ⌘,),
+multi-account with switching, a channel
 browser with subscribe/unsubscribe and muting, warm launch from a cached snapshot
 ("stale → live"), topic moves with propagation, read receipts, and an edit-history
 viewer. Offline-first: warm launch from the cached snapshot, a per-account SQLite
@@ -81,6 +82,10 @@ history limits.
 - License: [Apache-2.0](LICENSE) — matching the entire Zulip ecosystem (server, flutter,
   mobile, desktop are all Apache-2.0), so adapting or porting their code is license-clean
   with attribution.
+- Sounds: Zephyr/Sounds are the Zulip web app's notification sounds (CC0, Stefan Mertens;
+  "Zulip" by Vidsyn), except "Ding" (CC BY 3.0, [InspectorJ](https://freesound.org/s/411089/)).
+  `swift Scripts/import-zulip-sounds.swift <zulip>/static/audio/notification_sounds`
+  rebuilds them.
 - Prior art: architecture consciously adapted from
   [zulip-flutter](https://github.com/zulip/zulip-flutter) (store/event design, content
   parser) and the design docs in

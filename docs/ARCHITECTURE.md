@@ -353,7 +353,13 @@ exact offset through the row's edge sentinel — no marker nudge, no animation.
   iOS, backgrounding holds a finite background-task assertion (~30s of continued event
   polling) so last-moment messages still produce banners; beyond that, delivery resumes
   on next foreground.
-- Dock badge from `Unreads` (policy configurable). Sounds via system sounds.
+- Dock badge from `Unreads` (policy configurable).
+- Sounds (`MessageSounds`): the Zulip web app's notification sounds, bundled as CAF, in
+  two tiers — DMs and mentions, and other messages (the conversation or channel being
+  read, channels with notifications on) — plus a quiet swish when the echo of a send from
+  this device arrives. A banner carries its tier's sound (so System Settings and Focus
+  govern it); with no banner, it plays as a system sound. One sound per tier per second,
+  so catching up after a reconnect doesn't clatter.
 
 ## 11. Testing strategy
 

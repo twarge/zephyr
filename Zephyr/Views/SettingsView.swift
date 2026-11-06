@@ -99,6 +99,10 @@ private struct GeneralSettings: View {
     @AppStorage("badgePolicy") private var badgePolicy = BadgePolicy.dmsAndMentions.rawValue
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
+    @AppStorage(MessageSounds.personalKey) private var personalSound =
+        MessageSounds.defaultPersonal
+    @AppStorage(MessageSounds.otherKey) private var otherSound = MessageSounds.defaultOther
+    @AppStorage(MessageSounds.sendKey) private var sendSound = true
     @AppStorage("messageRetentionYears") private var messageRetentionYears = 5
     @AppStorage(MediaFileCache.sizeLimitKey) private var mediaCacheLimitMB =
         MediaFileCache.defaultSizeLimitMB
@@ -124,6 +128,9 @@ private struct GeneralSettings: View {
             #endif
         }
         .task { await refreshNotificationIssue() }
+        // Hear a sound as it's chosen.
+        .onChange(of: personalSound) { MessageSounds.preview(personalSound) }
+        .onChange(of: otherSound) { MessageSounds.preview(otherSound) }
         .onChange(of: badgePolicy) {
             UnreadMirror.shared.refresh()
             Task { await refreshNotificationIssue() }
@@ -173,6 +180,21 @@ private struct GeneralSettings: View {
         model.global.messageRetentionDays =
             AppModel.retentionDays(forYears: messageRetentionYears)
         MediaFileCache.scheduleSweep()
+    }
+
+    @ViewBuilder
+    private var soundOptions: some View {
+        Text("None").tag(MessageSounds.none)
+        #if os(macOS)
+        Divider()
+        #endif
+        ForEach(MessageSounds.names, id: \.self) { name in
+            Text(MessageSounds.label(name)).tag(name)
+        }
+    }
+
+    private var soundsCaption: Text {
+        Text("Other messages are new ones in the conversation or channel you're reading, and in channels you get notifications for. The sounds are Zulip's; Ding is by InspectorJ (CC BY 3.0).")
     }
 
     @ViewBuilder
@@ -230,6 +252,18 @@ private struct GeneralSettings: View {
             notificationIssueRows
             Toggle("Show in menu bar", isOn: $showMenuBarExtra)
             Text("Direct messages and mentions notify while Zephyr is running. (Zulip has no push service for desktop clients.)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Divider()
+                .padding(.vertical, 4)
+            Picker("Sound for DMs and mentions:", selection: $personalSound) {
+                soundOptions
+            }
+            Picker("Sound for other messages:", selection: $otherSound) {
+                soundOptions
+            }
+            Toggle("Sound when your message is sent", isOn: $sendSound)
+            soundsCaption
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Divider()
@@ -301,6 +335,19 @@ private struct GeneralSettings: View {
                 notificationIssueRows
             } footer: {
                 Text("Direct messages and mentions notify while Zephyr is running. (Zulip has no push service for desktop clients.)")
+            }
+            Section {
+                Picker("DMs and mentions", selection: $personalSound) {
+                    soundOptions
+                }
+                Picker("Other messages", selection: $otherSound) {
+                    soundOptions
+                }
+                Toggle("When your message is sent", isOn: $sendSound)
+            } header: {
+                Text("Sounds")
+            } footer: {
+                soundsCaption
             }
             Section {
                 Toggle("Channels above direct messages", isOn: $channelsAboveDMs)

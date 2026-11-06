@@ -85,6 +85,13 @@ struct ActiveConversation: Equatable {
     var key: ConversationKey
 }
 
+/// The channel feed being read in some window; its new messages play the
+/// quieter message sound while the app is active.
+struct ActiveChannel: Equatable {
+    var account: Account.ID
+    var streamId: Int
+}
+
 /// App-level state: owns the GlobalStore (real backends: accounts file +
 /// Keychain), the launch/login phase, and notification routing.
 @MainActor
@@ -113,6 +120,8 @@ final class AppModel {
     /// Set by MainSplitView; used to suppress banners for the conversation
     /// being read.
     var activeConversation: ActiveConversation?
+    /// Set by MainSplitView; its messages sound while it's being read.
+    var activeChannel: ActiveChannel?
     /// Set by notification clicks; the key window consumes it as navigation
     /// (switching servers first if needed).
     var pendingDestination: PendingDestination?

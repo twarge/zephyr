@@ -10,8 +10,10 @@
 		0977CC5FABE9E6F84BF48DA5 /* ShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */; };
 		0A60B1F1876B2D7E2F7ED48B /* TopicSummaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA4E5D37553DA7CA7D98DE9 /* TopicSummaryService.swift */; };
 		0A7AFFF808844CC0EE4BE1EE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */; };
+		0AE73DBABDCAAB1B4462D8C7 /* ascend.caf in Resources */ = {isa = PBXBuildFile; fileRef = 9CC905F188444F76EE8F5C94 /* ascend.caf */; };
 		0B1CBDD1323F731109D06DEC /* RecentConversationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 475341E1FDF45E220243460A /* RecentConversationsView.swift */; };
 		0BC179CD59C27B54EA265364 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C391C25A76B13BD0D05B8706 /* NotificationManager.swift */; };
+		1095BD24A23388E276DB6FC1 /* swish.caf in Resources */ = {isa = PBXBuildFile; fileRef = 4868F8AB2D6A1D74AC5F3B05 /* swish.caf */; };
 		15238C1DCBB889813D725E14 /* ConnectivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BFA44C0924355E456163217 /* ConnectivityMonitor.swift */; };
 		154A6DB5674AF7C019515AC3 /* ZulipMath in Frameworks */ = {isa = PBXBuildFile; productRef = 86972B326398BF7FE9542C42 /* ZulipMath */; };
 		176595C50C11447FBF0FA0F6 /* TVMonitorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DD1BDF55A7E32CD00071C8B /* TVMonitorView.swift */; };
@@ -19,38 +21,61 @@
 		188461C8A7C5D3500365BA6D /* KeyboardRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43C09E2CE84013DBCE92521D /* KeyboardRouter.swift */; };
 		190C8D2A4A55334226CCD9A6 /* ZulipContent in Frameworks */ = {isa = PBXBuildFile; productRef = 32DC8842D1935565F415D3F5 /* ZulipContent */; };
 		1A4EA966BF8059788CD35F91 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 823C14D4494BFA81F9DE3F8E /* Assets.xcassets */; };
+		1A5C0D7A677635D80BAEB8AF /* subtle.caf in Resources */ = {isa = PBXBuildFile; fileRef = 614125F07250A88402C829FC /* subtle.caf */; };
+		1AE3AE11D1DB4D8E6A2989F6 /* metallic-snare.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7D1F088EE7420CC146154DA0 /* metallic-snare.caf */; };
+		1D0991D258A815D58E05072B /* brlip.caf in Resources */ = {isa = PBXBuildFile; fileRef = F41B00308415C5B86F6A67A6 /* brlip.caf */; };
+		2073F5351110EED0C754E632 /* bink.caf in Resources */ = {isa = PBXBuildFile; fileRef = 45EB0B12D307818253590CD2 /* bink.caf */; };
 		217DBDEDF8373C7091CABD27 /* ZephyrShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D037A907658BA511667CA882 /* ZephyrShare.appex */; platformFilters = (ios, macos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		23CF6C4A3512B814CEAD8EF4 /* stairs.caf in Resources */ = {isa = PBXBuildFile; fileRef = A18616214BE2FFED99DC2052 /* stairs.caf */; };
 		24004A382336BF5AF3BA2749 /* OutboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6948BF0E49980622700ED102 /* OutboxView.swift */; };
 		24DEDBB195B9F821E1B69A87 /* ZulipModel in Frameworks */ = {isa = PBXBuildFile; productRef = 3F931C6D5BB1265C8E2B261B /* ZulipModel */; };
 		25FE3BFD9203521A1B8E2231 /* DraftsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BABEF92E892ACE3DBCEF0E5 /* DraftsView.swift */; };
+		28D97DEAECA6B200A9C6C848 /* tintong.caf in Resources */ = {isa = PBXBuildFile; fileRef = 28529209001CE5EEFE128271 /* tintong.caf */; };
 		299A23FEDA899300B4B4BECF /* AttachmentDownloadProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CD0F4E9EE27675541C64AB3 /* AttachmentDownloadProgress.swift */; };
+		2A6DDDE4ACDD5D6D5C3E2E83 /* wood-block.caf in Resources */ = {isa = PBXBuildFile; fileRef = E6A3431B71A28784376A72D8 /* wood-block.caf */; };
+		318F3C8E4D4A488DB583E70E /* pan.caf in Resources */ = {isa = PBXBuildFile; fileRef = 15ED6BA85697EBE6D108E9F8 /* pan.caf */; };
 		33A594A0E80E868623E9F348 /* ZephyrTVApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EC76EB5F5AC4DBFA4F47ED0 /* ZephyrTVApp.swift */; };
 		346BBA186AC92525017028EB /* MessageWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0358AA017C745BB21FEC6222 /* MessageWindowView.swift */; };
 		3D07A493DA42E4D98B0DA530 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9C40C777893FC7275F955B /* Platform.swift */; };
+		3D277D50C608D99C1DD944FD /* zing.caf in Resources */ = {isa = PBXBuildFile; fileRef = 0EB792F2418F4629E3B0A766 /* zing.caf */; };
+		3E0F9F4493ED8C70CBA8BE5F /* loud-tintong.caf in Resources */ = {isa = PBXBuildFile; fileRef = 68C194E7D898239387ABBEBA /* loud-tintong.caf */; };
 		3F863C40AC99B169668E1DD0 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7106DB9D273F41FC9FE36ABF /* AppModel.swift */; };
+		411B4956035C17436B4CFC2C /* send.caf in Resources */ = {isa = PBXBuildFile; fileRef = DFE74EFFFD38CAC1F16FFE88 /* send.caf */; };
 		428E7CBC70049F69CF04CAB5 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC85F6AA56F7EF9105F7742E /* HelpView.swift */; };
 		4CB078D2395814437BD064A9 /* CornerAdaptation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EBF1C83FB7EF7CB75AFC33C /* CornerAdaptation.swift */; };
+		5193EA5A7562B6B7584BAC50 /* up.caf in Resources */ = {isa = PBXBuildFile; fileRef = 858DB2C6003CC80BBBB325EC /* up.caf */; };
 		52EC40B9399E8AA2D4F65331 /* ZulipAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 5D28EB29BBDF0D08CC778000 /* ZulipAPI */; };
+		53A125FBCFA71A5E72A0D37B /* zulip.caf in Resources */ = {isa = PBXBuildFile; fileRef = EEE9158338E0B99634AC353C /* zulip.caf */; };
 		53D49ACBC473F8B9F2B5BD5E /* SharePickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DBB2BFB3C180FACDCB32F82 /* SharePickerSheet.swift */; };
 		54BFB8373908F2BE25281ECF /* ZulipModel in Frameworks */ = {isa = PBXBuildFile; productRef = E4D870E5241B561551F2791A /* ZulipModel */; };
+		557D0BE5D2C122C7BD81BE82 /* down.caf in Resources */ = {isa = PBXBuildFile; fileRef = D51C50E7518CE8A9F02CEA4E /* down.caf */; };
+		560DF3B71F3670DF9007B019 /* MessageSounds.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE29DBBBA2796CD8C2AF098E /* MessageSounds.swift */; };
 		5778BC649C0BB255015B12CC /* RemindersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8EB162FCCE5166524648043 /* RemindersView.swift */; };
 		5794DA3E0828FC47D382D330 /* ZephyrWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D409AD6B2CC607462E58207 /* ZephyrWidgets.swift */; };
+		5A3A429ACF4F9B1211D7E712 /* bright.caf in Resources */ = {isa = PBXBuildFile; fileRef = 990C528E7D6DE5A4C5D71758 /* bright.caf */; };
+		5D62FF4B1D0D7891E4E93FC7 /* shaker.caf in Resources */ = {isa = PBXBuildFile; fileRef = 2DFCF7C59FBF455FDCC56983 /* shaker.caf */; };
 		5E2EA17274897B42F4A65347 /* UnreadSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */; };
 		5F0FCA79F46D92DA6EF1091E /* NarrowFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7EBB59257B9154EAF76D934 /* NarrowFeedView.swift */; };
 		664752B641AB478805A1EAE7 /* AccountWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28D32E783B00DD974C9E8971 /* AccountWindowView.swift */; };
 		67B681DC63058035652E4E1A /* EmojiPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */; };
 		685FD431FA29FEA255D3FBC1 /* MessageContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 067FC7012EB2D00C26EF2527 /* MessageContentView.swift */; };
 		6A36656FF860BB05387C1623 /* PerfLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E26CC20F2298B58C015538 /* PerfLog.swift */; };
+		6C68CA5F6CE2095C5A23AE82 /* deep-tom.caf in Resources */ = {isa = PBXBuildFile; fileRef = 63F76FF29EDDD7E3905E69AD /* deep-tom.caf */; };
 		6E8974C03AF4B08EAFEE51A6 /* ShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */; };
 		706E3B7C39B1F3C9F5DF0E1E /* Support.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD6E84868E4713FC5F20FD6B /* Support.swift */; };
 		70E8661B18208CE08B86BFFA /* AppStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232E47A83B732D68F7D53F8A /* AppStateStore.swift */; };
 		73585300EF03DBD458D4EFB9 /* ZephyrWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C6F5CD532C093CA694EACE87 /* ZephyrWidgets.appex */; platformFilters = (ios, macos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		73E0C889198AF94F9BF99B79 /* fast-ascend.caf in Resources */ = {isa = PBXBuildFile; fileRef = 39F503E52E33F7D3846E0FF4 /* fast-ascend.caf */; };
 		7520AD45B999226B180174C7 /* NewConversationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */; };
 		75DE44DBC8650067EEAA958D /* TranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D95D81BD326A92094707205 /* TranscriptView.swift */; };
 		7BFEB47B6DCAC3AD9BCA6C35 /* Search.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B6E7BF3930F81D1C28D6C1 /* Search.swift */; };
 		7CA83B9202B397D38737BD29 /* ShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */; };
+		7DB397C75F03C8D2305F5B75 /* chime.caf in Resources */ = {isa = PBXBuildFile; fileRef = 31BE8E4B108990B4D4CFD2DF /* chime.caf */; };
 		7E536CB80BBA16C3965B52CF /* MessageActionSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC11E5BCCDABAA47341BC0CA /* MessageActionSheets.swift */; };
+		81C16E453FB8E258375AD4EA /* double-tap.caf in Resources */ = {isa = PBXBuildFile; fileRef = EB17EEBDB19FF3009FCAE881 /* double-tap.caf */; };
+		84C82C54036AE74600560A06 /* friendly.caf in Resources */ = {isa = PBXBuildFile; fileRef = 93E257BB92C701899B13E226 /* friendly.caf */; };
 		883C05E8DCB4C721B557D835 /* TopicAutocompleteField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 828F7934E9D581DD3703EAAC /* TopicAutocompleteField.swift */; };
+		8AF04F5D0B9356AEBA168D93 /* ding.caf in Resources */ = {isa = PBXBuildFile; fileRef = 82EA685E729D2FB1A2135399 /* ding.caf */; };
 		8CC1E79A10EE229827D2257A /* UnreadSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */; };
 		8D288550003242AB2596116F /* PDFAttachmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FE462CABA8309A90FD3A747 /* PDFAttachmentView.swift */; };
 		8F49328DDC70D304E6FE4130 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4093541134383EBC6243F280 /* ShareViewController.swift */; };
@@ -63,17 +88,24 @@
 		A4DAC225CFBF91023FFE91B3 /* ZulipAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 27D0006F9ED91CF207CFAA5B /* ZulipAPI */; };
 		A7595ABAA3B5AFE5760BA5C0 /* UnreadMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = 273C543CAF20C2C2615132A1 /* UnreadMirror.swift */; };
 		A82A7771694C25DF30CA4009 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28E9D19485B08518476527C2 /* LoginView.swift */; };
+		AF5C73BF4DDE4F19D3447ABE /* dry-bongos.caf in Resources */ = {isa = PBXBuildFile; fileRef = EA7D20039E56D8827E440B26 /* dry-bongos.caf */; };
 		B1054F65A0FA0D40D60D9523 /* FeedWarmCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B107C9FA821BCB2E527459E9 /* FeedWarmCache.swift */; };
 		B25F5C4B54A1AD406C201ECB /* ZephyrIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14B376B2915109D9F3810E20 /* ZephyrIntents.swift */; };
+		B75B56CFB610BB5B7F772286 /* simple.caf in Resources */ = {isa = PBXBuildFile; fileRef = E6EED98E6E76B25A015B80F0 /* simple.caf */; };
 		B8CB761D6FE61F47C1E0FCBC /* ZephyrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066FAF47CC310A2445AAB0A9 /* ZephyrApp.swift */; };
 		B97056A0F86D718EC7C1A28A /* SummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A0AA221515FD4C19AD8224 /* SummaryView.swift */; };
+		BB7F9ED8954A3CC5502E592F /* flute.caf in Resources */ = {isa = PBXBuildFile; fileRef = 3EB76EF56B6EBF97111AFB8C /* flute.caf */; };
 		BB931F8230B45BC90B104176 /* MessageFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BD4EE59C8A33FC99AA510C3 /* MessageFeed.swift */; };
 		BCBA356FC8FA69612CEAE5DA /* ComposeBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48877EEA1FAFF61902860BD0 /* ComposeBar.swift */; };
 		BD6ED142E9B10E20B22453B7 /* UnreadSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */; };
+		C212AD5D5F60741F853D49FB /* dutdut.caf in Resources */ = {isa = PBXBuildFile; fileRef = F00DE0B89D6F63C668A362A9 /* dutdut.caf */; };
 		C2C81E0729324AE820EB8883 /* ChannelFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1758438236E9536CC8336895 /* ChannelFeedView.swift */; };
 		CAFDE08EBB3B372F2C6AA2B1 /* DetachedWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */; };
+		D48FC6C99B2B42DA7D718650 /* kick-roll.caf in Resources */ = {isa = PBXBuildFile; fileRef = 8E5FA7E035552FBE1765E0D0 /* kick-roll.caf */; };
+		D70C892436AB4BEAAF91A8C0 /* beep-boop.caf in Resources */ = {isa = PBXBuildFile; fileRef = F1A1B87D0535DFBB55EC3CC7 /* beep-boop.caf */; };
 		D98ABC4211B58928C55BB7B0 /* MediaDropTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFE3DF32C25009CB60756EAD /* MediaDropTarget.swift */; };
 		E100D2C195474421ED98A3B1 /* WebAuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5410F479FB8AE6E80F4866 /* WebAuthSession.swift */; };
+		EA33709D514C5FECCC52FAE4 /* zaping.caf in Resources */ = {isa = PBXBuildFile; fileRef = 71937778211D70F297BC537A /* zaping.caf */; };
 		ED860DCE61FD7AFB0395FE8A /* MediaFileCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1864E59236F8BF8DE841EEAE /* MediaFileCache.swift */; };
 		F33ED1EE8D08E1F58540F09B /* Tips.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AB37CBF3789C6E2854F3632 /* Tips.swift */; };
 		F6C17F7A2914098D59DE30AB /* AllChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C28BE5A0DA537D6EB9C97A /* AllChannelsView.swift */; };
@@ -117,44 +149,65 @@
 		066FAF47CC310A2445AAB0A9 /* ZephyrApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZephyrApp.swift; sourceTree = "<group>"; };
 		067FC7012EB2D00C26EF2527 /* MessageContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageContentView.swift; sourceTree = "<group>"; };
 		08D61FEDB2BCFA89017740EF /* Zephyr.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Zephyr.entitlements; sourceTree = "<group>"; };
+		0EB792F2418F4629E3B0A766 /* zing.caf */ = {isa = PBXFileReference; path = zing.caf; sourceTree = "<group>"; };
 		0FA4E5D37553DA7CA7D98DE9 /* TopicSummaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicSummaryService.swift; sourceTree = "<group>"; };
 		149499DA07B92E143F965C6C /* OpenQuicklyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenQuicklyView.swift; sourceTree = "<group>"; };
 		14B376B2915109D9F3810E20 /* ZephyrIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZephyrIntents.swift; sourceTree = "<group>"; };
+		15ED6BA85697EBE6D108E9F8 /* pan.caf */ = {isa = PBXFileReference; path = pan.caf; sourceTree = "<group>"; };
 		1758438236E9536CC8336895 /* ChannelFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelFeedView.swift; sourceTree = "<group>"; };
 		1864E59236F8BF8DE841EEAE /* MediaFileCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaFileCache.swift; sourceTree = "<group>"; };
 		1BFA44C0924355E456163217 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityMonitor.swift; sourceTree = "<group>"; };
 		232E47A83B732D68F7D53F8A /* AppStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateStore.swift; sourceTree = "<group>"; };
 		246E2A99D0BD63D5209BD33B /* ZulipKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ZulipKit; path = Packages/ZulipKit; sourceTree = SOURCE_ROOT; };
 		273C543CAF20C2C2615132A1 /* UnreadMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadMirror.swift; sourceTree = "<group>"; };
+		28529209001CE5EEFE128271 /* tintong.caf */ = {isa = PBXFileReference; path = tintong.caf; sourceTree = "<group>"; };
 		28D32E783B00DD974C9E8971 /* AccountWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountWindowView.swift; sourceTree = "<group>"; };
 		28E9D19485B08518476527C2 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		2AB37CBF3789C6E2854F3632 /* Tips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tips.swift; sourceTree = "<group>"; };
 		2D95D81BD326A92094707205 /* TranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptView.swift; sourceTree = "<group>"; };
 		2DD1BDF55A7E32CD00071C8B /* TVMonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVMonitorView.swift; sourceTree = "<group>"; };
+		2DFCF7C59FBF455FDCC56983 /* shaker.caf */ = {isa = PBXFileReference; path = shaker.caf; sourceTree = "<group>"; };
+		31BE8E4B108990B4D4CFD2DF /* chime.caf */ = {isa = PBXFileReference; path = chime.caf; sourceTree = "<group>"; };
 		37E26CC20F2298B58C015538 /* PerfLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerfLog.swift; sourceTree = "<group>"; };
+		39F503E52E33F7D3846E0FF4 /* fast-ascend.caf */ = {isa = PBXFileReference; path = "fast-ascend.caf"; sourceTree = "<group>"; };
 		3B2CA9D7CF1C06AA7B0A1D52 /* MainSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainSplitView.swift; sourceTree = "<group>"; };
 		3BD4EE59C8A33FC99AA510C3 /* MessageFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageFeed.swift; sourceTree = "<group>"; };
 		3D409AD6B2CC607462E58207 /* ZephyrWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZephyrWidgets.swift; sourceTree = "<group>"; };
+		3EB76EF56B6EBF97111AFB8C /* flute.caf */ = {isa = PBXFileReference; path = flute.caf; sourceTree = "<group>"; };
 		3F4611B74F89FA03A6C524C9 /* DraftSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftSync.swift; sourceTree = "<group>"; };
 		3FE462CABA8309A90FD3A747 /* PDFAttachmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFAttachmentView.swift; sourceTree = "<group>"; };
 		4093541134383EBC6243F280 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		43C09E2CE84013DBCE92521D /* KeyboardRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardRouter.swift; sourceTree = "<group>"; };
+		45EB0B12D307818253590CD2 /* bink.caf */ = {isa = PBXFileReference; path = bink.caf; sourceTree = "<group>"; };
 		475341E1FDF45E220243460A /* RecentConversationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentConversationsView.swift; sourceTree = "<group>"; };
+		4868F8AB2D6A1D74AC5F3B05 /* swish.caf */ = {isa = PBXFileReference; path = swish.caf; sourceTree = "<group>"; };
 		48877EEA1FAFF61902860BD0 /* ComposeBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeBar.swift; sourceTree = "<group>"; };
 		4CD0F4E9EE27675541C64AB3 /* AttachmentDownloadProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentDownloadProgress.swift; sourceTree = "<group>"; };
 		4D9C40C777893FC7275F955B /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
 		4EBF1C83FB7EF7CB75AFC33C /* CornerAdaptation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CornerAdaptation.swift; sourceTree = "<group>"; };
 		52CC572745D47CCA1BA9CE63 /* UnreadSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadSummary.swift; sourceTree = "<group>"; };
+		614125F07250A88402C829FC /* subtle.caf */ = {isa = PBXFileReference; path = subtle.caf; sourceTree = "<group>"; };
+		63F76FF29EDDD7E3905E69AD /* deep-tom.caf */ = {isa = PBXFileReference; path = "deep-tom.caf"; sourceTree = "<group>"; };
 		68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWidgetView.swift; sourceTree = "<group>"; };
+		68C194E7D898239387ABBEBA /* loud-tintong.caf */ = {isa = PBXFileReference; path = "loud-tintong.caf"; sourceTree = "<group>"; };
 		6948BF0E49980622700ED102 /* OutboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxView.swift; sourceTree = "<group>"; };
 		7106DB9D273F41FC9FE36ABF /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		71937778211D70F297BC537A /* zaping.caf */ = {isa = PBXFileReference; path = zaping.caf; sourceTree = "<group>"; };
 		726EF7F3ABF31AB4CF23C545 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		76C23601CC0460F9C22C23DD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7D1F088EE7420CC146154DA0 /* metallic-snare.caf */ = {isa = PBXFileReference; path = "metallic-snare.caf"; sourceTree = "<group>"; };
 		7DBB2BFB3C180FACDCB32F82 /* SharePickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharePickerSheet.swift; sourceTree = "<group>"; };
 		7EC76EB5F5AC4DBFA4F47ED0 /* ZephyrTVApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZephyrTVApp.swift; sourceTree = "<group>"; };
 		823C14D4494BFA81F9DE3F8E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		828F7934E9D581DD3703EAAC /* TopicAutocompleteField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicAutocompleteField.swift; sourceTree = "<group>"; };
+		82EA685E729D2FB1A2135399 /* ding.caf */ = {isa = PBXFileReference; path = ding.caf; sourceTree = "<group>"; };
+		858DB2C6003CC80BBBB325EC /* up.caf */ = {isa = PBXFileReference; path = up.caf; sourceTree = "<group>"; };
+		8E5FA7E035552FBE1765E0D0 /* kick-roll.caf */ = {isa = PBXFileReference; path = "kick-roll.caf"; sourceTree = "<group>"; };
+		93E257BB92C701899B13E226 /* friendly.caf */ = {isa = PBXFileReference; path = friendly.caf; sourceTree = "<group>"; };
+		990C528E7D6DE5A4C5D71758 /* bright.caf */ = {isa = PBXFileReference; path = bright.caf; sourceTree = "<group>"; };
 		9BABEF92E892ACE3DBCEF0E5 /* DraftsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftsView.swift; sourceTree = "<group>"; };
+		9CC905F188444F76EE8F5C94 /* ascend.caf */ = {isa = PBXFileReference; path = ascend.caf; sourceTree = "<group>"; };
+		A18616214BE2FFED99DC2052 /* stairs.caf */ = {isa = PBXFileReference; path = stairs.caf; sourceTree = "<group>"; };
 		A38B120E431BE62466F5CB98 /* ZephyrTV.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ZephyrTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A3FEB97E56AD99E91FB367B9 /* ShareInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInbox.swift; sourceTree = "<group>"; };
 		A863CFF41CD971B0C62BB1FB /* EmojiPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiPickerView.swift; sourceTree = "<group>"; };
@@ -163,6 +216,7 @@
 		B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewConversationSheet.swift; sourceTree = "<group>"; };
 		BC85F6AA56F7EF9105F7742E /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
 		BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		BE29DBBBA2796CD8C2AF098E /* MessageSounds.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageSounds.swift; sourceTree = "<group>"; };
 		C0B6E7BF3930F81D1C28D6C1 /* Search.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Search.swift; sourceTree = "<group>"; };
 		C17B1B985702AAFC4C30468A /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		C391C25A76B13BD0D05B8706 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
@@ -170,11 +224,21 @@
 		C6F5CD532C093CA694EACE87 /* ZephyrWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ZephyrWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		CFE3DF32C25009CB60756EAD /* MediaDropTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDropTarget.swift; sourceTree = "<group>"; };
 		D037A907658BA511667CA882 /* ZephyrShare.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ZephyrShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D51C50E7518CE8A9F02CEA4E /* down.caf */ = {isa = PBXFileReference; path = down.caf; sourceTree = "<group>"; };
 		DEB41CE528D54E2C156C0FEB /* DetachedWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetachedWindow.swift; sourceTree = "<group>"; };
+		DFE74EFFFD38CAC1F16FFE88 /* send.caf */ = {isa = PBXFileReference; path = send.caf; sourceTree = "<group>"; };
 		E5A0AA221515FD4C19AD8224 /* SummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryView.swift; sourceTree = "<group>"; };
+		E6A3431B71A28784376A72D8 /* wood-block.caf */ = {isa = PBXFileReference; path = "wood-block.caf"; sourceTree = "<group>"; };
+		E6EED98E6E76B25A015B80F0 /* simple.caf */ = {isa = PBXFileReference; path = simple.caf; sourceTree = "<group>"; };
 		E7EBB59257B9154EAF76D934 /* NarrowFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NarrowFeedView.swift; sourceTree = "<group>"; };
 		E8EB162FCCE5166524648043 /* RemindersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersView.swift; sourceTree = "<group>"; };
+		EA7D20039E56D8827E440B26 /* dry-bongos.caf */ = {isa = PBXFileReference; path = "dry-bongos.caf"; sourceTree = "<group>"; };
+		EB17EEBDB19FF3009FCAE881 /* double-tap.caf */ = {isa = PBXFileReference; path = "double-tap.caf"; sourceTree = "<group>"; };
 		EC11E5BCCDABAA47341BC0CA /* MessageActionSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageActionSheets.swift; sourceTree = "<group>"; };
+		EEE9158338E0B99634AC353C /* zulip.caf */ = {isa = PBXFileReference; path = zulip.caf; sourceTree = "<group>"; };
+		F00DE0B89D6F63C668A362A9 /* dutdut.caf */ = {isa = PBXFileReference; path = dutdut.caf; sourceTree = "<group>"; };
+		F1A1B87D0535DFBB55EC3CC7 /* beep-boop.caf */ = {isa = PBXFileReference; path = "beep-boop.caf"; sourceTree = "<group>"; };
+		F41B00308415C5B86F6A67A6 /* brlip.caf */ = {isa = PBXFileReference; path = brlip.caf; sourceTree = "<group>"; };
 		FB37E72A9961DF2EB9503B4D /* ChannelTopicsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelTopicsView.swift; sourceTree = "<group>"; };
 		FC5410F479FB8AE6E80F4866 /* WebAuthSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthSession.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -255,6 +319,44 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		38D1737C9972751E0836FCF2 /* Sounds */ = {
+			isa = PBXGroup;
+			children = (
+				9CC905F188444F76EE8F5C94 /* ascend.caf */,
+				F1A1B87D0535DFBB55EC3CC7 /* beep-boop.caf */,
+				45EB0B12D307818253590CD2 /* bink.caf */,
+				990C528E7D6DE5A4C5D71758 /* bright.caf */,
+				F41B00308415C5B86F6A67A6 /* brlip.caf */,
+				31BE8E4B108990B4D4CFD2DF /* chime.caf */,
+				63F76FF29EDDD7E3905E69AD /* deep-tom.caf */,
+				82EA685E729D2FB1A2135399 /* ding.caf */,
+				EB17EEBDB19FF3009FCAE881 /* double-tap.caf */,
+				D51C50E7518CE8A9F02CEA4E /* down.caf */,
+				EA7D20039E56D8827E440B26 /* dry-bongos.caf */,
+				F00DE0B89D6F63C668A362A9 /* dutdut.caf */,
+				39F503E52E33F7D3846E0FF4 /* fast-ascend.caf */,
+				3EB76EF56B6EBF97111AFB8C /* flute.caf */,
+				93E257BB92C701899B13E226 /* friendly.caf */,
+				8E5FA7E035552FBE1765E0D0 /* kick-roll.caf */,
+				68C194E7D898239387ABBEBA /* loud-tintong.caf */,
+				7D1F088EE7420CC146154DA0 /* metallic-snare.caf */,
+				15ED6BA85697EBE6D108E9F8 /* pan.caf */,
+				DFE74EFFFD38CAC1F16FFE88 /* send.caf */,
+				2DFCF7C59FBF455FDCC56983 /* shaker.caf */,
+				E6EED98E6E76B25A015B80F0 /* simple.caf */,
+				A18616214BE2FFED99DC2052 /* stairs.caf */,
+				614125F07250A88402C829FC /* subtle.caf */,
+				4868F8AB2D6A1D74AC5F3B05 /* swish.caf */,
+				28529209001CE5EEFE128271 /* tintong.caf */,
+				858DB2C6003CC80BBBB325EC /* up.caf */,
+				E6A3431B71A28784376A72D8 /* wood-block.caf */,
+				71937778211D70F297BC537A /* zaping.caf */,
+				0EB792F2418F4629E3B0A766 /* zing.caf */,
+				EEE9158338E0B99634AC353C /* zulip.caf */,
+			);
+			path = Sounds;
+			sourceTree = "<group>";
+		};
 		612AF186E8C6E85C4880CC83 = {
 			isa = PBXGroup;
 			children = (
@@ -304,6 +406,7 @@
 				3F4611B74F89FA03A6C524C9 /* DraftSync.swift */,
 				43C09E2CE84013DBCE92521D /* KeyboardRouter.swift */,
 				1864E59236F8BF8DE841EEAE /* MediaFileCache.swift */,
+				BE29DBBBA2796CD8C2AF098E /* MessageSounds.swift */,
 				C391C25A76B13BD0D05B8706 /* NotificationManager.swift */,
 				37E26CC20F2298B58C015538 /* PerfLog.swift */,
 				4D9C40C777893FC7275F955B /* Platform.swift */,
@@ -314,6 +417,7 @@
 				08D61FEDB2BCFA89017740EF /* Zephyr.entitlements */,
 				066FAF47CC310A2445AAB0A9 /* ZephyrApp.swift */,
 				14B376B2915109D9F3810E20 /* ZephyrIntents.swift */,
+				38D1737C9972751E0836FCF2 /* Sounds */,
 				2F9A6FAB9E659DB79DF34D95 /* Views */,
 			);
 			path = Zephyr;
@@ -497,6 +601,37 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A4EA966BF8059788CD35F91 /* Assets.xcassets in Resources */,
+				0AE73DBABDCAAB1B4462D8C7 /* ascend.caf in Resources */,
+				D70C892436AB4BEAAF91A8C0 /* beep-boop.caf in Resources */,
+				2073F5351110EED0C754E632 /* bink.caf in Resources */,
+				5A3A429ACF4F9B1211D7E712 /* bright.caf in Resources */,
+				1D0991D258A815D58E05072B /* brlip.caf in Resources */,
+				7DB397C75F03C8D2305F5B75 /* chime.caf in Resources */,
+				6C68CA5F6CE2095C5A23AE82 /* deep-tom.caf in Resources */,
+				8AF04F5D0B9356AEBA168D93 /* ding.caf in Resources */,
+				81C16E453FB8E258375AD4EA /* double-tap.caf in Resources */,
+				557D0BE5D2C122C7BD81BE82 /* down.caf in Resources */,
+				AF5C73BF4DDE4F19D3447ABE /* dry-bongos.caf in Resources */,
+				C212AD5D5F60741F853D49FB /* dutdut.caf in Resources */,
+				73E0C889198AF94F9BF99B79 /* fast-ascend.caf in Resources */,
+				BB7F9ED8954A3CC5502E592F /* flute.caf in Resources */,
+				84C82C54036AE74600560A06 /* friendly.caf in Resources */,
+				D48FC6C99B2B42DA7D718650 /* kick-roll.caf in Resources */,
+				3E0F9F4493ED8C70CBA8BE5F /* loud-tintong.caf in Resources */,
+				1AE3AE11D1DB4D8E6A2989F6 /* metallic-snare.caf in Resources */,
+				318F3C8E4D4A488DB583E70E /* pan.caf in Resources */,
+				411B4956035C17436B4CFC2C /* send.caf in Resources */,
+				5D62FF4B1D0D7891E4E93FC7 /* shaker.caf in Resources */,
+				B75B56CFB610BB5B7F772286 /* simple.caf in Resources */,
+				23CF6C4A3512B814CEAD8EF4 /* stairs.caf in Resources */,
+				1A5C0D7A677635D80BAEB8AF /* subtle.caf in Resources */,
+				1095BD24A23388E276DB6FC1 /* swish.caf in Resources */,
+				28D97DEAECA6B200A9C6C848 /* tintong.caf in Resources */,
+				5193EA5A7562B6B7584BAC50 /* up.caf in Resources */,
+				2A6DDDE4ACDD5D6D5C3E2E83 /* wood-block.caf in Resources */,
+				EA33709D514C5FECCC52FAE4 /* zaping.caf in Resources */,
+				3D277D50C608D99C1DD944FD /* zing.caf in Resources */,
+				53A125FBCFA71A5E72A0D37B /* zulip.caf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -541,6 +676,7 @@
 				7E536CB80BBA16C3965B52CF /* MessageActionSheets.swift in Sources */,
 				685FD431FA29FEA255D3FBC1 /* MessageContentView.swift in Sources */,
 				BB931F8230B45BC90B104176 /* MessageFeed.swift in Sources */,
+				560DF3B71F3670DF9007B019 /* MessageSounds.swift in Sources */,
 				9511713F095ADB5FAF8E1593 /* MessageWidgetView.swift in Sources */,
 				346BBA186AC92525017028EB /* MessageWindowView.swift in Sources */,
 				5F0FCA79F46D92DA6EF1091E /* NarrowFeedView.swift in Sources */,

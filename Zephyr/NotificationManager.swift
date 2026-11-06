@@ -53,43 +53,58 @@ final class NotificationManager: NSObject {
         }
     }
 
-    /// Decides whether a message event deserves a banner and posts it.
+    /// Decides whether a message event deserves a banner and posts it, or
+    /// plays a sound for one that doesn't (see `MessageSounds`).
     func handleMessageEvent(_ event: MessageEvent, accountId: Account.ID, store: PerAccountStore) {
-        guard authorized, UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool ?? true
-        else { return }
-        // Focus filter: the active Focus may restrict banners to one server.
+        let message = event.message
+        // Your own message: a swish when a send from this device reaches
+        // the server (only its echo carries the local id).
+        if message.senderId == store.selfUserId {
+            if event.localMessageId != nil { MessageSounds.play(.send) }
+            return
+        }
+        // Focus filter: the active Focus may restrict alerts to one server.
         if let only = UserDefaults.standard.string(forKey: "focusNotifyAccount"),
            let onlyId = UUID(uuidString: only), onlyId != accountId {
             return
         }
-        let message = event.message
-        guard message.senderId != store.selfUserId else { return }
         guard !event.flags.contains("read") else { return }
 
         let isMention = !Set(event.flags).isDisjoint(with: [
             "mentioned", "wildcard_mentioned", "stream_wildcard_mentioned",
             "topic_wildcard_mentioned",
         ])
-        // Policy: every DM, channel messages that mention you, and all
-        // messages in channels with per-channel notifications on — except
-        // muted topics.
-        let channelNotifies = message.streamId.map {
-            store.subscriptions[$0]?.desktopNotifications == true
-        } ?? false
-        guard message.type == .private || isMention || channelNotifies else { return }
         if let streamId = message.streamId,
            store.topicVisibility(streamId: streamId, topic: message.subject) == .muted,
            !isMention {
             return
         }
-
         guard let key = Unreads.conversationKey(for: message, selfUserId: store.selfUserId)
         else { return }
-        // No banner for the conversation you're actively reading.
+        // No banner for the conversation you're actively reading: the
+        // quieter sound instead, as for anything new in it.
         if Platform.isActive,
            appModel?.activeConversation == ActiveConversation(account: accountId, key: key) {
+            MessageSounds.play(.other)
             return
         }
+
+        // Policy: every DM, channel messages that mention you, and all
+        // messages in channels with per-channel notifications on.
+        let isPersonal = message.type == .private || isMention
+        let channelNotifies = message.streamId.map {
+            store.subscriptions[$0]?.desktopNotifications == true
+        } ?? false
+        guard isPersonal || channelNotifies else {
+            // The channel you're reading sounds for its new messages.
+            if Platform.isActive, let streamId = message.streamId,
+               appModel?.activeChannel == ActiveChannel(account: accountId, streamId: streamId) {
+                MessageSounds.play(.other)
+            }
+            return
+        }
+        guard authorized, UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool ?? true
+        else { return }
 
         let content = UNMutableNotificationContent()
         content.categoryIdentifier = Self.categoryId
@@ -105,7 +120,7 @@ final class NotificationManager: NSObject {
             }
         }
         content.body = String(ContentParser.parse(html: message.content).plainText.prefix(300))
-        content.sound = .default
+        content.sound = MessageSounds.notificationSound(isPersonal ? .personal : .other)
         content.userInfo = Self.userInfo(
             accountId: accountId, key: key, messageId: message.id)
 

@@ -215,7 +215,8 @@ extension ZephyrApp {
         credits.append(NSAttributedString(string: "Apache License 2.0", attributes: link))
         credits.append(NSAttributedString(
             string: "\n© 2026 Twarge LLC"
-                + "\nIncludes GRDB.swift, SwiftSoup, and SwiftMath (MIT).",
+                + "\nIncludes GRDB.swift, SwiftSoup, and SwiftMath (MIT)."
+                + "\nSounds from Zulip (CC0); Ding by InspectorJ (CC BY 3.0).",
             attributes: base))
         NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
     }

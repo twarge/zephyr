@@ -559,6 +559,8 @@ struct MainSplitView: View {
                 keys.pendingNear = (key, near)
             }
             initialNear = nil
+            // The opening selection never passes through onChange.
+            noteActiveReading()
             keys.store = store
             keys.currentDestination = selection
             keys.navigate = { destination in selection = destination }
@@ -641,13 +643,23 @@ struct MainSplitView: View {
         storedDestination = savedWindowState
     }
 
-    private func selectionChanged() {
+    /// What this window is reading, for banner suppression and sounds.
+    private func noteActiveReading() {
         if case .conversation(let key) = selection {
             model.activeConversation =
                 ActiveConversation(account: store.accountId, key: key)
         } else if model.activeConversation?.account == store.accountId {
             model.activeConversation = nil
         }
+        if case .channel(let streamId) = selection {
+            model.activeChannel = ActiveChannel(account: store.accountId, streamId: streamId)
+        } else if model.activeChannel?.account == store.accountId {
+            model.activeChannel = nil
+        }
+    }
+
+    private func selectionChanged() {
+        noteActiveReading()
         keys.currentDestination = selection
         keys.selectedMessageId = nil
         #if os(iOS)
