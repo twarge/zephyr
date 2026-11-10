@@ -12,15 +12,18 @@ public final class StubURLProtocol: URLProtocol {
         /// Bodies are delivered in pieces this large, so consumers see a
         /// stream rather than one lump.
         public var chunkSize: Int
+        /// Never answers, until the client cancels.
+        public var hangs: Bool
 
         public init(
             status: Int = 200, headers: [String: String] = [:],
-            body: Data = Data(), chunkSize: Int = 1 << 14
+            body: Data = Data(), chunkSize: Int = 1 << 14, hangs: Bool = false
         ) {
             self.status = status
             self.headers = headers
             self.body = body
             self.chunkSize = chunkSize
+            self.hangs = hangs
         }
     }
 
@@ -34,9 +37,14 @@ public final class StubURLProtocol: URLProtocol {
     /// An ephemeral session that resolves every request against the
     /// registered stubs (an unregistered URL fails the request).
     public static func session() -> URLSession {
+        URLSession(configuration: configuration())
+    }
+
+    /// The stubbed configuration, for clients that build their own session.
+    public static func configuration() -> URLSessionConfiguration {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubURLProtocol.self]
-        return URLSession(configuration: config)
+        return config
     }
 
     override public class func canInit(with request: URLRequest) -> Bool { true }
@@ -54,6 +62,7 @@ public final class StubURLProtocol: URLProtocol {
             client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
             return
         }
+        if stub.hangs { return }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         var rest = stub.body[...]
         while !rest.isEmpty {

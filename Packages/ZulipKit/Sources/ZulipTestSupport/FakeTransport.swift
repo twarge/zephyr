@@ -33,6 +33,8 @@ public struct RecordedRequest: Sendable {
 
 public enum FakeResponse: Sendable {
     case json(String, status: Int = 200)
+    /// An arbitrary response — non-JSON bodies, custom headers.
+    case http(status: Int, headers: [String: String] = [:], body: String = "")
     /// Never responds (until the request's task is cancelled). Useful as the
     /// default response so a test's event loop parks quietly.
     case hang
@@ -91,6 +93,11 @@ public final class FakeTransport: ApiTransport {
         case .json(let body, let status):
             let http = HTTPURLResponse(
                 url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (Data(body.utf8), http)
+        case .http(let status, let headers, let body):
+            let http = HTTPURLResponse(
+                url: request.url!, statusCode: status, httpVersion: "HTTP/1.1",
+                headerFields: headers)!
             return (Data(body.utf8), http)
         case .networkError:
             throw URLError(.notConnectedToInternet)

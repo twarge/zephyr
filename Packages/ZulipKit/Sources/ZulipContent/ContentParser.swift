@@ -36,11 +36,12 @@ public enum ContentParser {
 
         for node in nodes {
             if let text = node as? TextNode {
-                // Whitespace between blocks is layout noise; real text becomes
-                // an implicit paragraph (as inside loose list items).
-                if !text.getWholeText().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    danglingInlines.append(.text(text.getWholeText()))
-                }
+                // Text becomes an implicit paragraph (as in tight list items).
+                // Whitespace-only text is kept too — it separates inline
+                // siblings ("<strong>a</strong> <em>b</em>") — and flushing
+                // trims it at block boundaries, so whitespace between blocks
+                // never makes an empty paragraph.
+                danglingInlines.append(.text(text.getWholeText()))
                 continue
             }
             guard let element = node as? Element else { continue }

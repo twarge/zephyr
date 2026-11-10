@@ -5,7 +5,7 @@ import Foundation
 /// The HTML is a closed dialect (one server-side renderer produces it), so the
 /// parser matches known structures exactly and folds anything unrecognized
 /// into `.unimplemented` — rendered visibly, never silently dropped.
-public struct MessageContent: Sendable, Equatable {
+public struct MessageContent: Sendable, Hashable {
     public var blocks: [BlockNode]
 
     public init(blocks: [BlockNode]) {
@@ -13,7 +13,7 @@ public struct MessageContent: Sendable, Equatable {
     }
 }
 
-public indirect enum BlockNode: Sendable, Equatable {
+public indirect enum BlockNode: Sendable, Hashable {
     case paragraph([InlineNode])
     case heading(level: Int, [InlineNode])
     /// `div.codehilite` — Pygments token spans preserved for syntax coloring.
@@ -39,7 +39,7 @@ public indirect enum BlockNode: Sendable, Equatable {
 
 /// One run of code with its Pygments token class ("k", "s2", "c1", …; nil for
 /// plain text).
-public struct CodeSpan: Sendable, Equatable {
+public struct CodeSpan: Sendable, Hashable {
     public var text: String
     public var tokenClass: String?
 
@@ -55,8 +55,8 @@ extension [CodeSpan] {
     }
 }
 
-public struct TableNode: Sendable, Equatable {
-    public enum ColumnAlignment: Sendable, Equatable {
+public struct TableNode: Sendable, Hashable {
+    public enum ColumnAlignment: Sendable, Hashable {
         case left, center, right
     }
 
@@ -73,7 +73,7 @@ public struct TableNode: Sendable, Equatable {
     }
 }
 
-public struct VideoNode: Sendable, Equatable {
+public struct VideoNode: Sendable, Hashable {
     /// The watch/download link (upload path, or external URL for embeds).
     public var href: String
     /// Poster/preview image, when the server provides one (YouTube etc.).
@@ -88,7 +88,7 @@ public struct VideoNode: Sendable, Equatable {
     }
 }
 
-public struct LinkPreviewNode: Sendable, Equatable {
+public struct LinkPreviewNode: Sendable, Hashable {
     public var url: String
     public var title: String?
     public var descriptionText: String?
@@ -102,7 +102,7 @@ public struct LinkPreviewNode: Sendable, Equatable {
     }
 }
 
-public indirect enum InlineNode: Sendable, Equatable {
+public indirect enum InlineNode: Sendable, Hashable {
     case text(String)
     case lineBreak
     case strong([InlineNode])
@@ -120,8 +120,8 @@ public indirect enum InlineNode: Sendable, Equatable {
     case unimplemented(html: String)
 }
 
-public struct LinkNode: Sendable, Equatable {
-    public enum Kind: Sendable, Equatable {
+public struct LinkNode: Sendable, Hashable {
+    public enum Kind: Sendable, Hashable {
         case plain
         case channel(streamId: Int?)
         case channelTopic(streamId: Int?)
@@ -133,8 +133,8 @@ public struct LinkNode: Sendable, Equatable {
     public var kind: Kind
 }
 
-public struct MentionNode: Sendable, Equatable {
-    public enum Target: Sendable, Equatable {
+public struct MentionNode: Sendable, Hashable {
+    public enum Target: Sendable, Hashable {
         case user(id: Int?)
         case userGroup(id: Int?)
         case channelWildcard
@@ -146,7 +146,7 @@ public struct MentionNode: Sendable, Equatable {
     public var silent: Bool
 }
 
-public enum EmojiNode: Sendable, Equatable {
+public enum EmojiNode: Sendable, Hashable {
     /// Resolved to the actual character sequence (from the `emoji-…` class's
     /// hex codepoints), plus the shortcode name for accessibility.
     case unicode(String, name: String)
@@ -154,7 +154,7 @@ public enum EmojiNode: Sendable, Equatable {
     case realm(src: String, name: String)
 }
 
-public struct ImageNode: Sendable, Equatable {
+public struct ImageNode: Sendable, Hashable {
     public var src: String
     public var originalSrc: String?
     public var alt: String?

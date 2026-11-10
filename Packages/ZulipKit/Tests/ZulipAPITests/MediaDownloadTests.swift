@@ -124,4 +124,31 @@ struct MediaDownloadTests {
         defer { try? FileManager.default.removeItem(at: temporaryURL) }
         #expect(filename == "Q3 Report.zip")
     }
+
+    @Test func cancellationThrowsCancellationError() async {
+        let url = URL(string: "https://chat.example.com/user_uploads/2/kl/stalled.zip")!
+        StubURLProtocol.register(.init(hangs: true), for: url)
+        let connection = connection()
+        let task = Task {
+            try await connection.downloadFile(at: url, via: StubURLProtocol.session())
+        }
+        try? await Task.sleep(for: .milliseconds(100))
+        task.cancel()
+        await #expect(throws: CancellationError.self) {
+            _ = try await task.value
+        }
+    }
+
+    @Test func emptyBodyDownloads() async throws {
+        let url = URL(string: "https://chat.example.com/user_uploads/2/mn/empty.txt")!
+        StubURLProtocol.register(.init(headers: ["Content-Type": "text/plain"]), for: url)
+        let outcome = try await connection().downloadFile(at: url, via: StubURLProtocol.session())
+        guard case .file(let temporaryURL, let filename) = outcome else {
+            Issue.record("expected a file, got \(outcome)")
+            return
+        }
+        defer { try? FileManager.default.removeItem(at: temporaryURL) }
+        #expect(filename == "empty.txt")
+        #expect(try Data(contentsOf: temporaryURL).isEmpty)
+    }
 }

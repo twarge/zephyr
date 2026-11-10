@@ -46,6 +46,13 @@ public protocol ApiTransport: Sendable {
         _ request: URLRequest,
         uploadProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> (Data, HTTPURLResponse)
+
+    /// Sends `request` with the contents of `bodyFile` as its body, so large
+    /// uploads stream from disk instead of sitting in memory.
+    func perform(
+        _ request: URLRequest, bodyFile: URL,
+        uploadProgress: (@Sendable (Double) -> Void)?
+    ) async throws -> (Data, HTTPURLResponse)
 }
 
 extension ApiTransport {
@@ -55,6 +62,20 @@ extension ApiTransport {
         uploadProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> (Data, HTTPURLResponse) {
         try await perform(request)
+    }
+
+    /// Default: loads the file into `httpBody` — fine for fakes, which
+    /// record the body anyway.
+    public func perform(
+        _ request: URLRequest, bodyFile: URL,
+        uploadProgress: (@Sendable (Double) -> Void)?
+    ) async throws -> (Data, HTTPURLResponse) {
+        var request = request
+        request.httpBody = try Data(contentsOf: bodyFile)
+        if let uploadProgress {
+            return try await perform(request, uploadProgress: uploadProgress)
+        }
+        return try await perform(request)
     }
 }
 
@@ -68,15 +89,17 @@ public struct URLSessionTransport: ApiTransport {
         // Individual requests set tighter timeouts; this is the outer bound,
         // sized for event long-polls.
         config.timeoutIntervalForRequest = 600
-        session = URLSession(configuration: config)
+        self.init(configuration: config)
+    }
+
+    public init(configuration: URLSessionConfiguration) {
+        session = URLSession(configuration: configuration)
     }
 
     public func perform(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
+        try await Self.httpResponse {
+            try await session.data(for: request)
         }
-        return (data, http)
     }
 
     public func perform(
@@ -84,7 +107,33 @@ public struct URLSessionTransport: ApiTransport {
         uploadProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> (Data, HTTPURLResponse) {
         let delegate = UploadProgressDelegate(callback: uploadProgress)
-        let (data, response) = try await session.data(for: request, delegate: delegate)
+        return try await Self.httpResponse {
+            try await session.data(for: request, delegate: delegate)
+        }
+    }
+
+    public func perform(
+        _ request: URLRequest, bodyFile: URL,
+        uploadProgress: (@Sendable (Double) -> Void)?
+    ) async throws -> (Data, HTTPURLResponse) {
+        let delegate = uploadProgress.map(UploadProgressDelegate.init(callback:))
+        return try await Self.httpResponse {
+            try await session.upload(for: request, fromFile: bodyFile, delegate: delegate)
+        }
+    }
+
+    /// URLSession reports task cancellation as `URLError(.cancelled)`;
+    /// callers expect structured concurrency's `CancellationError`.
+    private static func httpResponse(
+        _ load: () async throws -> (Data, URLResponse)
+    ) async throws -> (Data, HTTPURLResponse) {
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await load()
+        } catch let error as URLError where error.code == .cancelled && Task.isCancelled {
+            throw CancellationError()
+        }
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
@@ -141,18 +190,20 @@ extension ApiError: LocalizedError {
 
 /// Central JSON configuration: the Zulip API is snake_case throughout.
 public enum ZulipJSON {
-    public static var decoder: JSONDecoder {
+    // Shared: both are Sendable and safe to use concurrently; building one
+    // per call was measurable on large register/message payloads.
+    public static let decoder: JSONDecoder = {
         let d = JSONDecoder()
         d.keyDecodingStrategy = .convertFromSnakeCase
         return d
-    }
+    }()
 
-    public static var encoder: JSONEncoder {
+    public static let encoder: JSONEncoder = {
         let e = JSONEncoder()
         e.keyEncodingStrategy = .convertToSnakeCase
         e.outputFormatting = [.sortedKeys]
         return e
-    }
+    }()
 
     public static func encodeString(_ value: some Encodable) throws -> String {
         String(decoding: try encoder.encode(value), as: UTF8.self)
@@ -180,7 +231,18 @@ public final class ApiConnection: Sendable {
 
     public static var defaultUserAgent: String {
         let v = ProcessInfo.processInfo.operatingSystemVersion
-        return "Zephyr/0.1 (macOS \(v.majorVersion).\(v.minorVersion))"
+        #if os(macOS)
+        let platform = "macOS"
+        #elseif os(visionOS)
+        let platform = "visionOS"
+        #elseif os(tvOS)
+        let platform = "tvOS"
+        #elseif os(iOS)
+        let platform = ProcessInfo.processInfo.isiOSAppOnMac ? "macOS" : "iOS"
+        #else
+        let platform = "unknown"
+        #endif
+        return "Zephyr/0.1 (\(platform) \(v.majorVersion).\(v.minorVersion))"
     }
 
     public init(
@@ -216,16 +278,40 @@ public final class ApiConnection: Sendable {
         if (200..<300).contains(response.statusCode) {
             return data
         }
+        let headerRetryAfter = Self.retryAfter(
+            header: response.value(forHTTPHeaderField: "Retry-After"))
         if let envelope = try? ZulipJSON.decoder.decode(ErrorEnvelope.self, from: data),
            envelope.result == "error" {
             throw ApiError(
                 httpStatus: response.statusCode,
                 code: envelope.code ?? "UNKNOWN_ERROR",
                 message: envelope.msg ?? "",
-                retryAfterSeconds: envelope.retryAfter)
+                retryAfterSeconds: envelope.retryAfter ?? headerRetryAfter)
         }
         let bodyPreview = String(data: data.prefix(500), encoding: .utf8) ?? ""
-        throw ApiError(httpStatus: response.statusCode, code: "HTTP_ERROR", message: bodyPreview)
+        // A bare 429 is a proxy or load balancer rate-limiting us: the
+        // request never reached Zulip, so it's as safely retryable as
+        // Zulip's own RATE_LIMIT_HIT.
+        let code = response.statusCode == 429 ? "RATE_LIMIT_HIT" : "HTTP_ERROR"
+        throw ApiError(
+            httpStatus: response.statusCode, code: code, message: bodyPreview,
+            retryAfterSeconds: headerRetryAfter)
+    }
+
+    /// Parses a `Retry-After` header: delta-seconds or an HTTP-date.
+    static func retryAfter(header: String?, now: Date = Date()) -> Double? {
+        guard let value = header?.trimmingCharacters(in: .whitespaces), !value.isEmpty else {
+            return nil
+        }
+        if let seconds = Double(value) {
+            return seconds >= 0 ? seconds : nil
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        guard let date = formatter.date(from: value) else { return nil }
+        return max(0, date.timeIntervalSince(now))
     }
 
     /// POST /user_uploads (multipart) — returns the upload's realm-relative
@@ -235,54 +321,102 @@ public final class ApiConnection: Sendable {
         _ fileData: Data, filename: String, mimeType: String = "application/octet-stream",
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> String {
-        guard var components = URLComponents(url: realmURL, resolvingAgainstBaseURL: false) else {
-            throw ApiError(httpStatus: 0, code: "BAD_REALM_URL", message: realmURL.absoluteString)
-        }
-        components.path = "/api/v1/user_uploads"
-        guard let url = components.url else {
-            throw ApiError(httpStatus: 0, code: "BAD_REALM_URL", message: realmURL.absoluteString)
-        }
-
-        let boundary = "zephyr-\(UUID().uuidString)"
-        var body = Data()
-        body.append(Data("--\(boundary)\r\n".utf8))
-        body.append(
-            Data(
-                "Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n"
-                    .utf8))
-        body.append(Data("Content-Type: \(mimeType)\r\n\r\n".utf8))
-        body.append(fileData)
-        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
-
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.httpBody = body
-        urlRequest.timeoutInterval = 300
-        urlRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        urlRequest.setValue(
-            "multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        if let authHeader {
-            urlRequest.setValue(authHeader, forHTTPHeaderField: "Authorization")
-        }
-
-        struct UploadResult: Decodable {
-            var url: String?
-            var uri: String?
-        }
+        let multipart = Multipart(filename: filename, mimeType: mimeType)
+        var urlRequest = try multipart.request(for: self)
+        urlRequest.httpBody = multipart.head + fileData + multipart.tail
         let (data, response): (Data, HTTPURLResponse)
         if let progress {
             (data, response) = try await transport.perform(urlRequest, uploadProgress: progress)
         } else {
             (data, response) = try await transport.perform(urlRequest)
         }
-        let processed = try processResponse(data, response)
-        let result = try ZulipJSON.decoder.decode(UploadResult.self, from: processed)
+        return try uploadPath(from: processResponse(data, response))
+    }
+
+    /// The streaming variant: the multipart body is assembled in a
+    /// temporary file and uploaded from disk, so a multi-gigabyte video
+    /// never sits in memory.
+    public func uploadFile(
+        fileURL: URL, filename: String, mimeType: String = "application/octet-stream",
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> String {
+        let multipart = Multipart(filename: filename, mimeType: mimeType)
+        let urlRequest = try multipart.request(for: self)
+        let bodyFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("zephyr-upload-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: bodyFile) }
+        try multipart.writeBody(from: fileURL, to: bodyFile)
+        let (data, response) = try await transport.perform(
+            urlRequest, bodyFile: bodyFile, uploadProgress: progress)
+        return try uploadPath(from: processResponse(data, response))
+    }
+
+    private func uploadPath(from data: Data) throws -> String {
+        struct UploadResult: Decodable {
+            var url: String?
+            var uri: String?
+        }
+        let result = try ZulipJSON.decoder.decode(UploadResult.self, from: data)
         guard let path = result.url ?? result.uri else {
             throw ApiError(
                 httpStatus: 200, code: ApiError.malformedResponseCode,
                 message: "upload response missing url")
         }
         return path
+    }
+
+    /// One-file `multipart/form-data` body for /user_uploads.
+    struct Multipart {
+        let boundary = "zephyr-\(UUID().uuidString)"
+        let head: Data
+        var tail: Data { Data("\r\n--\(boundary)--\r\n".utf8) }
+
+        init(filename: String, mimeType: String) {
+            head = Data(
+                ("--\(boundary)\r\n"
+                    + "Content-Disposition: form-data; name=\"file\"; "
+                    + "filename=\"\(Self.quotedFilename(filename))\"\r\n"
+                    + "Content-Type: \(Self.strippingLineBreaks(mimeType))\r\n\r\n").utf8)
+        }
+
+        /// A filename safe inside the quoted-string: `"` becomes %22 (as
+        /// browsers send it) and CR/LF are dropped, so a name can neither
+        /// end the string early nor inject header lines.
+        static func quotedFilename(_ filename: String) -> String {
+            strippingLineBreaks(filename).replacingOccurrences(of: "\"", with: "%22")
+        }
+
+        static func strippingLineBreaks(_ value: String) -> String {
+            String(value.unicodeScalars.filter { $0 != "\r" && $0 != "\n" })
+        }
+
+        func request(for connection: ApiConnection) throws -> URLRequest {
+            var request = URLRequest(url: try connection.url(forPath: "/api/v1/user_uploads"))
+            request.httpMethod = "POST"
+            request.timeoutInterval = 300
+            request.setValue(
+                "multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            connection.applyCommonHeaders(to: &request)
+            return request
+        }
+
+        /// Writes head, the file's bytes (copied a chunk at a time), and
+        /// tail to `destination`.
+        func writeBody(from source: URL, to destination: URL) throws {
+            guard FileManager.default.createFile(atPath: destination.path, contents: head) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            let output = try FileHandle(forWritingTo: destination)
+            defer { try? output.close() }
+            try output.seekToEnd()
+            let input = try FileHandle(forReadingFrom: source)
+            defer { try? input.close() }
+            while let chunk = try input.read(upToCount: 1 << 20), !chunk.isEmpty {
+                try output.write(contentsOf: chunk)
+            }
+            try output.write(contentsOf: tail)
+            try output.close()
+        }
     }
 
     /// Sends a request and decodes the success response strictly; a decode
@@ -314,22 +448,45 @@ public final class ApiConnection: Sendable {
 
     /// An authenticated URLRequest for fetching media (avatars, uploads) with
     /// `mediaSession`. Not for API endpoints — use `request(_:)`.
+    ///
+    /// `path` is realm-relative and may come straight from message HTML:
+    /// already percent-encoded, and possibly carrying a `?query`.
     public func authorizedURLRequest(path: String, timeout: Double = 60) throws -> URLRequest {
         try makeURLRequest(ApiRequest(method: .get, path: path, timeout: timeout))
     }
 
     /// The variant for media links that arrive fully resolved: auth is
-    /// attached only when the URL is on this connection's realm — a foreign
-    /// host gets a plain request.
+    /// attached only when the URL is on this connection's realm origin —
+    /// scheme, host and port — so a foreign host, a plain-http link to the
+    /// realm's host, or another port gets a plain request.
     public func authorizedURLRequest(url: URL, timeout: Double = 60) -> URLRequest {
         var request = URLRequest(url: url)
         request.timeoutInterval = timeout
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        if let authHeader,
-           url.host()?.lowercased() == realmURL.host()?.lowercased() {
+        if let authHeader, isOnRealmOrigin(url) {
             request.setValue(authHeader, forHTTPHeaderField: "Authorization")
         }
         return request
+    }
+
+    /// Same-origin check against `realmURL` (RFC 6454: scheme, host, and
+    /// effective port).
+    public func isOnRealmOrigin(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(),
+              scheme == realmURL.scheme?.lowercased(),
+              let host = url.host()?.lowercased(),
+              host == realmURL.host()?.lowercased()
+        else { return false }
+        return Self.effectivePort(url) == Self.effectivePort(realmURL)
+    }
+
+    private static func effectivePort(_ url: URL) -> Int? {
+        if let port = url.port { return port }
+        switch url.scheme?.lowercased() {
+        case "https": return 443
+        case "http": return 80
+        default: return nil
+        }
     }
 
     /// Session for media fetches: follows redirects but strips the
@@ -356,26 +513,13 @@ public final class ApiConnection: Sendable {
     }
 
     private func makeURLRequest(_ request: ApiRequest) throws -> URLRequest {
-        guard var components = URLComponents(url: realmURL, resolvingAgainstBaseURL: false) else {
-            throw ApiError(httpStatus: 0, code: "BAD_REALM_URL", message: realmURL.absoluteString)
-        }
-        components.path = request.path
-
         var urlRequest: URLRequest
         switch request.method {
         case .get, .delete:
-            if !request.params.isEmpty {
-                components.percentEncodedQuery = Self.encodeForm(request.params)
-            }
-            guard let url = components.url else {
-                throw ApiError(httpStatus: 0, code: "BAD_REALM_URL", message: realmURL.absoluteString)
-            }
-            urlRequest = URLRequest(url: url)
+            let query = request.params.isEmpty ? nil : Self.encodeForm(request.params)
+            urlRequest = URLRequest(url: try url(forPath: request.path, query: query))
         case .post, .patch:
-            guard let url = components.url else {
-                throw ApiError(httpStatus: 0, code: "BAD_REALM_URL", message: realmURL.absoluteString)
-            }
-            urlRequest = URLRequest(url: url)
+            urlRequest = URLRequest(url: try url(forPath: request.path))
             urlRequest.httpBody = Data(Self.encodeForm(request.params).utf8)
             urlRequest.setValue(
                 "application/x-www-form-urlencoded; charset=utf-8",
@@ -383,11 +527,81 @@ public final class ApiConnection: Sendable {
         }
         urlRequest.httpMethod = request.method.rawValue
         urlRequest.timeoutInterval = request.timeout ?? 60
+        applyCommonHeaders(to: &urlRequest)
+        return urlRequest
+    }
+
+    fileprivate func applyCommonHeaders(to urlRequest: inout URLRequest) {
         urlRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         if let authHeader {
             urlRequest.setValue(authHeader, forHTTPHeaderField: "Authorization")
         }
-        return urlRequest
+    }
+
+    /// The realm URL for a realm-relative `path`, which may already be
+    /// percent-encoded and carry its own query (HTML `src`s do); `query`
+    /// (already encoded) is appended to any query the path brings.
+    fileprivate func url(forPath path: String, query: String? = nil) throws -> URL {
+        guard var components = URLComponents(url: realmURL, resolvingAgainstBaseURL: false) else {
+            throw ApiError(httpStatus: 0, code: "BAD_REALM_URL", message: realmURL.absoluteString)
+        }
+        let (encodedPath, pathQuery) = Self.encodedPathAndQuery(path)
+        components.percentEncodedPath = encodedPath
+        let queries = [pathQuery, query].compactMap { $0 }.filter { !$0.isEmpty }
+        components.percentEncodedQuery = queries.isEmpty ? nil : queries.joined(separator: "&")
+        components.fragment = nil
+        guard let url = components.url else {
+            throw ApiError(httpStatus: 0, code: "BAD_REALM_URL", message: realmURL.absoluteString)
+        }
+        return url
+    }
+
+    /// Splits a realm-relative reference into percent-encoded path and
+    /// query, dropping any fragment. Existing `%XX` escapes are kept as
+    /// they are (re-encoding them would double-encode `%E6` to `%25E6`);
+    /// anything else that isn't allowed — spaces, non-ASCII, a stray `%` —
+    /// is encoded.
+    static func encodedPathAndQuery(_ reference: String) -> (path: String, query: String?) {
+        var rest = Substring(reference)
+        if let hash = rest.firstIndex(of: "#") {
+            rest = rest[..<hash]
+        }
+        var query: String?
+        if let mark = rest.firstIndex(of: "?") {
+            query = percentEncodingPreservingEscapes(rest[rest.index(after: mark)...], allowed: .urlQueryAllowed)
+            rest = rest[..<mark]
+        }
+        var path = percentEncodingPreservingEscapes(rest, allowed: .urlPathAllowed)
+        if !path.hasPrefix("/") {
+            path = "/" + path
+        }
+        return (path, query)
+    }
+
+    private static func percentEncodingPreservingEscapes(
+        _ string: Substring, allowed: CharacterSet
+    ) -> String {
+        let bytes = Array(string.utf8)
+        var result = ""
+        result.reserveCapacity(bytes.count)
+        var i = 0
+        while i < bytes.count {
+            let byte = bytes[i]
+            if byte == UInt8(ascii: "%"), i + 2 < bytes.count,
+               bytes[i + 1].isHexDigit, bytes[i + 2].isHexDigit {
+                result += String(decoding: bytes[i...(i + 2)], as: UTF8.self)
+                i += 3
+                continue
+            }
+            if byte < 0x80, byte != UInt8(ascii: "%"),
+               allowed.contains(Unicode.Scalar(byte)) {
+                result.unicodeScalars.append(Unicode.Scalar(byte))
+            } else {
+                result += String(format: "%%%02X", byte)
+            }
+            i += 1
+        }
+        return result
     }
 
     // Strict percent-encoding (RFC 3986 unreserved only), used for both query
@@ -406,5 +620,13 @@ public final class ApiConnection: Sendable {
                 return "\(name)=\(value)"
             }
             .joined(separator: "&")
+    }
+}
+
+private extension UInt8 {
+    var isHexDigit: Bool {
+        (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(self)
+            || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains(self)
+            || (UInt8(ascii: "A")...UInt8(ascii: "F")).contains(self)
     }
 }

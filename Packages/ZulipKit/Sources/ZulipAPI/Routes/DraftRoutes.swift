@@ -20,10 +20,11 @@ extension ApiConnection {
         return id
     }
 
-    /// PATCH /drafts/{id}.
+    /// PATCH /drafts/{id}. The id goes only in the path: the documented
+    /// `draft` object is type/to/topic/content/timestamp, as for create.
     public func editDraft(id: Int, _ draft: ServerDraft) async throws {
         var payload = draft
-        payload.id = id
+        payload.id = nil
         _ = try await send(
             ApiRequest(
                 method: .patch, path: "/api/v1/drafts/\(id)",

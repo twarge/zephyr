@@ -73,7 +73,8 @@ extension ApiConnection {
                 params: [
                     Param(
                         "subscriptions",
-                        "[{\"name\": \(jsonString(name)), \"description\": \(jsonString(description))}]"),
+                        try ZulipJSON.encodeString(
+                            [NewSubscription(name: name, description: description)])),
                     Param("invite_only", inviteOnly ? "true" : "false"),
                     Param("announce", announce ? "true" : "false"),
                 ]))
@@ -103,7 +104,7 @@ extension ApiConnection {
             ApiRequest(
                 method: .post, path: "/api/v1/users/me/subscriptions",
                 params: [
-                    Param("subscriptions", "[{\"name\": \(jsonString(name))}]"),
+                    Param("subscriptions", try ZulipJSON.encodeString([NewSubscription(name: name)])),
                     Param(
                         "principals",
                         "[\(userIds.map(String.init).joined(separator: ","))]"),
@@ -117,7 +118,7 @@ extension ApiConnection {
             ApiRequest(
                 method: .delete, path: "/api/v1/users/me/subscriptions",
                 params: [
-                    Param("subscriptions", "[\(jsonString(name))]"),
+                    Param("subscriptions", try ZulipJSON.encodeString([name])),
                     Param(
                         "principals",
                         "[\(userIds.map(String.init).joined(separator: ","))]"),
@@ -132,7 +133,7 @@ extension ApiConnection {
                 params: [
                     Param(
                         "subscriptions",
-                        "[{\"name\": \(jsonString(name))}]")
+                        try ZulipJSON.encodeString([NewSubscription(name: name)]))
                 ]))
     }
 
@@ -141,7 +142,7 @@ extension ApiConnection {
         _ = try await send(
             ApiRequest(
                 method: .delete, path: "/api/v1/users/me/subscriptions",
-                params: [Param("subscriptions", "[\(jsonString(name))]")]))
+                params: [Param("subscriptions", try ZulipJSON.encodeString([name]))]))
     }
 
     /// POST /users/me/subscriptions/properties — per-channel settings
@@ -155,7 +156,8 @@ extension ApiConnection {
                 params: [
                     Param(
                         "subscription_data",
-                        "[{\"stream_id\": \(streamId), \"property\": \(jsonString(property)), \"value\": \(value)}]")
+                        try ZulipJSON.encodeString(
+                            [SubscriptionProperty(streamId: streamId, property: property, value: value)]))
                 ]))
     }
 
@@ -169,15 +171,22 @@ extension ApiConnection {
                 params: [
                     Param(
                         "subscription_data",
-                        "[{\"stream_id\": \(streamId), \"property\": \(jsonString(property)), \"value\": \(jsonString(value))}]")
+                        try ZulipJSON.encodeString(
+                            [SubscriptionProperty(streamId: streamId, property: property, value: value)]))
                 ]))
     }
 
-    private func jsonString(_ value: String) -> String {
-        let escaped = value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-        return "\"\(escaped)\""
+    // JSON-encoded, never hand-assembled: channel names and colors are
+    // user text and may hold quotes, backslashes or control characters.
+    private struct NewSubscription: Encodable {
+        var name: String
+        var description: String?
+    }
+
+    private struct SubscriptionProperty<Value: Encodable>: Encodable {
+        var streamId: Int
+        var property: String
+        var value: Value
     }
 
     /// POST /user_topics — per-topic visibility (0 none, 1 muted, 2 unmuted,

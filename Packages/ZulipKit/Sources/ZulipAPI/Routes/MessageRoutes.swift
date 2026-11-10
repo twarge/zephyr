@@ -225,7 +225,10 @@ extension ApiConnection {
         }
         let result: HistoryResult = try await request(
             ApiRequest(
-                method: .get, path: "/api/v1/messages/\(messageId)/history"))
+                method: .get, path: "/api/v1/messages/\(messageId)/history",
+                // Empty topics as "" (not "(no topic)"), matching getMessages
+                // and the event stream.
+                params: [Param("allow_empty_topic_name", "true")]))
         return result.messageHistory
     }
 
