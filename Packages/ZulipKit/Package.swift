@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "ZulipKit",
-    platforms: [.macOS(.v15), .iOS(.v18), .tvOS(.v18), .visionOS(.v2)],
+    platforms: [.macOS(.v26), .iOS(.v26), .tvOS(.v18), .visionOS(.v26)],
     products: [
         .library(name: "ZulipAPI", targets: ["ZulipAPI"]),
         .library(name: "ZulipModel", targets: ["ZulipModel"]),
@@ -12,9 +12,9 @@ let package = Package(
         .executable(name: "zulip-harness", targets: ["Harness"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0"),
-        .package(url: "https://github.com/mgriebling/SwiftMath.git", from: "1.5.0"),
-        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
+        .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.14.3"),
+        .package(url: "https://github.com/mgriebling/SwiftMath.git", from: "1.7.3"),
+        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.12.0"),
     ],
     targets: [
         .target(name: "ZulipAPI"),

@@ -43,7 +43,7 @@ targets:
         # Merged with the generated keys; carries NSUserActivityTypes.
         INFOPLIST_FILE: Support/Info.plist
         MACOSX_DEPLOYMENT_TARGET: "26.0"
-        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
         XROS_DEPLOYMENT_TARGET: "26.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         # Native Apple Vision app, not iPad-compatibility mode.
@@ -87,7 +87,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]: Support/Widgets-iOS.entitlements
         CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]: Support/Widgets-iOS.entitlements
         MACOSX_DEPLOYMENT_TARGET: "26.0"
-        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "6.0"
         # No MainActor-default here: TimelineProvider's requirements are
@@ -129,7 +129,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]: Support/Widgets-iOS.entitlements
         CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]: Support/Widgets-iOS.entitlements
         MACOSX_DEPLOYMENT_TARGET: "26.0"
-        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "6.0"
         SWIFT_APPROACHABLE_CONCURRENCY: YES
