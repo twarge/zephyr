@@ -10,7 +10,7 @@ struct ZephyrApp: App {
     @State private var model = AppModel()
     @Environment(\.openWindow) private var openWindow
     #if os(macOS)
-    @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
+    @AppStorage("showMenuBarExtra") private var showMenuBarExtra = false
     #endif
 
     init() {

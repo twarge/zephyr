@@ -98,7 +98,7 @@ private struct GeneralSettings: View {
     @Environment(AppModel.self) private var model
     @AppStorage("badgePolicy") private var badgePolicy = BadgePolicy.dmsAndMentions.rawValue
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
-    @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
+    @AppStorage("showMenuBarExtra") private var showMenuBarExtra = false
     @AppStorage(MessageSounds.personalKey) private var personalSound =
         MessageSounds.defaultPersonal
     @AppStorage(MessageSounds.otherKey) private var otherSound = MessageSounds.defaultOther
