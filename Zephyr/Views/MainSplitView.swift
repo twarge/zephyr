@@ -193,10 +193,10 @@ struct MainSplitView: View {
                 selectedAccount: $selectedAccount,
                 startDirectMessage: { newConversation = .directMessage(initialUsers: []) })
                 #if os(macOS)
-                .navigationSplitViewColumnWidth(min: 156, ideal: 156, max: 400)
+                .navigationSplitViewColumnWidth(min: 156, ideal: 234, max: 400)
                 #else
                 // The iPad's system sidebars (Mail, Notes) run ~320pt;
-                // the macOS-tuned 156 reads half-width there. No maximum:
+                // the macOS-tuned 234 reads narrow there. No maximum:
                 // a bent Duo's split view widens the sidebar to the crease
                 // (~475pt), and a cap would hold it short.
                 .navigationSplitViewColumnWidth(min: 280, ideal: 320)
