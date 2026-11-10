@@ -41,6 +41,17 @@ public struct Event: Sendable {
         case urlEmbedData(UrlEmbedDataEvent)
         /// One of the user's own settings changed (on any of their clients).
         case userSettingsUpdate(UserSettingsUpdateEvent)
+        /// Legacy realm_emoji/update: the realm's complete custom emoji set
+        /// (servers below FL 491, which ignore `individual_emoji_changes`).
+        case realmEmojiReplace([String: RealmEmojiItem])
+        /// realm_emoji/add (FL 491+): one new custom emoji, by id.
+        case realmEmojiAdd(emojiId: String, emoji: RealmEmojiItem)
+        /// realm_emoji/update_one (FL 491+): changed properties of one emoji.
+        case realmEmojiUpdateOne(emojiId: String, deactivated: Bool?)
+        case channelFolderAdd(ChannelFolderAddEvent)
+        case channelFolderUpdate(ChannelFolderUpdateEvent)
+        /// New display order: folder ids, first to last.
+        case channelFolderReorder(order: [Int])
         case unexpected(type: String, op: String?)
     }
 }
@@ -67,6 +78,17 @@ public struct UpdateMessageEvent: Decodable, Sendable {
     public var subject: String?
     public var origSubject: String?
     public var propagateMode: String?
+    /// Server re-render only (link previews, thumbnails): not a user edit,
+    /// so it must not mark the message edited.
+    public var renderingOnly: Bool?
+
+    public var isRenderingOnly: Bool { renderingOnly ?? false }
+
+    /// Whether the event moves messages to another topic or channel.
+    public var isMove: Bool {
+        (newStreamId != nil && newStreamId != streamId)
+            || (subject != nil && origSubject != nil && subject != origSubject)
+    }
 }
 
 public struct DeleteMessageEvent: Decodable, Sendable {
@@ -82,6 +104,24 @@ public struct UpdateMessageFlagsEvent: Decodable, Sendable {
     public var flag: String
     public var messages: [Int]
     public var all: Bool
+    /// remove/read only (FL 121+): where each newly-unread message lives,
+    /// so clients can file unreads for messages they never loaded.
+    public var messageDetails: [String: MessageDetail]?
+
+    public struct MessageDetail: Decodable, Sendable, Equatable {
+        /// "stream" or "private".
+        public var type: String
+        public var mentioned: Bool?
+        /// DMs: the other recipients (excluding self; empty for self-DMs).
+        public var userIds: [Int]?
+        public var streamId: Int?
+        public var topic: String?
+    }
+
+    /// The detail for one message id.
+    public func detail(for messageId: Int) -> MessageDetail? {
+        messageDetails?[String(messageId)]
+    }
 }
 
 /// A per-channel setting change (`subscription`/`update`): value is
@@ -91,6 +131,9 @@ public struct SubscriptionUpdateEvent: Decodable, Sendable {
     public var property: String
     public var boolValue: Bool?
     public var stringValue: String?
+    /// Integer-valued properties (`folder_id`); nil also when the value is
+    /// null (a channel removed from its folder).
+    public var intValue: Int?
 
     enum CodingKeys: String, CodingKey {
         case streamId, property, value
@@ -102,7 +145,79 @@ public struct SubscriptionUpdateEvent: Decodable, Sendable {
         property = try container.decode(String.self, forKey: .property)
         boolValue = try? container.decode(Bool.self, forKey: .value)
         stringValue = try? container.decode(String.self, forKey: .value)
+        intValue = boolValue == nil ? try? container.decode(Int.self, forKey: .value) : nil
     }
+}
+
+/// `channel_folder/add` (Zulip 11+). `order` arrived later (FL 414): an
+/// older server's folder sorts last.
+public struct ChannelFolderAddEvent: Decodable, Sendable {
+    public var folder: ChannelFolder
+    public var isArchived: Bool
+
+    private enum CodingKeys: String, CodingKey { case channelFolder }
+    private struct Raw: Decodable {
+        var id: Int
+        var name: String
+        var order: Int?
+        var isArchived: Bool?
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let raw = try decoder.container(keyedBy: CodingKeys.self)
+            .decode(Raw.self, forKey: .channelFolder)
+        folder = ChannelFolder(id: raw.id, name: raw.name, order: raw.order ?? .max)
+        isArchived = raw.isArchived ?? false
+    }
+}
+
+/// `channel_folder/update`: only the changed fields are present.
+public struct ChannelFolderUpdateEvent: Decodable, Sendable {
+    public var channelFolderId: Int
+    public var name: String?
+    public var isArchived: Bool?
+
+    private enum CodingKeys: String, CodingKey { case channelFolderId, data }
+    private struct Changes: Decodable {
+        var name: String?
+        var isArchived: Bool?
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        channelFolderId = try container.decode(Int.self, forKey: .channelFolderId)
+        let data = try container.decode(Changes.self, forKey: .data)
+        name = data.name
+        isArchived = data.isArchived
+    }
+}
+
+private struct RealmEmojiEnvelope: Decodable {
+    var realmEmoji: [String: RealmEmojiItem]
+}
+
+private struct RealmEmojiAddEnvelope: Decodable {
+    struct Identified: Decodable { var id: String }
+    var emoji: RealmEmojiItem
+    var emojiId: String
+
+    private enum CodingKeys: String, CodingKey { case emoji }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        emoji = try container.decode(RealmEmojiItem.self, forKey: .emoji)
+        emojiId = try container.decode(Identified.self, forKey: .emoji).id
+    }
+}
+
+private struct RealmEmojiUpdateOneEnvelope: Decodable {
+    struct Changes: Decodable { var deactivated: Bool? }
+    var emojiId: String
+    var data: Changes
+}
+
+private struct ChannelFolderReorderEnvelope: Decodable {
+    var order: [Int]
 }
 
 /// `user_settings/update`: `value` is a bool, integer or string by setting;
@@ -251,6 +366,21 @@ extension Event: Decodable {
             kind = .urlEmbedData(try UrlEmbedDataEvent(from: decoder))
         case ("user_settings", "update"):
             kind = .userSettingsUpdate(try UserSettingsUpdateEvent(from: decoder))
+        case ("realm_emoji", "update"):
+            kind = .realmEmojiReplace(try RealmEmojiEnvelope(from: decoder).realmEmoji)
+        case ("realm_emoji", "add"):
+            let envelope = try RealmEmojiAddEnvelope(from: decoder)
+            kind = .realmEmojiAdd(emojiId: envelope.emojiId, emoji: envelope.emoji)
+        case ("realm_emoji", "update_one"):
+            let envelope = try RealmEmojiUpdateOneEnvelope(from: decoder)
+            kind = .realmEmojiUpdateOne(
+                emojiId: envelope.emojiId, deactivated: envelope.data.deactivated)
+        case ("channel_folder", "add"):
+            kind = .channelFolderAdd(try ChannelFolderAddEvent(from: decoder))
+        case ("channel_folder", "update"):
+            kind = .channelFolderUpdate(try ChannelFolderUpdateEvent(from: decoder))
+        case ("channel_folder", "reorder"):
+            kind = .channelFolderReorder(order: try ChannelFolderReorderEnvelope(from: decoder).order)
         default:
             kind = .unexpected(type: type, op: op)
         }

@@ -66,23 +66,36 @@ public final class Unreads {
         }
     }
 
+    /// Reverse index of `unreadIds`, so removal and moves are O(ids).
+    @ObservationIgnored private var keyById: [Int: ConversationKey] = [:]
+
     public init(snapshot: UnreadMessagesSnapshot?, selfUserId: Int) {
         self.selfUserId = selfUserId
         guard let snapshot else { return }
         oldUnreadsMissing = snapshot.oldUnreadsMissing
         mentionIds = Set(snapshot.mentions)
+        var byKey: [ConversationKey: Set<Int>] = [:]
         for dm in snapshot.pms where !dm.unreadMessageIds.isEmpty {
-            unreadIds[.dm(String(dm.otherUserId))] = Set(dm.unreadMessageIds)
+            byKey[.dm(String(dm.otherUserId)), default: []].formUnion(dm.unreadMessageIds)
         }
         for huddle in snapshot.huddles where !huddle.unreadMessageIds.isEmpty {
             let participants = huddle.userIdsString.split(separator: ",").compactMap { Int($0) }
             let key = Self.dmKey(participantIds: participants, selfUserId: selfUserId)
-            unreadIds[key, default: []].formUnion(huddle.unreadMessageIds)
+            byKey[key, default: []].formUnion(huddle.unreadMessageIds)
         }
         for channel in snapshot.streams where !channel.unreadMessageIds.isEmpty {
             let key = ConversationKey.topic(streamId: channel.streamId, topic: channel.topic)
-            unreadIds[key, default: []].formUnion(channel.unreadMessageIds)
+            byKey[key, default: []].formUnion(channel.unreadMessageIds)
         }
+        unreadIds = byKey
+        for (key, ids) in byKey {
+            for id in ids { keyById[id] = key }
+        }
+    }
+
+    /// The conversation an unread message is filed under.
+    public func conversationKey(ofUnread id: Int) -> ConversationKey? {
+        keyById[id]
     }
 
     public nonisolated static func dmKey(participantIds: [Int], selfUserId: Int) -> ConversationKey {
@@ -114,53 +127,121 @@ public final class Unreads {
     func handleMessage(_ message: Message, flags: [String]) {
         guard message.senderId != selfUserId, !flags.contains("read") else { return }
         guard let key = Self.conversationKey(for: message, selfUserId: selfUserId) else { return }
-        unreadIds[key, default: []].insert(message.id)
+        insert(message.id, into: key)
         if !Set(flags).isDisjoint(with: Self.mentionFlags) {
             mentionIds.insert(message.id)
         }
     }
 
     /// Applies an `update_message_flags` event for the `read` flag.
-    /// `locate` resolves a message id in the canonical message map, needed to
-    /// re-file a message when `read` is removed.
+    /// `locate` resolves a message id in the canonical message map, and
+    /// `detail` the event's `message_details` — together they re-file a
+    /// message when `read` is removed, loaded or not.
     func handleFlagsEvent(
         op: UpdateFlagsOp,
         flag: String,
         ids: [Int],
         all: Bool,
-        locate: (Int) -> Message?
+        locate: (Int) -> Message?,
+        detail: (Int) -> UpdateMessageFlagsEvent.MessageDetail? = { _ in nil }
     ) {
         guard flag == "read" else { return }
         switch op {
         case .add:
             if all {
                 unreadIds = [:]
+                keyById = [:]
                 mentionIds = []
                 oldUnreadsMissing = false
             } else {
                 removeMessages(ids: ids)
             }
         case .remove:
+            var byKey = unreadIds
+            var mentions = mentionIds
             for id in ids {
-                guard let message = locate(id),
-                      let key = Self.conversationKey(for: message, selfUserId: selfUserId)
+                let message = locate(id)
+                let detail = detail(id)
+                guard let key = message.flatMap({
+                    Self.conversationKey(for: $0, selfUserId: selfUserId)
+                }) ?? detail.flatMap({ Self.conversationKey(for: $0, selfUserId: selfUserId) })
                 else { continue }
-                unreadIds[key, default: []].insert(id)
+                if let old = keyById[id], old != key {
+                    Self.remove(id, from: old, in: &byKey)
+                }
+                byKey[key, default: []].insert(id)
+                keyById[id] = key
+                let mentioned = detail?.mentioned
+                    ?? message.map { !Set($0.flags ?? []).isDisjoint(with: Self.mentionFlags) }
+                    ?? false
+                if mentioned { mentions.insert(id) }
             }
+            unreadIds = byKey
+            if mentions != mentionIds { mentionIds = mentions }
         }
     }
 
-    func removeMessages(ids: [Int]) {
+    /// Re-files unread messages a topic/channel move carried elsewhere.
+    /// Works from the bookkeeping alone, so moved ids never loaded move
+    /// too; `belongs` limits it to ids filed under the move's source.
+    func handleMove(
+        ids: [Int], to newKey: ConversationKey, belongs: (ConversationKey) -> Bool
+    ) {
+        var byKey = unreadIds
+        var changed = false
         for id in ids {
-            mentionIds.remove(id)
-            for (key, var set) in unreadIds where set.contains(id) {
-                set.remove(id)
-                if set.isEmpty {
-                    unreadIds.removeValue(forKey: key)
-                } else {
-                    unreadIds[key] = set
-                }
-            }
+            guard let old = keyById[id], old != newKey, belongs(old) else { continue }
+            Self.remove(id, from: old, in: &byKey)
+            byKey[newKey, default: []].insert(id)
+            keyById[id] = newKey
+            changed = true
+        }
+        if changed { unreadIds = byKey }
+    }
+
+    func removeMessages(ids: some Sequence<Int>) {
+        var byKey: [ConversationKey: Set<Int>]?
+        for id in ids {
+            if mentionIds.contains(id) { mentionIds.remove(id) }
+            guard let key = keyById.removeValue(forKey: id) else { continue }
+            if byKey == nil { byKey = unreadIds }
+            Self.remove(id, from: key, in: &byKey!)
+        }
+        if let byKey { unreadIds = byKey }
+    }
+
+    private func insert(_ id: Int, into key: ConversationKey) {
+        if let old = keyById[id] {
+            guard old != key else { return }
+            var byKey = unreadIds
+            Self.remove(id, from: old, in: &byKey)
+            byKey[key, default: []].insert(id)
+            unreadIds = byKey
+        } else {
+            unreadIds[key, default: []].insert(id)
+        }
+        keyById[id] = key
+    }
+
+    private static func remove(
+        _ id: Int, from key: ConversationKey, in byKey: inout [ConversationKey: Set<Int>]
+    ) {
+        guard var set = byKey[key] else { return }
+        set.remove(id)
+        byKey[key] = set.isEmpty ? nil : set
+    }
+
+    nonisolated static func conversationKey(
+        for detail: UpdateMessageFlagsEvent.MessageDetail, selfUserId: Int
+    ) -> ConversationKey? {
+        switch detail.type {
+        case "stream", "channel":
+            guard let streamId = detail.streamId else { return nil }
+            return .topic(streamId: streamId, topic: detail.topic ?? "")
+        case "private", "direct":
+            return dmKey(participantIds: detail.userIds ?? [], selfUserId: selfUserId)
+        default:
+            return nil
         }
     }
 }

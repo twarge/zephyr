@@ -7,6 +7,23 @@ public protocol UpdateMachineDelegate: AnyObject {
     /// The queue died or produced undecodable events: discard the store and
     /// rebuild from a fresh /register. The machine has already stopped.
     func updateMachineNeedsRebuild(_ machine: UpdateMachine, reason: UpdateMachine.RebuildReason)
+    /// The server rejected the account's credentials (revoked key,
+    /// deactivated user or realm). The machine has already stopped; only
+    /// re-authentication helps.
+    func updateMachineAuthenticationFailed(_ machine: UpdateMachine)
+}
+
+extension UpdateMachineDelegate {
+    public func updateMachineAuthenticationFailed(_ machine: UpdateMachine) {}
+}
+
+/// Whether an error means the server rejected the credentials themselves —
+/// retrying can't fix it (a revoked API key, a deactivated user or realm).
+public func isAuthenticationFailure(_ error: any Error) -> Bool {
+    guard let apiError = error as? ApiError else { return false }
+    return apiError.httpStatus == 401
+        || ["UNAUTHORIZED", "INVALID_API_KEY", "USER_DEACTIVATED", "REALM_DEACTIVATED"]
+            .contains(apiError.code)
 }
 
 /// The event-polling loop for one `PerAccountStore`: long-poll GET /events,
@@ -113,6 +130,13 @@ public final class UpdateMachine {
                 logger.info("event queue expired; requesting store rebuild")
                 stop()
                 delegate?.updateMachineNeedsRebuild(self, reason: .badEventQueueId)
+                return
+            } catch where isAuthenticationFailure(error) {
+                logger.error("event poll rejected the credentials; stopping: \(error)")
+                stop()
+                store.isRecoveringEventStream = false
+                store.markNeedsReauthentication()
+                delegate?.updateMachineAuthenticationFailed(self)
                 return
             } catch let error as ApiError where error.isMalformedResponse {
                 logger.error("undecodable events; requesting store rebuild: \(error.message, privacy: .public)")

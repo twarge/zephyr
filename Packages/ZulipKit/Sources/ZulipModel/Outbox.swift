@@ -75,6 +75,9 @@ public struct OutboxMessage: Identifiable, Sendable, Equatable, Codable {
     /// ambiguous (the send may have completed; its echo died with the old
     /// event queue), so it demotes to `.failed` and requires a manual retry.
     /// `.queued` entries never reached the server and stay auto-resendable.
+    /// Mid-session store swaps don't go through this: the replacement takes
+    /// the outbox in memory, in-flight states intact
+    /// (`PerAccountStore.adoptPendingWork`).
     public var restoredState: State {
         switch state {
         case .sending: return .failed("Not confirmed sent before quitting")

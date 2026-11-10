@@ -123,6 +123,39 @@ public final class ConversationList {
         sorted = nil
     }
 
+    /// Re-keys recency after a topic/channel move: the destination takes
+    /// the moved messages' recency, and a source whose newest message
+    /// moved falls back to `remainingLatest` (its newest message still in
+    /// memory) — or leaves the list when none remains.
+    func handleMove(
+        movedIds: [Int], from oldKey: ConversationKey, to newKey: ConversationKey,
+        lookup: (Int) -> Message?, remainingLatest: Message?, selfUserId: Int
+    ) {
+        guard oldKey != newKey, let maxMoved = movedIds.max() else { return }
+        var updated = byKey
+        if let source = updated[oldKey], movedIds.contains(source.lastMessageId) {
+            updated[oldKey] = nil
+            if let remainingLatest,
+               let entry = Self.latest(remainingLatest, selfUserId: selfUserId, in: updated),
+               entry.key == oldKey {
+                updated[oldKey] = entry
+            }
+        }
+        if (updated[newKey]?.lastMessageId ?? -1) < maxMoved {
+            if let message = lookup(maxMoved),
+               let entry = Self.latest(message, selfUserId: selfUserId, in: updated),
+               entry.key == newKey {
+                updated[newKey] = entry
+            } else if lookup(maxMoved).map({ ($0.flags ?? []).contains("historical") }) != true {
+                // Not loaded: recency only, no snippet yet.
+                updated[newKey] = Conversation(key: newKey, lastMessageId: maxMoved)
+            }
+        }
+        guard updated != byKey else { return }
+        byKey = updated
+        sorted = nil
+    }
+
     /// The conversation entry the message makes, when it is its
     /// conversation's latest — nil when it's older, or not one of the
     /// user's conversations.

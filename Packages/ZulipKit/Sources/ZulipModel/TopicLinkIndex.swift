@@ -147,7 +147,7 @@ public final class TopicLinkIndex {
         }
         if !relevant.isEmpty {
             let selfId = store.selfUserId
-            try? await database.upsertAsync(relevant, selfUserId: selfId)
+            await database.enqueueWrite { try? $0.upsert(relevant, selfUserId: selfId) }.value
             scheduleRefresh()
         }
         return await lists(streamId: streamId, topic: topic)

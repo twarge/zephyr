@@ -45,7 +45,12 @@ public final class MessageListModel: Identifiable {
     public let id = UUID()
     public let narrow: Narrow
 
-    public private(set) var messages: [Message] = []
+    public private(set) var messages: [Message] = [] {
+        didSet { messagesVersion &+= 1 }
+    }
+    /// Bumped on every change to `messages` (a row added, removed or
+    /// replaced — flags and content included): a cheap memo key for views.
+    public private(set) var messagesVersion = 0
     public private(set) var haveOldest = false
     public private(set) var haveNewest = false
     public private(set) var isFetching = false
@@ -598,22 +603,92 @@ public final class MessageListModel: Identifiable {
 
     func handleChangedMessages(ids: some Sequence<Int>) {
         guard let store else { return }
+        // Search results (.custom) can't be re-evaluated client-side —
+        // updated in place, never added or dropped.
+        let isSearch: Bool
+        if case .custom = narrow { isSearch = true } else { isSearch = false }
+        var indexById: [Int: Int]?
+        var removed: Set<Int> = []
+        var added: [Message] = []
         for id in ids {
-            guard let index = messages.firstIndex(where: { $0.id == id }) else { continue }
-            guard let updated = store.messages[id] else {
-                messages.remove(at: index)
+            if indexById == nil {
+                indexById = Dictionary(
+                    messages.enumerated().map { ($1.id, $0) },
+                    uniquingKeysWith: { first, _ in first })
+            }
+            guard let index = indexById?[id] else {
+                // Not shown: a move (or a fetch elsewhere) can bring a
+                // message into this narrow. The window is a contiguous
+                // slice, so one inside its bounds belongs in it.
+                if !isSearch, let updated = store.messages[id],
+                   covers(id), admits(updated, in: store) {
+                    added.append(updated)
+                }
                 continue
             }
-            // Moves can carry a message out of this narrow. Search results
-            // (.custom) can't be re-evaluated client-side — keep them.
-            if case .custom = narrow {
-                messages[index] = updated
-            } else if admits(updated, in: store) {
+            guard let updated = store.messages[id] else {
+                removed.insert(id)
+                continue
+            }
+            // Moves can carry a message out of this narrow.
+            if isSearch || admits(updated, in: store) {
                 messages[index] = updated
             } else {
-                messages.remove(at: index)
+                removed.insert(id)
             }
         }
+        if !removed.isEmpty {
+            messages.removeAll { removed.contains($0.id) }
+        }
+        if !added.isEmpty {
+            let known = Set(messages.map(\.id))
+            var merged = messages
+            merged.append(contentsOf: added.filter { !known.contains($0.id) })
+            merged.sort { $0.id < $1.id }
+            messages = merged
+            trimWindowKeepingNewest()
+        }
+    }
+
+    /// Whether `id` falls inside the fetched window's bounds.
+    private func covers(_ id: Int) -> Bool {
+        guard didInitialFetch else { return false }
+        guard let first = messages.first, let last = messages.last else {
+            return haveOldest && haveNewest
+        }
+        return (id > first.id || haveOldest) && (id < last.id || haveNewest)
+    }
+
+    /// Messages the store doesn't hold were moved into `streamId`/`topic`:
+    /// when they could fall inside this window, refetch its span so they
+    /// appear (the store's reconcile hands them to
+    /// `handleChangedMessages`).
+    func handleUnloadedMovedIn(ids: [Int], streamId: Int, topic: String) {
+        switch narrow {
+        case .topic(let narrowStream, let narrowTopic):
+            guard narrowStream == streamId, TopicName.matches(narrowTopic, topic) else { return }
+        case .channel(let narrowStream):
+            guard narrowStream == streamId else { return }
+        case .combinedFeed:
+            break
+        default:
+            return
+        }
+        guard ids.contains(where: covers) else { return }
+        Task { await self.refetchWindowSpan() }
+    }
+
+    private func refetchWindowSpan() async {
+        guard let store, !isFetching else { return }
+        isFetching = true
+        let gen = generation
+        defer { isFetching = false }
+        let anchor: MessageAnchor = haveOldest ? .oldest : messages.first.map { .id($0.id) } ?? .newest
+        guard let result = try? await fetchPage(
+            store, anchor: anchor, numBefore: 0, numAfter: min(1000, messages.count + 100)),
+            generation == gen
+        else { return }
+        store.reconcileFetchedMessages(result.messages)
     }
 
     /// A conversation's mute state changed. Only the home view cares:
@@ -644,6 +719,11 @@ public final class MessageListModel: Identifiable {
               pendingNewest.contains(where: { $0.senderId == store.selfUserId })
         else { return }
         Task { await self.jumpToNewest() }
+    }
+
+    /// What the store must keep in memory for this list.
+    var retainedMessageIds: [Int] {
+        messages.map(\.id) + pendingNewest.map(\.id)
     }
 
     func handleDeletedMessages(ids: [Int]) {

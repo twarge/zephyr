@@ -26,6 +26,11 @@ public final class GlobalStore: UpdateMachineDelegate {
     public var enabledAccounts: [Account] {
         accounts.filter(\.isEnabled)
     }
+    /// Accounts whose credentials the server rejected (while polling or
+    /// re-registering): they stay disconnected until signed in again
+    /// (`addAccount` with a fresh key) or removed.
+    public private(set) var accountsNeedingReauthentication: Set<Account.ID> = []
+
     /// Bumped whenever a store is created or replaced, so UI can re-resolve.
     public private(set) var storeGeneration = 0
 
@@ -49,6 +54,9 @@ public final class GlobalStore: UpdateMachineDelegate {
 
     private var machines: [Account.ID: UpdateMachine] = [:]
     private var loadTasks: [Account.ID: Task<PerAccountStore, any Error>] = [:]
+    /// Queue-death rebuilds in progress; cancelled when the account is
+    /// disabled or removed.
+    @ObservationIgnored private var rebuildTasks: [Account.ID: Task<Void, Never>] = [:]
     /// Stores built from the on-disk snapshot cache: rendered while the live
     /// register runs, never polled (their queue is stale), always replaced.
     private var provisionalStores: Set<Account.ID> = []
@@ -106,6 +114,21 @@ public final class GlobalStore: UpdateMachineDelegate {
         return account
     }
 
+    /// Stores a fresh API key for an account whose credentials were
+    /// rejected, and clears its signed-out state. The next
+    /// `perAccountStore(for:)` registers anew (the stale store keeps
+    /// rendering until the replacement installs).
+    public func reauthenticate(_ accountId: Account.ID, apiKey: String) throws {
+        guard let account = accounts.first(where: { $0.id == accountId }) else {
+            throw ModelError.accountNotFound
+        }
+        try credentials.setAPIKey(apiKey, realmURL: account.realmURL, email: account.email)
+        accountsNeedingReauthentication.remove(accountId)
+        machines.removeValue(forKey: accountId)?.stop()
+        if stores[accountId] != nil { provisionalStores.insert(accountId) }
+        storeGeneration += 1
+    }
+
     /// Reorders the account list (drives ⌘1…⌘9 precedence); persisted.
     public func moveAccounts(fromOffsets: IndexSet, toOffset: Int) {
         var moved: [Account] = []
@@ -131,8 +154,10 @@ public final class GlobalStore: UpdateMachineDelegate {
             machines.removeValue(forKey: accountId)?.stop()
             loadTasks[accountId]?.cancel()
             loadTasks[accountId] = nil
+            rebuildTasks.removeValue(forKey: accountId)?.cancel()
             provisionalStores.remove(accountId)
             if let store = stores.removeValue(forKey: accountId) {
+                store.retire()
                 store.persistMessageCache(synchronously: true)
                 Task {
                     try? await store.connection.deleteEventQueue(queueId: store.queueId)
@@ -144,7 +169,10 @@ public final class GlobalStore: UpdateMachineDelegate {
 
     public func removeAccount(_ accountId: Account.ID) async throws {
         machines.removeValue(forKey: accountId)?.stop()
+        loadTasks.removeValue(forKey: accountId)?.cancel()
+        rebuildTasks.removeValue(forKey: accountId)?.cancel()
         if let store = stores.removeValue(forKey: accountId) {
+            store.retire()
             try? await store.connection.deleteEventQueue(queueId: store.queueId)
         }
         if let account = accounts.first(where: { $0.id == accountId }) {
@@ -155,6 +183,7 @@ public final class GlobalStore: UpdateMachineDelegate {
         }
         OfflineStore.remove(for: accountId)
         provisionalStores.remove(accountId)
+        accountsNeedingReauthentication.remove(accountId)
         accounts.removeAll { $0.id == accountId }
         try accountsStore.save(accounts)
         storeGeneration += 1
@@ -354,18 +383,30 @@ public final class GlobalStore: UpdateMachineDelegate {
             logger.info("register round-trip: \((clock.now - registerStart).ms, privacy: .public) ms, payload \(result.rawData.count / 1024) KB")
         }
         let snapshot = result.snapshot
+        // Disabled, removed or cancelled during the register: don't revive
+        // the account with a live store.
+        guard !Task.isCancelled,
+              accounts.contains(where: { $0.id == accountId && $0.isEnabled })
+        else {
+            let queueId = snapshot.queueId
+            Task { try? await connection.deleteEventQueue(queueId: queueId) }
+            throw ModelError.accountNotFound
+        }
         connection.featureLevel = snapshot.zulipFeatureLevel
         if let cacheURL = snapshotCacheURL(for: accountId) {
             try? result.rawData.write(to: cacheURL, options: .atomic)
         }
+        // One database connection per file: the replaced store's, if any.
         let store = PerAccountStore(
             account: account, connection: connection, snapshot: snapshot,
-            offline: persistsToDisk ? OfflineStore.forAccount(accountId) : nil)
+            offline: persistsToDisk ? OfflineStore.forAccount(accountId) : nil,
+            database: stores[accountId]?.database)
         installStore(store, for: accountId)
         return store
     }
 
     private func installStore(_ store: PerAccountStore, for accountId: Account.ID) {
+        accountsNeedingReauthentication.remove(accountId)
         let previous = stores[accountId]
         machines[accountId]?.stop()
         provisionalStores.remove(accountId)
@@ -381,6 +422,9 @@ public final class GlobalStore: UpdateMachineDelegate {
         machine.start()
         storeGeneration += 1
         if let previous {
+            // Unsent work moves over in memory, in-flight states intact;
+            // the old instance stops flushing so nothing sends twice.
+            store.adoptPendingWork(from: previous)
             // Store swap (provisional → live, queue rebuild): carry the
             // old instance's hydration over instead of re-reading SQLite —
             // the second read ran during the post-register render storm
@@ -395,20 +439,34 @@ public final class GlobalStore: UpdateMachineDelegate {
     public func updateMachineNeedsRebuild(_ machine: UpdateMachine, reason: UpdateMachine.RebuildReason) {
         guard let entry = machines.first(where: { $0.value === machine }) else { return }
         let accountId = entry.key
+        guard rebuildTasks[accountId] == nil else { return }
         logger.info("rebuilding store for account \(accountId, privacy: .public): \(String(describing: reason), privacy: .public)")
         stores[accountId]?.isRecoveringEventStream = true
-        Task { await self.rebuild(accountId: accountId) }
+        rebuildTasks[accountId] = Task {
+            await self.rebuild(accountId: accountId)
+            self.rebuildTasks[accountId] = nil
+        }
     }
 
     private func rebuild(accountId: Account.ID) async {
         // The old store stays in `stores` (UI keeps rendering stale data with
         // the recovering banner) until the replacement is installed.
         var backoff = BackoffMachine(firstBound: .milliseconds(200), maxBound: .seconds(60))
-        while true {
+        while !Task.isCancelled {
+            guard accounts.contains(where: { $0.id == accountId && $0.isEnabled }) else { return }
             do {
                 _ = try await loadStore(accountId: accountId)
                 return
             } catch is CancellationError {
+                return
+            } catch where Self.isPermanentLoadFailure(error) {
+                // Retrying can't fix these; they wait for the user
+                // (re-sign-in, re-enable).
+                logger.error("store rebuild stopped: \(error)")
+                if isAuthenticationFailure(error) {
+                    accountsNeedingReauthentication.insert(accountId)
+                    stores[accountId]?.markNeedsReauthentication()
+                }
                 return
             } catch {
                 logger.error("store rebuild failed; retrying: \(error)")
@@ -421,9 +479,23 @@ public final class GlobalStore: UpdateMachineDelegate {
         }
     }
 
+    /// Load failures no retry can fix: the account or its key is gone, the
+    /// server rejects the credentials, or it's below our floor.
+    static func isPermanentLoadFailure(_ error: any Error) -> Bool {
+        error is ModelError || isAuthenticationFailure(error)
+    }
+
+    public func updateMachineAuthenticationFailed(_ machine: UpdateMachine) {
+        guard let entry = machines.first(where: { $0.value === machine }) else { return }
+        machines.removeValue(forKey: entry.key)
+        accountsNeedingReauthentication.insert(entry.key)
+    }
+
     /// Stops all machines; optionally deletes the server-side event queues
     /// (used by the harness on ^C and at app quit).
     public func shutdown(deleteQueues: Bool = true) async {
+        for task in rebuildTasks.values { task.cancel() }
+        rebuildTasks.removeAll()
         for machine in machines.values {
             machine.stop()
         }

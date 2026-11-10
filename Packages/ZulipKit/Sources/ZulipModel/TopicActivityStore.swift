@@ -186,7 +186,9 @@ public final class TopicActivityStore {
                 if let old = TopicActivityID(message) { verifiedTopics.remove(old) }
                 if id == event.messageId, let content = event.renderedContent {
                     message.content = content
-                    message.lastEditTimestamp = event.editTimestamp ?? message.lastEditTimestamp
+                    if !event.isRenderingOnly {
+                        message.lastEditTimestamp = event.editTimestamp ?? message.lastEditTimestamp
+                    }
                 }
                 if let topic = event.subject { message.subject = topic }
                 if let stream = event.newStreamId { message.streamId = stream }

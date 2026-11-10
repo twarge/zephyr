@@ -116,8 +116,10 @@ struct StoreEventTests {
         let request = try #require(transport.requests.first)
         #expect(request.path.hasSuffix("/users/me/subscriptions"))
         let subscriptions = try #require(request.formValue("subscriptions"))
-        #expect(subscriptions.contains(#""name": "ops""#))
-        #expect(subscriptions.contains(#""description": "Operations""#))
+        let decoded = try #require(
+            JSONSerialization.jsonObject(with: Data(subscriptions.utf8)) as? [[String: Any]])
+        #expect(decoded.first?["name"] as? String == "ops")
+        #expect(decoded.first?["description"] as? String == "Operations")
         #expect(request.formValue("invite_only") == "true")
         #expect(request.formValue("announce") == "false")
 
@@ -399,8 +401,10 @@ struct StoreEventTests {
         #expect(store.subscriptions[10]?.color == "#76ce90")
         try await eventually("property sent") { transport.requests.count == 1 }
         let data = try #require(transport.requests[0].formValue("subscription_data"))
-        #expect(data.contains(#""property": "color""#))
-        #expect(data.contains(##""value": "#76ce90""##))
+        let decoded = try #require(
+            JSONSerialization.jsonObject(with: Data(data.utf8)) as? [[String: Any]])
+        #expect(decoded.first?["property"] as? String == "color")
+        #expect(decoded.first?["value"] as? String == "#76ce90")
     }
 
     @Test func reminderRefreshPopulatesAndCancelDeletes() async throws {

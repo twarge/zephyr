@@ -265,7 +265,7 @@ extension MessageDatabase {
 
     /// Decodes each stored row, lets `change` amend it (false skips it),
     /// and writes it back the way an upsert does.
-    private func rewrite(
+    func rewrite(
         ids: [Int], selfUserId: Int, _ change: (inout Message) -> Bool
     ) throws {
         guard !ids.isEmpty else { return }

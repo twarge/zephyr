@@ -3,6 +3,7 @@ import Foundation
 // query interpolation) must not leak into importers' overload resolution —
 // they can silently change what a plain string literal infers to.
 internal import GRDB
+import Synchronization
 import ZulipAPI
 
 /// The per-account SQLite message store: full retained history with FTS5,
@@ -21,12 +22,17 @@ import ZulipAPI
 /// account's offline directory. Channel messages' conversation links are
 /// indexed as they're written, for View Links (MessageDatabase+Links).
 public final class MessageDatabase: Sendable {
-    let queue: DatabaseQueue
+    /// WAL pool: the launch restore and offline reads run beside the
+    /// debounced writes instead of queueing behind them. Only the app
+    /// process opens the file (no extension shares it).
+    let queue: DatabasePool
     /// Absolute links count toward the link index only on this host.
     let realmURL: URL?
+    /// The newest enqueued write; each new one waits for it.
+    private let writeTail = Mutex<Task<Void, Never>?>(nil)
 
     public init(path: String, realmURL: URL? = nil) throws {
-        queue = try DatabaseQueue(path: path)
+        queue = try DatabasePool(path: path)
         self.realmURL = realmURL
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1") { db in
@@ -65,7 +71,44 @@ public final class MessageDatabase: Sendable {
         migrator.registerMigration("v2-links") { db in
             try Self.createLinkIndex(db)
         }
+        migrator.registerMigration("v3-conversation-index") { db in
+            // The launch restore windows each conversation newest-first;
+            // these serve that order, so it streams instead of sorting.
+            try db.execute(sql: """
+                CREATE INDEX IF NOT EXISTS message_topic_desc
+                    ON message(stream_id, topic COLLATE NOCASE, id DESC)
+                    WHERE stream_id IS NOT NULL;
+                CREATE INDEX IF NOT EXISTS message_dm_desc
+                    ON message(dm_key, id DESC) WHERE dm_key IS NOT NULL;
+                """)
+        }
         try migrator.migrate(queue)
+    }
+
+    // MARK: Serial writer
+
+    /// Runs `work` off the main actor after every write enqueued before it,
+    /// so the disk sees changes in the order they were made (a delete can't
+    /// be overtaken by an older upsert that resurrects the row). Shared by
+    /// every store instance holding this database.
+    @discardableResult
+    public func enqueueWrite(
+        _ work: @escaping @Sendable (MessageDatabase) -> Void
+    ) -> Task<Void, Never> {
+        writeTail.withLock { tail in
+            let previous = tail
+            let task = Task.detached(priority: .utility) { [self] in
+                await previous?.value
+                work(self)
+            }
+            tail = task
+            return task
+        }
+    }
+
+    /// Completes once every write enqueued so far has landed.
+    public func waitForWrites() async {
+        await writeTail.withLock { $0 }?.value
     }
 
     // MARK: Writes
@@ -134,6 +177,24 @@ public final class MessageDatabase: Sendable {
             realmURL: realmURL)
     }
 
+    /// Sets or clears one flag on stored copies (the in-memory store saves
+    /// its own) — so pruning keeps starred rows and an offline restore
+    /// shows the current read state.
+    public func updateFlag(_ flag: String, isSet: Bool, ids: [Int], selfUserId: Int) throws {
+        try rewrite(ids: ids, selfUserId: selfUserId) { message in
+            var flags = message.flags ?? []
+            if isSet {
+                guard !flags.contains(flag) else { return false }
+                flags.append(flag)
+            } else {
+                guard flags.contains(flag) else { return false }
+                flags.removeAll { $0 == flag }
+            }
+            message.flags = flags
+            return true
+        }
+    }
+
     public func delete(ids: [Int]) throws {
         guard !ids.isEmpty else { return }
         try queue.write { db in
@@ -148,17 +209,29 @@ public final class MessageDatabase: Sendable {
     /// by id — the cold-launch restore set.
     public func recentPerConversation(_ perConversation: Int) throws -> [Message] {
         try queue.read { db in
+            // Channel and DM rows window separately: each partition order
+            // then matches an index (message_topic_desc, message_dm_desc), so
+            // SQLite streams rows in order instead of sorting the table.
             let rows = try Row.fetchAll(
                 db,
                 sql: """
-                    SELECT payload FROM (
+                    SELECT payload, id FROM (
                         SELECT payload, id, ROW_NUMBER() OVER (
-                            PARTITION BY stream_id, topic COLLATE NOCASE, dm_key
+                            PARTITION BY stream_id, topic COLLATE NOCASE
                             ORDER BY id DESC) AS rank
-                        FROM message
-                    ) WHERE rank <= ? ORDER BY id ASC
+                        FROM message INDEXED BY message_topic_desc
+                        WHERE stream_id IS NOT NULL
+                    ) WHERE rank <= ?
+                    UNION ALL
+                    SELECT payload, id FROM (
+                        SELECT payload, id, ROW_NUMBER() OVER (
+                            PARTITION BY dm_key ORDER BY id DESC) AS rank
+                        FROM message INDEXED BY message_dm_desc
+                        WHERE dm_key IS NOT NULL
+                    ) WHERE rank <= ?
+                    ORDER BY id ASC
                     """,
-                arguments: [perConversation])
+                arguments: [perConversation, perConversation])
             return Self.decode(rows)
         }
     }
