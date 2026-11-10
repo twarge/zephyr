@@ -56,10 +56,30 @@ final class KeyboardRouter {
             anchorMessageId = newValue
             selectedMessageIds = newValue.map { [$0] } ?? []
             extensionTip = nil
+            dropStaleActionRequest()
+            updateHasSelection()
         }
     }
 
+    /// Whether a message or attachment is selected — its own property,
+    /// written on edges only, so views that care only about "anything
+    /// selected" (the toolbar's Share) don't re-render on every arrow key.
+    private(set) var hasSelection = false
+
+    private func updateHasSelection() {
+        let has = anchorMessageId != nil || anchorMediaId != nil
+        if hasSelection != has { hasSelection = has }
+    }
+
     private var anchorMessageId: Int?
+
+    /// A request aimed at a message no longer selected is stale: the row
+    /// it was waiting for must not act on it when it next appears.
+    private func dropStaleActionRequest() {
+        if let request = messageActionRequest, request.messageId != anchorMessageId {
+            messageActionRequest = nil
+        }
+    }
     /// The full selection (⌘-click toggles, ⇧-click/⇧↓/⇧↑ ranges); always
     /// contains the anchor when non-empty. Batch actions (copy, share,
     /// export) consume this; everything else targets the anchor.
@@ -87,6 +107,8 @@ final class KeyboardRouter {
             selectedMessageIds.insert(id)
             anchorMessageId = id
         }
+        dropStaleActionRequest()
+        updateHasSelection()
     }
 
     /// ⇧-click: the selection becomes the transcript range from the anchor
@@ -160,17 +182,50 @@ final class KeyboardRouter {
     /// each router handles keys only while its own window is key.
     @ObservationIgnored weak var hostWindow: NSWindow?
     #endif
-    /// Set to a message id to ask its row to enter edit mode; the row clears it.
-    var editRequestId: Int?
     /// A menu-bar action aimed at the selected message; the owning row
-    /// consumes it (same pattern as editRequestId).
+    /// consumes it — on change if realized, else when it next appears
+    /// (the feed reveals the selection as the request is posted).
     var messageActionRequest: MessageActionRequest?
+    /// Bumped to have the visible feed scroll the selection into view.
+    private(set) var revealSelectionNonce = 0
     /// iOS counterpart of the macOS first-responder text check: single-key
     /// navigation must stay quiet while any text input in the detail focus
     /// scope is active (compose, topic field, message editor).
     var composeInputFocused = false
-    var editingMessage = false
     var textInputActive: Bool { composeInputFocused || editingMessage }
+
+    /// The inline message editor: held here rather than in the row, whose
+    /// state the lazy feed discards when it scrolls away mid-edit. The
+    /// text is its own property so typing re-renders only the editor
+    /// (rows observe just the id).
+    private(set) var editingMessageId: Int?
+    var inlineEditText = ""
+    var editingMessage: Bool { editingMessageId != nil }
+
+    /// Opens the inline editor on one of the user's messages, seeded with
+    /// its raw markdown.
+    func beginInlineEdit(_ messageId: Int) {
+        guard let store else { return }
+        Task {
+            let raw = await store.fetchRawContent(messageId) ?? ""
+            guard !raw.isEmpty else { return }
+            inlineEditText = raw
+            editingMessageId = messageId
+        }
+    }
+
+    func endInlineEdit() {
+        editingMessageId = nil
+        inlineEditText = ""
+    }
+
+    /// Posts a Message-menu action to the selected message's row,
+    /// revealing it first so an off-screen row realizes to take it.
+    func requestMessageAction(_ action: MessageActionRequest.Action) {
+        guard let id = selectedMessageId else { return }
+        messageActionRequest = MessageActionRequest(messageId: id, action: action)
+        revealSelectionNonce &+= 1
+    }
 
     /// Pane handoff: ← from the messages pane focuses the sidebar list
     /// (native arrow navigation takes over); → returns to messages.
@@ -184,7 +239,25 @@ final class KeyboardRouter {
     /// Message-link (/near/) navigation: the conversation to open anchored
     /// at a message, and the message to flash once visible.
     @ObservationIgnored var pendingNear: (key: ConversationKey, messageId: Int)?
+    /// Bumped when a link targets the conversation already on screen but
+    /// outside its loaded window: the transcript refetches at `pendingNear`.
+    private(set) var pendingNearRequest = 0
     var highlightMessageId: Int?
+
+    /// Aims a message link: flashes the message, and opens its
+    /// conversation anchored there. `alreadyOpen` (the conversation on
+    /// screen) refetches only when the target isn't loaded.
+    func aimMessageLink(_ key: ConversationKey, messageId: Int, alreadyOpen: Bool) {
+        highlightMessageId = messageId
+        guard alreadyOpen else {
+            pendingNear = (key, messageId)
+            return
+        }
+        guard activeFeed?.messages.contains(where: { $0.id == messageId }) != true
+        else { return }
+        pendingNear = (key, messageId)
+        pendingNearRequest &+= 1
+    }
     var showHelp = false
 
     /// Selected media (image/PDF) in the transcript, both platforms. Router
@@ -202,6 +275,7 @@ final class KeyboardRouter {
             selectedMediaIds = newValue.map { [$0] } ?? []
             mediaExtensionTip = nil
             selectedMediaQuickLook = nil
+            updateHasSelection()
         }
     }
 
@@ -220,7 +294,7 @@ final class KeyboardRouter {
 
     /// Registered by the compose bar and sidebar: selecting media blurs text
     /// inputs, so Space reaches the monitor instead of typing a space.
-    @ObservationIgnored var blurCompose: (() -> Void)?
+    @ObservationIgnored private(set) var blurCompose: (() -> Void)?
     @ObservationIgnored var blurSearch: (() -> Void)?
 
     /// True while the tap that selected media is still dispatching. A tap
@@ -344,6 +418,7 @@ final class KeyboardRouter {
             selectedMediaIds.insert(id)
             anchorMediaId = id
         }
+        updateHasSelection()
     }
 
     /// ⇧-click: the attachment selection becomes the list range from the
@@ -389,10 +464,10 @@ final class KeyboardRouter {
 
     @ObservationIgnored var currentDestination: Destination?
     @ObservationIgnored var navigate: ((Destination) -> Void)?
-    @ObservationIgnored var focusCompose: (() -> Void)?
+    @ObservationIgnored private(set) var focusCompose: (() -> Void)?
     /// Channel-mode compose only: replying to a message steers the topic
     /// field to that message's topic.
-    @ObservationIgnored var setComposeTopic: ((String) -> Void)?
+    @ObservationIgnored private(set) var setComposeTopic: ((String) -> Void)?
     @ObservationIgnored var focusSearch: (() -> Void)?
     @ObservationIgnored var newConversation: (() -> Void)?
     @ObservationIgnored private var monitor: Any?
@@ -431,7 +506,32 @@ final class KeyboardRouter {
     }
 
     /// Format-menu actions (⌘B/⌘I/⌘K) applied by the visible compose bar.
-    @ObservationIgnored var applyFormat: ((ComposeFormat) -> Void)?
+    @ObservationIgnored private(set) var applyFormat: ((ComposeFormat) -> Void)?
+    @ObservationIgnored private var composeOwner: UUID?
+
+    /// The visible compose bar's focus, blur, format, and (channel mode)
+    /// topic hooks, ownership-tokened like uploads: a disappearing bar
+    /// clears them only if no successor has registered since.
+    func registerCompose(
+        owner: UUID, focus: @escaping () -> Void, blur: @escaping () -> Void,
+        applyFormat: @escaping (ComposeFormat) -> Void,
+        setTopic: ((String) -> Void)?
+    ) {
+        composeOwner = owner
+        focusCompose = focus
+        blurCompose = blur
+        self.applyFormat = applyFormat
+        setComposeTopic = setTopic
+    }
+
+    func unregisterCompose(owner: UUID) {
+        guard composeOwner == owner else { return }
+        composeOwner = nil
+        focusCompose = nil
+        blurCompose = nil
+        applyFormat = nil
+        setComposeTopic = nil
+    }
 
     /// List indenting (⌘] / ⌘[, Format → Indent / Outdent List Item):
     /// each editor answers whether it took the step — focused, with a list
@@ -668,7 +768,8 @@ final class KeyboardRouter {
     private func editSelected() -> Bool {
         guard let message = selectedMessage, message.senderId == store?.selfUserId
         else { return false }
-        editRequestId = message.id
+        beginInlineEdit(message.id)
+        revealSelectionNonce &+= 1
         return true
     }
 

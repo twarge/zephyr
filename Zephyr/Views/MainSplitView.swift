@@ -3,25 +3,6 @@ import TipKit
 import ZulipAPI
 import ZulipModel
 
-/// What the detail column shows: a DM/topic transcript, a channel's
-/// interleaved message feed, a channel's topic list, or a cross-channel view.
-/// Codable so each server's selection persists across launches.
-nonisolated enum Destination: Hashable, Codable {
-    case summary
-    case conversation(ConversationKey)
-    case channel(streamId: Int)
-    case channelTopics(streamId: Int)
-    case recentConversations
-    case drafts
-    case outbox
-    case reminders
-    case combinedFeed
-    case mentions
-    case starred
-    case search(SearchQuery)
-    case allChannels
-}
-
 /// The Messages-style main window: unified conversation sidebar + transcript.
 struct MainSplitView: View {
     @Environment(AppModel.self) private var model
@@ -79,11 +60,13 @@ struct MainSplitView: View {
     /// Staged sharing-picker content (the selected attachment's file, or
     /// the selected message as text); the toolbar anchor presents and
     /// clears it.
-    @State private var macShareItems: [Any]?
+    @State var macShareItems: [Any]?
+    /// A failed File → Export Selected… write, shown as an alert.
+    @State var exportError: String?
     #else
     /// Staged share-sheet content (the selected attachment's file, or the
     /// selected message as text); presented while non-nil.
-    @State private var sharePayload: SharePayload?
+    @State var sharePayload: SharePayload?
     #endif
 
     /// Whether RealmLogoView will render an actual image (uploaded logo
@@ -126,7 +109,7 @@ struct MainSplitView: View {
     /// True while the narrow-window watcher hid the sidebar (so growing
     /// the window restores it; a user's manual collapse is left alone).
     @State private var autoCollapsedSidebar = false
-    @State private var keys = KeyboardRouter()
+    @State var keys = KeyboardRouter()
     /// Per-window navigation state, restored with the window by the system
     /// (frames and window existence restore automatically; this brings the
     /// in-window destination along).
@@ -149,10 +132,10 @@ struct MainSplitView: View {
     @State private var historyNavigation = false
     /// A downloaded attachment presented via Quick Look (iOS; macOS saves
     /// to Downloads instead).
-    @State private var downloadPreviewURL: URL?
+    @State var downloadPreviewURL: URL?
     /// In-flight attachment downloads: drives the toolbar progress ring,
     /// and repeat clicks on a URL already downloading are ignored.
-    @State private var downloads: [AttachmentDownload] = []
+    @State var downloads: [AttachmentDownload] = []
     #if os(iOS)
     @FocusState private var detailFocused: Bool
     #endif
@@ -220,16 +203,10 @@ struct MainSplitView: View {
                         RealmLogoView(store: store, height: 30)
                     }
                     #else
-                    if #available(iOS 26.0, *) {
-                        ToolbarItem(placement: .topBarLeading) {
-                            RealmLogoView(store: store, height: 30)
-                        }
-                        .sharedBackgroundVisibility(.hidden)
-                    } else {
-                        ToolbarItem(placement: .topBarLeading) {
-                            RealmLogoView(store: store, height: 30)
-                        }
+                    ToolbarItem(placement: .topBarLeading) {
+                        RealmLogoView(store: store, height: 30)
                     }
+                    .sharedBackgroundVisibility(.hidden)
                     #endif
                     if horizontalSizeClass == .compact {
                         ToolbarItem(placement: .topBarTrailing) {
@@ -248,13 +225,11 @@ struct MainSplitView: View {
                             }
                         }
                         #else
-                        if #available(iOS 26.0, *) {
-                            DefaultToolbarItem(kind: .search, placement: .bottomBar)
-                            ToolbarSpacer(.flexible, placement: .bottomBar)
-                            ToolbarItem(placement: .bottomBar) {
-                                Button("New Conversation", systemImage: "square.and.pencil") {
-                                    model.pendingNewConversation = true
-                                }
+                        DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                        ToolbarSpacer(.flexible, placement: .bottomBar)
+                        ToolbarItem(placement: .bottomBar) {
+                            Button("New Conversation", systemImage: "square.and.pencil") {
+                                model.pendingNewConversation = true
                             }
                         }
                         #endif
@@ -320,6 +295,8 @@ struct MainSplitView: View {
                     suppressWhenCompactComposer: selectionHasComposer))
                 #endif
                 .popoverTip(QuickLookNavigationTip())
+                .actionFailureBanner(store: store)
+                .signedOutBanner(store: store)
                 #if !os(macOS)
                 .sheet(item: $sharePayload) { payload in
                     ShareActivityView(items: payload.items) { sharePayload = nil }
@@ -531,6 +508,11 @@ struct MainSplitView: View {
                 checkShareInbox()
             }
         }
+        // The share extension's Darwin ping: on iPad, a share made in Slide
+        // Over or Split View lands while this app is already active.
+        .onReceive(NotificationCenter.default.publisher(for: ShareInboxSignal.changed)) { _ in
+            checkShareInbox()
+        }
         .sheet(isPresented: $showSharePicker, onDismiss: { model.sharePickerActive = false }) {
             SharePickerSheet(store: store, itemCount: pendingShareItemCount) { destination in
                 model.pendingComposeSeed = pendingShareItems
@@ -538,6 +520,15 @@ struct MainSplitView: View {
             }
         }
         #if os(macOS)
+        .alert(
+            "Export Failed",
+            isPresented: Binding(
+                get: { exportError != nil }, set: { if !$0 { exportError = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(exportError ?? "")
+        }
         .background(WindowReader { window in
             keys.hostWindow = window
             if window != nil, !sidebarMeasure.windowShown {
@@ -713,7 +704,7 @@ struct MainSplitView: View {
         detailLeadingToolbar
         #else
         #if os(visionOS)
-        // Same layout as iOS 26, minus ToolbarSpacer (not on visionOS).
+        // Same layout as iOS, minus ToolbarSpacer (not on visionOS).
         if horizontalSizeClass == .compact {
             if !selectionHasComposer {
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
@@ -727,25 +718,23 @@ struct MainSplitView: View {
             DefaultToolbarItem(kind: .search, placement: .topBarLeading)
         }
         #else
-        if #available(iOS 26.0, *) {
-            if horizontalSizeClass == .compact {
-                // Messages-style bottom bar on views without a composer:
-                // expanded search field + write button. Composer views
-                // (transcript, channel) drop search entirely — the
-                // message field owns the bottom edge.
-                if !selectionHasComposer {
-                    DefaultToolbarItem(kind: .search, placement: .bottomBar)
-                    ToolbarSpacer(.flexible, placement: .bottomBar)
-                    ToolbarItem(placement: .bottomBar) {
-                        Button("New Conversation", systemImage: "square.and.pencil") {
-                            model.pendingNewConversation = true
-                        }
+        if horizontalSizeClass == .compact {
+            // Messages-style bottom bar on views without a composer:
+            // expanded search field + write button. Composer views
+            // (transcript, channel) drop search entirely — the
+            // message field owns the bottom edge.
+            if !selectionHasComposer {
+                DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+                ToolbarItem(placement: .bottomBar) {
+                    Button("New Conversation", systemImage: "square.and.pencil") {
+                        model.pendingNewConversation = true
                     }
                 }
-            } else {
-                // iPad: the minimized magnifier, upper-left of the main bar.
-                DefaultToolbarItem(kind: .search, placement: .topBarLeading)
             }
+        } else {
+            // iPad: the minimized magnifier, upper-left of the main bar.
+            DefaultToolbarItem(kind: .search, placement: .topBarLeading)
         }
         #endif
         #endif
@@ -780,7 +769,7 @@ struct MainSplitView: View {
                             .foregroundStyle(channelColor(streamId))
                             #endif
                     }
-                    .help("Go to #\(channelName(streamId))")
+                    .help("Go to #\(store.channelName(streamId))")
                 }
             }
     }
@@ -799,7 +788,7 @@ struct MainSplitView: View {
             // Contextual share, like iOS: appears while a message or
             // attachment is selected. The picker anchors to the button;
             // File → Export Selected… saves to disk instead.
-            if keys.selectedMessageId != nil || keys.selectedMediaId != nil {
+            if keys.hasSelection {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Share", systemImage: "square.and.arrow.up") {
                         shareSelection()
@@ -820,26 +809,22 @@ struct MainSplitView: View {
                     } label: {
                         Image(systemName: channelGlyph(streamId))
                     }
-                    .help("Go to #\(channelName(streamId))")
+                    .help("Go to #\(store.channelName(streamId))")
                 }
                 #if !os(visionOS)
-                if #available(iOS 26.0, *) {
-                    ToolbarSpacer(.fixed, placement: .primaryAction)
-                }
+                ToolbarSpacer(.fixed, placement: .primaryAction)
                 #endif
             }
             // Contextual share: appears while a message or attachment is
             // selected — the system sheet covers save, send, and print.
-            if keys.selectedMessageId != nil || keys.selectedMediaId != nil {
+            if keys.hasSelection {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Share", systemImage: "square.and.arrow.up") {
                         shareSelection()
                     }
                 }
                 #if !os(visionOS)
-                if #available(iOS 26.0, *) {
-                    ToolbarSpacer(.fixed, placement: .primaryAction)
-                }
+                ToolbarSpacer(.fixed, placement: .primaryAction)
                 #endif
             }
             // Compact width keeps the detail's top bar minimal: the gear
@@ -851,9 +836,7 @@ struct MainSplitView: View {
                     }
                 }
                 #if !os(visionOS)
-                if #available(iOS 26.0, *) {
-                    ToolbarSpacer(.fixed, placement: .primaryAction)
-                }
+                ToolbarSpacer(.fixed, placement: .primaryAction)
                 #endif
                 ToolbarItem(placement: .primaryAction) {
                     Button("New Conversation", systemImage: "square.and.pencil") {
@@ -875,16 +858,10 @@ struct MainSplitView: View {
                     connectionLostBadge
                 }
                 #else
-                if #available(iOS 26.0, *) {
-                    ToolbarItem(placement: .automatic) {
-                        connectionLostBadge
-                    }
-                    .sharedBackgroundVisibility(.hidden)
-                } else {
-                    ToolbarItem(placement: .automatic) {
-                        connectionLostBadge
-                    }
+                ToolbarItem(placement: .automatic) {
+                    connectionLostBadge
                 }
+                .sharedBackgroundVisibility(.hidden)
                 #endif
             }
     }
@@ -960,96 +937,6 @@ struct MainSplitView: View {
         }
     }
 
-    /// Downloads an attachment through the account's authenticated session:
-    /// macOS saves into Downloads and reveals it; iOS presents Quick Look
-    /// (whose share sheet covers "Save to Files"). The body streams to disk
-    /// with the toolbar ring tracking it (and cancelling it).
-    private func downloadAttachment(url: URL, connection: ApiConnection) {
-        guard !downloads.contains(where: { $0.url == url }) else { return }
-        let download = AttachmentDownload(url: url)
-        downloads.append(download)
-        download.task = Task {
-            defer { downloads.removeAll { $0 === download } }
-            do {
-                let outcome = try await connection.downloadFile(at: url) { received, total in
-                    Task { @MainActor in
-                        download.received = received
-                        download.total = total
-                    }
-                }
-                // A failed fetch, or an HTML answer to a file link (the
-                // login wall of a realm we're not signed into), isn't the
-                // file — hand those to the browser, which can sign in.
-                guard case .file(let temporary, let filename) = outcome else {
-                    Platform.openExternalURL(url)
-                    return
-                }
-                placeDownloadedFile(temporary, filename: filename)
-            } catch {
-                // The ring's cancel already cleaned up its partial file;
-                // real failures get the browser fallback.
-                if !(error is CancellationError),
-                   (error as? URLError)?.code != .cancelled {
-                    Platform.openExternalURL(url)
-                }
-            }
-        }
-        // The ring appears only for downloads still running after a beat —
-        // the common small attachment comes and goes without toolbar churn.
-        Task {
-            try? await Task.sleep(for: .seconds(1))
-            download.revealed = true
-        }
-    }
-
-    /// Puts a finished download where the platform wants it: Downloads plus
-    /// a Finder reveal on macOS, Quick Look's temp directory on iOS.
-    private func placeDownloadedFile(_ temporary: URL, filename: String) {
-        #if os(macOS)
-        guard let downloadsDir = FileManager.default.urls(
-            for: .downloadsDirectory, in: .userDomainMask).first else { return }
-        var destination = downloadsDir.appendingPathComponent(filename)
-        if FileManager.default.fileExists(atPath: destination.path) {
-            let base = (filename as NSString).deletingPathExtension
-            let ext = (filename as NSString).pathExtension
-            destination = downloadsDir.appendingPathComponent(
-                "\(base)-\(Int(Date.now.timeIntervalSince1970))"
-                    + (ext.isEmpty ? "" : ".\(ext)"))
-        }
-        do {
-            try FileManager.default.moveItem(at: temporary, to: destination)
-            NSWorkspace.shared.activateFileViewerSelecting([destination])
-        } catch {
-            // Sandbox without the Downloads entitlement, disk full…
-            try? FileManager.default.removeItem(at: temporary)
-        }
-        #else
-        let preview = FileManager.default.temporaryDirectory
-            .appendingPathComponent(filename)
-        try? FileManager.default.removeItem(at: preview)
-        do {
-            try FileManager.default.moveItem(at: temporary, to: preview)
-            downloadPreviewURL = preview
-        } catch {
-            try? FileManager.default.removeItem(at: temporary)
-        }
-        #endif
-    }
-
-    /// Only the server can classify an unknown extension: a quick HEAD —
-    /// HTML (or nothing) means a page for the browser, anything else is a
-    /// file worth downloading.
-    private static func sniffIsFile(_ url: URL) async -> Bool {
-        var request = URLRequest(url: url, timeoutInterval: 10)
-        request.httpMethod = "HEAD"
-        guard let (_, response) = try? await ApiConnection.mediaSession.data(for: request),
-              let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode),
-              let mime = response.mimeType?.lowercased()
-        else { return false }
-        return mime != "text/html" && mime != "application/xhtml+xml"
-    }
-
     /// Routes a parsed narrow link: directly when it's this window's
     /// account, via the pending-destination hop otherwise.
     private func openInternal(_ link: InternalLink, accountId: Account.ID) {
@@ -1059,10 +946,8 @@ struct MainSplitView: View {
             selfUserId: selfUserId, store: model.global.stores[accountId])
         if accountId == store.accountId {
             if let near, case .conversation(let key) = destination {
-                keys.highlightMessageId = near
-                if selection != .conversation(key) {
-                    keys.pendingNear = (key, near)
-                }
+                keys.aimMessageLink(
+                    key, messageId: near, alreadyOpen: selection == .conversation(key))
             }
             selection = destination
         } else {
@@ -1122,8 +1007,7 @@ struct MainSplitView: View {
     }
 
     private func requestMessageAction(_ action: MessageActionRequest.Action) {
-        guard let id = keys.selectedMessageId else { return }
-        keys.messageActionRequest = MessageActionRequest(messageId: id, action: action)
+        keys.requestMessageAction(action)
     }
 
     /// Connection-lost indicator: the system warning triangle, sitting
@@ -1137,20 +1021,13 @@ struct MainSplitView: View {
             .help("No connection to server")
     }
 
-    /// The drop highlight's border. It frames the whole pane, so on 26 and
-    /// later its corners are concentric with the window's (the display's
-    /// on iPhone) — stroked half its width in, as strokeBorder strokes
-    /// the 10pt rectangle drawn before then.
-    @ViewBuilder
+    /// The drop highlight's border. It frames the whole pane, so its
+    /// corners are concentric with the window's (the display's on
+    /// iPhone) — stroked half its width in, like a strokeBorder.
     private var dropHighlightBorder: some View {
-        if #available(iOS 26, macOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
-            ConcentricRectangle(corners: .concentric(minimum: .fixed(9)))
-                .stroke(.tint, lineWidth: 2)
-                .padding(1)
-        } else {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(.tint, lineWidth: 2)
-        }
+        ConcentricRectangle(corners: .concentric(minimum: .fixed(9)))
+            .stroke(.tint, lineWidth: 2)
+            .padding(1)
     }
 
     /// A plain function, not an inline switch expression: the latter blew
@@ -1164,10 +1041,6 @@ struct MainSplitView: View {
         default:
             return nil
         }
-    }
-
-    private func channelName(_ streamId: Int) -> String {
-        store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel"
     }
 
     private func channelGlyph(_ streamId: Int) -> String {
@@ -1193,7 +1066,11 @@ struct MainSplitView: View {
         #if os(macOS)
         guard keys.hostWindow?.isKeyWindow != false else { return }
         #endif
-        let items = ShareInbox.pendingItems()
+        // Items whose uploads are still running stay in the inbox until
+        // they finish; they must not be offered again.
+        let items = ShareInbox.pendingItems().filter {
+            !model.shareItemsUploading.contains($0.directory)
+        }
         guard !items.isEmpty else { return }
         model.sharePickerActive = true
         pendingShareItems = items
@@ -1211,132 +1088,11 @@ struct MainSplitView: View {
         #endif
         model.pendingDestination = nil
         if let near = pending.near, case .conversation(let key) = pending.destination {
-            keys.highlightMessageId = near
-            if selection != .conversation(key) {
-                keys.pendingNear = (key, near)
-            }
+            keys.aimMessageLink(
+                key, messageId: near, alreadyOpen: selection == .conversation(key))
         }
         selection = pending.destination
     }
-
-    /// Stages the current selection for sharing: the selected attachments'
-    /// downloaded files when any are selected, else the selected
-    /// message(s) as attributed plain text, transcript order. iOS presents
-    /// the share sheet; macOS the sharing picker off the toolbar button.
-    private func shareSelection() {
-        Task {
-            let items: [Any]
-            let attachments = keys.selectedAttachments()
-            if !attachments.isEmpty {
-                var urls: [URL] = []
-                for attachment in attachments {
-                    if let url = await downloadMediaFile(
-                        path: attachment.path, connection: store.connection) {
-                        urls.append(mediaHandoffCopy(of: url))
-                    }
-                }
-                guard !urls.isEmpty else { return }
-                items = urls
-            } else {
-                let messages = keys.selectedMessages()
-                guard !messages.isEmpty else { return }
-                items = [messages.map { messageShareText($0) }.joined(separator: "\n\n")]
-            }
-            #if os(macOS)
-            macShareItems = items
-            #else
-            sharePayload = SharePayload(items: items)
-            #endif
-        }
-    }
-
-    #if os(macOS)
-    /// File → Export Selected…: the selected attachment(s) — a save panel
-    /// for one, a folder chooser for several — or the selected message(s)
-    /// as one text file, transcript order.
-    private func exportSelected() {
-        let attachments = keys.selectedAttachments()
-        if attachments.count > 1 {
-            exportFolderPanel { folder in
-                Task {
-                    for attachment in attachments {
-                        guard let url = await downloadMediaFile(
-                            path: attachment.path, connection: store.connection)
-                        else { continue }
-                        // Collision-safe: "name-2.ext" rather than a
-                        // silent overwrite in a folder the panel never
-                        // confirmed replacements for.
-                        let destination = Self.uniqueDestination(
-                            for: url.lastPathComponent, in: folder)
-                        try? FileManager.default.copyItem(at: url, to: destination)
-                        unlockMediaFile(destination)
-                    }
-                }
-            }
-        } else if let attachment = attachments.first {
-            Task {
-                guard let url = await downloadMediaFile(
-                    path: attachment.path, connection: store.connection) else { return }
-                savePanel(suggestedName: url.lastPathComponent) { destination in
-                    // The panel already confirmed any replacement.
-                    if FileManager.default.fileExists(atPath: destination.path) {
-                        try? FileManager.default.removeItem(at: destination)
-                    }
-                    try? FileManager.default.copyItem(at: url, to: destination)
-                    unlockMediaFile(destination)
-                }
-            }
-        } else {
-            let messages = keys.selectedMessages()
-            guard !messages.isEmpty else { return }
-            let text = messages.map { messageShareText($0) }.joined(separator: "\n\n")
-            let name = messages.count == 1
-                ? "Message from \(messages[0].senderFullName).txt"
-                : "Messages.txt"
-            savePanel(suggestedName: name) { destination in
-                try? text.write(to: destination, atomically: true, encoding: .utf8)
-            }
-        }
-    }
-
-    private func savePanel(suggestedName: String, write: @escaping (URL) -> Void) {
-        guard let window = keys.hostWindow else { return }
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = suggestedName
-        panel.beginSheetModal(for: window) { response in
-            guard response == .OK, let url = panel.url else { return }
-            write(url)
-        }
-    }
-
-    /// Multi-attachment export: one folder choice, every file into it.
-    private func exportFolderPanel(_ handler: @escaping (URL) -> Void) {
-        guard let window = keys.hostWindow else { return }
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.prompt = "Export"
-        panel.message = "Choose a folder for the exported attachments"
-        panel.beginSheetModal(for: window) { response in
-            guard response == .OK, let url = panel.url else { return }
-            handler(url)
-        }
-    }
-
-    private static func uniqueDestination(for name: String, in folder: URL) -> URL {
-        var url = folder.appendingPathComponent(name)
-        let base = (name as NSString).deletingPathExtension
-        let ext = (name as NSString).pathExtension
-        var counter = 2
-        while FileManager.default.fileExists(atPath: url.path) {
-            let candidate = ext.isEmpty ? "\(base)-\(counter)" : "\(base)-\(counter).\(ext)"
-            url = folder.appendingPathComponent(candidate)
-            counter += 1
-        }
-        return url
-    }
-    #endif
 
     #if os(iOS)
     private func handleKeyPress(_ press: KeyPress) -> Bool {
@@ -1364,6 +1120,9 @@ struct MainSplitView: View {
     }
     #endif
 
+    /// This window, for the feeds' per-window scroll memory.
+    private var scene: FeedWarmCache.Scene { ObjectIdentifier(keys) }
+
     @ViewBuilder
     private var detailContent: some View {
         Group {
@@ -1372,10 +1131,12 @@ struct MainSplitView: View {
                 SummaryView(store: store, search: search, selection: $selection)
                     .id(Destination.summary)
             case .conversation(let key):
-                TranscriptView(store: store, conversation: key, selection: $selection)
+                TranscriptView(
+                    store: store, conversation: key, selection: $selection, scene: scene)
                     .id(key)
             case .channel(let streamId):
-                ChannelFeedView(store: store, streamId: streamId, selection: $selection)
+                ChannelFeedView(
+                    store: store, streamId: streamId, selection: $selection, scene: scene)
                     .id(streamId)
             case .channelTopics(let streamId):
                 ChannelTopicsView(store: store, streamId: streamId, selection: $selection)
@@ -1398,17 +1159,17 @@ struct MainSplitView: View {
                 NarrowFeedView(
                     store: store, title: "Combined feed",
                     narrow: .combinedFeed(includesMuted: combinedShowsMuted),
-                    showsConversationJump: true, selection: $selection)
+                    showsConversationJump: true, selection: $selection, scene: scene)
                     .id(Narrow.combinedFeed(includesMuted: combinedShowsMuted))
             case .mentions:
                 NarrowFeedView(
                     store: store, title: "Mentions", narrow: .mentions,
-                    showsConversationJump: true, selection: $selection)
+                    showsConversationJump: true, selection: $selection, scene: scene)
                     .id(Destination.mentions)
             case .starred:
                 NarrowFeedView(
                     store: store, title: "Starred messages", narrow: .starred,
-                    showsConversationJump: true, selection: $selection)
+                    showsConversationJump: true, selection: $selection, scene: scene)
                     .id(Destination.starred)
             case .search(let query):
                 NarrowFeedView(
@@ -1418,7 +1179,7 @@ struct MainSplitView: View {
                     ignoredSearchWords: query.exclusivelyIgnoredSearchWords,
                     anchorDate: query.anchorDay?.start(),
                     showsConversationJump: true,
-                    selection: $selection)
+                    selection: $selection, scene: scene)
                     .id(query)
             case .allChannels:
                 AllChannelsView(store: store, search: search, selection: $selection)
@@ -1436,188 +1197,3 @@ struct MainSplitView: View {
         }
     }
 }
-
-/// The window's server menu: switching (⌘1–⌘9), account management, sign
-/// out. One per window — it changes only this window's server.
-#if !os(macOS)
-/// Compact width only: the root list is the whole UI there, so it gets
-/// its own searchable (same shared model) for the bar's search pin.
-/// Regular width leaves search solely to the detail column.
-private struct CompactSidebarSearch: ViewModifier {
-    let search: SidebarSearchModel
-    @Binding var selection: Destination?
-    /// The WINDOW's compactness, passed in from the split view — the
-    /// sidebar column's own environment reads compact even in a full
-    /// iPad window (columns are narrow), which wrongly attached the
-    /// search field to the iPad sidebar.
-    let isCompact: Bool
-
-    func body(content: Content) -> some View {
-        if isCompact {
-            content.modifier(
-                DetailSearchField(search: search, selection: $selection))
-        } else {
-            content
-        }
-    }
-}
-
-/// iOS: the sidebar-filtering search field, attached to the DETAIL
-/// column so its minimized magnifier renders in the main view's toolbar
-/// (macOS keeps the field on the sidebar list → window toolbar). The
-/// field drives the same shared search model either way.
-private struct DetailSearchField: ViewModifier {
-    @Bindable var search: SidebarSearchModel
-    @Binding var selection: Destination?
-    /// Compact composer views (transcript, channel) drop search
-    /// entirely — the message field owns the bottom edge.
-    var suppressWhenCompactComposer = false
-    @Environment(KeyboardRouter.self) private var keys
-    @Environment(\.horizontalSizeClass) private var sizeClass
-    @FocusState private var searchFocused: Bool
-
-    func body(content: Content) -> some View {
-        if sizeClass == .compact {
-            if suppressWhenCompactComposer {
-                content
-            } else {
-                // Bottom-bar field, expanded (Messages-style) — no
-                // minimize.
-                searchable(content)
-            }
-        } else if #available(iOS 26.0, *) {
-            searchable(content)
-                .searchToolbarBehavior(.minimize)
-        } else {
-            searchable(content)
-        }
-    }
-
-    private func searchable(_ content: Content) -> some View {
-        content
-            // Explicit .toolbar placement: .automatic hoists the field
-            // into the iPad sidebar (duplicating the main-bar magnifier)
-            // and reserves the compact under-title drawer (a phantom top
-            // margin). The DefaultToolbarItem pins own the position.
-            .searchable(
-                text: $search.filterText, tokens: $search.tokens,
-                placement: .toolbar, prompt: "Filter or search"
-            ) { token in
-                Text(token.bubbleText)
-            }
-            .searchSuggestions {
-                ForEach(search.suggestions) { token in
-                    Label(token.suggestionTitle, systemImage: token.suggestionIcon)
-                        .searchCompletion(token)
-                }
-            }
-            .searchFocused($searchFocused)
-            .onSubmit(of: .search) { runSearch() }
-            .onAppear {
-                // The keyboard router's / shortcut focuses this field;
-                // media selection blurs it so Space can Quick Look.
-                let focus = $searchFocused
-                keys.focusSearch = { focus.wrappedValue = true }
-                keys.blurSearch = { focus.wrappedValue = false }
-            }
-    }
-
-    private func runSearch() {
-        let query = SearchQuery(tokens: search.tokens, text: search.filterText)
-        guard !query.isEmpty else { return }
-        search.recordSearch(query)
-        search.filterText = ""
-        search.tokens = []
-        selection = .search(query)
-    }
-}
-#endif
-
-struct ServerMenu: View {
-    let store: PerAccountStore
-    @Binding var selectedAccount: Account.ID?
-
-    @Environment(AppModel.self) private var model
-    @State private var showSettings = false
-
-    var body: some View {
-        Menu {
-            ForEach(
-                Array(model.global.enabledAccounts.prefix(9).enumerated()), id: \.element.id
-            ) { index, account in
-                Button {
-                    selectedAccount = account.id
-                } label: {
-                    if account.id == store.accountId {
-                        Label(accountLabel(account), systemImage: "checkmark")
-                    } else {
-                        Text(accountLabel(account))
-                    }
-                }
-                .keyboardShortcut(
-                    KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
-            }
-            ForEach(model.global.enabledAccounts.dropFirst(9)) { account in
-                Button {
-                    selectedAccount = account.id
-                } label: {
-                    if account.id == store.accountId {
-                        Label(accountLabel(account), systemImage: "checkmark")
-                    } else {
-                        Text(accountLabel(account))
-                    }
-                }
-            }
-            Divider()
-            #if os(macOS)
-            SettingsLink {
-                Text("Accounts & Settings…")
-            }
-            #else
-            Button("Accounts & Settings…") {
-                showSettings = true
-            }
-            #endif
-            Button("Sign Out of This Server…") {
-                Task { await model.signOut(accountId: store.accountId) }
-            }
-        } label: {
-            Text(store.realmName
-                ?? store.connection.realmURL.host() ?? "Server")
-                .font(.callout.weight(.medium))
-        }
-        .help("Servers and accounts (⌘1–⌘9 switch this window)")
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .environment(model)
-        }
-    }
-
-    private func accountLabel(_ account: Account) -> String {
-        "\(account.realmName ?? account.realmURL.host() ?? "?") — \(account.email)"
-    }
-}
-
-#if os(macOS)
-/// Presents the system sharing picker anchored to the view it backs
-/// whenever `items` lands, then clears it. AppKit-side because SwiftUI has
-/// no programmatic ShareLink presentation and the picker needs an anchor
-/// view (it draws its popover off this rect).
-struct SharingServiceAnchor: NSViewRepresentable {
-    @Binding var items: [Any]?
-
-    func makeNSView(context: Context) -> NSView { NSView() }
-
-    func updateNSView(_ view: NSView, context: Context) {
-        guard let staged = items else { return }
-        // Presenting (and clearing the binding) must wait out the current
-        // view update.
-        DispatchQueue.main.async {
-            guard items != nil else { return }
-            items = nil
-            NSSharingServicePicker(items: staged)
-                .show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
-        }
-    }
-}
-#endif

@@ -10,18 +10,14 @@ private struct ChannelTitleMenu: ViewModifier {
     let conversation: ConversationKey
     @Binding var selection: Destination?
 
-    private func channelName(_ streamId: Int) -> String {
-        store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel"
-    }
-
     func body(content: Content) -> some View {
         #if os(macOS)
         if case .topic(let streamId, _) = conversation {
             content.toolbarTitleMenu {
-                Button("All Messages in #\(channelName(streamId))", systemImage: "number") {
+                Button("All Messages in #\(store.channelName(streamId))", systemImage: "number") {
                     selection = .channel(streamId: streamId)
                 }
-                Button("Topics in #\(channelName(streamId))", systemImage: "list.bullet") {
+                Button("Topics in #\(store.channelName(streamId))", systemImage: "list.bullet") {
                     selection = .channelTopics(streamId: streamId)
                 }
             }
@@ -40,6 +36,8 @@ struct TranscriptView: View {
     let store: PerAccountStore
     let conversation: ConversationKey
     @Binding var selection: Destination?
+    /// The window, for per-window scroll memory (FeedWarmCache).
+    let scene: FeedWarmCache.Scene
 
     @Environment(KeyboardRouter.self) private var keys
     @State private var model: MessageListModel?
@@ -48,27 +46,24 @@ struct TranscriptView: View {
 
     init(
         store: PerAccountStore, conversation: ConversationKey,
-        selection: Binding<Destination?>
+        selection: Binding<Destination?>, scene: FeedWarmCache.Scene
     ) {
         self.store = store
         self.conversation = conversation
+        self.scene = scene
         _selection = selection
         // A recently viewed conversation resumes its parked model, and a
         // cold one opens on its cached messages — set before the first
         // layout pass so there is no spinner frame.
         let narrow = conversation.narrow(selfUserId: store.selfUserId)
         if let warm = FeedWarmCache.shared.lookupOrPreview(
-            narrow: narrow, store: store,
+            narrow: narrow, store: store, scene: scene,
             makeModel: { MessageListModel(store: store, narrow: narrow) })
         {
             _model = State(initialValue: warm.model)
             _cache = State(initialValue: warm.cache)
             _scrollMemory = State(initialValue: warm.scrollMemory)
         }
-    }
-
-    private func channelName(_ streamId: Int) -> String {
-        store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel"
     }
 
     /// "#channel › topic" (with a resolved check where applicable); DMs use
@@ -78,7 +73,7 @@ struct TranscriptView: View {
             let display = TopicName.displayName(topic)
             let name = display.isEmpty ? "general chat" : display
             let resolved = TopicName.isResolved(topic) ? "✓ " : ""
-            return "\(channelName(streamId)) › \(resolved)\(name)"
+            return "\(store.channelName(streamId)) › \(resolved)\(name)"
         }
         return conversation.displayTitle(in: store)
     }
@@ -88,7 +83,7 @@ struct TranscriptView: View {
             if let model, model.didInitialFetch {
                 MessageFeedList(
                     store: store, model: model, cache: cache,
-                    onNewMessages: { store.markConversationRead(conversation) },
+                    marksArrivalsRead: true,
                     scrollMemory: scrollMemory)
             } else {
                 ProgressView()
@@ -115,52 +110,37 @@ struct TranscriptView: View {
         // stores), the list re-binds — otherwise it stays registered with a
         // dead store and never receives live events.
         .task(id: ObjectIdentifier(store)) {
-            // A message link opens anchored at its target.
-            var anchor: Int?
-            if let pending = keys.pendingNear, pending.key == conversation {
-                anchor = pending.messageId
-                keys.pendingNear = nil
-            }
-            let narrow = conversation.narrow(selfUserId: store.selfUserId)
-            // A healthy model already bound to this store (warm start, or
-            // a reappearing live view) needs no refetch — parked models
-            // keep absorbing live events. Only a message-link anchor
-            // forces a fresh fetch.
-            if anchor == nil, let model, model.isBound(to: store),
-               model.didInitialFetch, model.fetchError == nil
-            {
-                // A cached preview from init fetches in place, under the
-                // messages it shows.
-                if model.awaitsServer {
-                    await model.fetchInitial()
-                }
-                store.markConversationRead(conversation)
-                return
-            }
-            let list = MessageListModel(
-                store: store, narrow: narrow, anchorMessageId: anchor)
-            // A message link replaces a cached preview outright, as a first
-            // open would: the preview sits at the first unread, not the
-            // link's target.
-            if model == nil || model?.awaitsServer == true {
-                // First open: show the fetch in progress.
-                model = list
-                await list.fetchInitial()
-            } else {
-                // Store swap (provisional → live at launch, queue rebuild):
-                // the rendered transcript stays up until the replacement
-                // has content — no blank flash mid-read.
-                await list.fetchInitial()
-                model = list
-            }
-            // Park for instant return. Anchored fetches stay out: they
-            // resume mid-history, which a plain reopen shouldn't.
-            if anchor == nil, list.fetchError == nil {
-                FeedWarmCache.shared.insert(
-                    model: list, cache: cache, scrollMemory: scrollMemory,
-                    narrow: narrow, store: store)
-            }
-            store.markConversationRead(conversation)
+            await bindModel()
         }
+        // A message link into this conversation whose target isn't in the
+        // loaded window (MainSplitView leaves it pending): refetch there.
+        .onChange(of: keys.pendingNearRequest) {
+            guard let pending = keys.pendingNear, pending.key == conversation else { return }
+            Task { await bindModel() }
+        }
+    }
+
+    private func bindModel() async {
+        // A message link opens anchored at its target.
+        var anchor: Int?
+        if let pending = keys.pendingNear, pending.key == conversation {
+            anchor = pending.messageId
+            keys.pendingNear = nil
+        }
+        let narrow = conversation.narrow(selfUserId: store.selfUserId)
+        // Only a message-link anchor forces a fresh fetch. A link replaces
+        // a cached preview outright, as a first open would: the preview
+        // sits at the first unread, not the link's target. Anchored
+        // fetches stay out of the warm cache: they resume mid-history,
+        // which a plain reopen shouldn't.
+        await FeedWarmCache.shared.bind(
+            current: model, store: store, narrow: narrow, count: 60,
+            keepsCurrent: anchor == nil, replacesPreview: true, parks: anchor == nil,
+            warm: (cache, scrollMemory), scene: scene,
+            makeModel: {
+                MessageListModel(store: store, narrow: narrow, anchorMessageId: anchor)
+            },
+            install: { model = $0 })
+        store.markConversationRead(conversation)
     }
 }

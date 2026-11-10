@@ -407,5 +407,13 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, newPhase in
             model.scenePhaseChanged(to: newPhase)
         }
+        #if os(macOS)
+        // ⌘Q leaves no scene-phase change behind: flush pending writes
+        // (debounced drafts, the message cache) on the way out.
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSApplication.willTerminateNotification)) { _ in
+            model.persistCaches()
+        }
+        #endif
     }
 }

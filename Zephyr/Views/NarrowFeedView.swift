@@ -17,6 +17,8 @@ struct NarrowFeedView: View {
     /// (Combined, Mentions, Starred, Search).
     var showsConversationJump = false
     @Binding var selection: Destination?
+    /// The window, for per-window scroll memory (FeedWarmCache).
+    let scene: FeedWarmCache.Scene
 
     @Environment(KeyboardRouter.self) private var keys
     @State private var model: MessageListModel?
@@ -52,8 +54,10 @@ struct NarrowFeedView: View {
         ignoredSearchWords: [String]? = nil,
         anchorDate: Date? = nil,
         showsConversationJump: Bool = false,
-        selection: Binding<Destination?>
+        selection: Binding<Destination?>,
+        scene: FeedWarmCache.Scene
     ) {
+        self.scene = scene
         self.store = store
         self.title = title
         self.narrow = narrow
@@ -69,7 +73,7 @@ struct NarrowFeedView: View {
         // one would silently go stale.
         if case .custom = narrow { return }
         if let warm = FeedWarmCache.shared.lookupOrPreview(
-            narrow: narrow, store: store,
+            narrow: narrow, store: store, scene: scene,
             makeModel: { MessageListModel(store: store, narrow: narrow, anchorDate: anchorDate) })
         {
             _model = State(initialValue: warm.model)
@@ -118,38 +122,21 @@ struct NarrowFeedView: View {
         // Store-keyed: re-binds when the store instance is replaced
         // (warm-launch swap, queue rebuild).
         .task(id: ObjectIdentifier(store)) {
-            // A healthy model bound to this store (warm start, or a
-            // reappearing live view) needs no refetch; a cached preview
-            // from init fetches in place, under the messages it shows.
-            if let model, model.isBound(to: store),
-               model.didInitialFetch, model.fetchError == nil
-            {
-                if model.awaitsServer {
-                    await model.fetchInitial(count: 100)
-                }
-                return
-            }
-            let list = MessageListModel(store: store, narrow: narrow, anchorDate: anchorDate)
-            if model == nil {
-                model = list
-                await list.fetchInitial(count: 100)
-                // A date search lands on the server's pick through the
-                // message-link path: highlighted before the feed's first
-                // layout (no suspension since the fetch flipped
-                // didInitialFetch), so its opening anchors there.
-                if let id = list.dateAnchorMessageId {
-                    keys.highlightMessageId = id
-                }
-            } else {
-                // Store swap: keep rendering the old feed until the
-                // replacement has content.
-                await list.fetchInitial(count: 100)
-                model = list
-            }
-            if list.fetchError == nil, !isCustomNarrow {
-                FeedWarmCache.shared.insert(
-                    model: list, cache: cache, scrollMemory: scrollMemory,
-                    narrow: narrow, store: store)
+            let firstOpen = model == nil
+            let fresh = await FeedWarmCache.shared.bind(
+                current: model, store: store, narrow: narrow, count: 100,
+                parks: !isCustomNarrow,
+                warm: (cache, scrollMemory), scene: scene,
+                makeModel: {
+                    MessageListModel(store: store, narrow: narrow, anchorDate: anchorDate)
+                },
+                install: { model = $0 })
+            // A date search lands on the server's pick through the
+            // message-link path: highlighted before the feed's first
+            // layout (no suspension since the fetch flipped
+            // didInitialFetch), so its opening anchors there.
+            if firstOpen, let id = fresh?.dateAnchorMessageId {
+                keys.highlightMessageId = id
             }
         }
     }

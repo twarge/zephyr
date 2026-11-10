@@ -7,12 +7,16 @@ import ZulipModel
 import UIKit
 #endif
 
-/// Memoized message-HTML parsing, keyed by (id, edit timestamp) so edits
-/// re-parse exactly one message. One cache per open transcript.
+/// Memoized message-HTML parsing, keyed by id and validated against the
+/// HTML itself: edits and `rendering_only` re-renders (link previews,
+/// which leave the edit timestamp alone) re-parse exactly one message.
+/// One cache per open transcript.
 @MainActor
 final class MessageContentCache {
     private struct Entry {
-        var edit: Int?
+        /// The HTML parsed — the same string storage as the message's
+        /// while unchanged, so the check is usually a pointer compare.
+        var html: String
         var content: MessageContent
         /// `content` minus its link previews, built when first shown.
         var withoutPreviews: MessageContent?
@@ -32,11 +36,11 @@ final class MessageContentCache {
 
     /// The parse as the server rendered it, link previews included.
     func parsedContent(for message: Message) -> MessageContent {
-        if let hit = cache[message.id], hit.edit == message.lastEditTimestamp {
+        if let hit = cache[message.id], hit.html == message.content {
             return hit.content
         }
         let parsed = ContentParser.parse(html: message.content)
-        cache[message.id] = Entry(edit: message.lastEditTimestamp, content: parsed)
+        cache[message.id] = Entry(html: message.content, content: parsed)
         return parsed
     }
 }
@@ -297,8 +301,7 @@ extension View {
 
     /// Mail's line under the title ("12 unread"): beneath the large
     /// title, then beneath the inline title once that scrolls away (the
-    /// window subtitle on macOS). Empty shows none. iOS 26+; none on
-    /// visionOS.
+    /// window subtitle on macOS). Empty shows none; none on visionOS.
     func subtitled(_ text: @escaping () -> String) -> some View {
         modifier(LiveSubtitle(text: text))
     }
@@ -316,12 +319,16 @@ private struct LiveSubtitle: ViewModifier {
         // No navigation subtitle on visionOS: the title stands alone.
         content
         #else
-        if #available(iOS 26.0, *) {
-            content.navigationSubtitle(text())
-        } else {
-            content
-        }
+        content.navigationSubtitle(text())
         #endif
+    }
+}
+
+extension PerAccountStore {
+    /// A channel's display name, from the realm's channel list or the
+    /// user's subscriptions.
+    func channelName(_ streamId: Int) -> String {
+        channels[streamId]?.name ?? subscriptions[streamId]?.name ?? "channel"
     }
 }
 

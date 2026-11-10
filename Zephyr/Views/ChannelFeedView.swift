@@ -7,31 +7,33 @@ struct ChannelFeedView: View {
     let store: PerAccountStore
     let streamId: Int
     @Binding var selection: Destination?
+    /// The window, for per-window scroll memory (FeedWarmCache).
+    let scene: FeedWarmCache.Scene
 
     @State private var model: MessageListModel?
     @State private var cache = MessageContentCache()
     @State private var scrollMemory = FeedScrollMemory()
 
-    init(store: PerAccountStore, streamId: Int, selection: Binding<Destination?>) {
+    init(
+        store: PerAccountStore, streamId: Int, selection: Binding<Destination?>,
+        scene: FeedWarmCache.Scene
+    ) {
         self.store = store
         self.streamId = streamId
+        self.scene = scene
         _selection = selection
         // A recently viewed channel resumes its parked model, and a cold
         // one opens on its cached messages — set before the first layout
         // pass so there is no spinner frame.
         let narrow = Narrow.channel(streamId: streamId)
         if let warm = FeedWarmCache.shared.lookupOrPreview(
-            narrow: narrow, store: store,
+            narrow: narrow, store: store, scene: scene,
             makeModel: { MessageListModel(store: store, narrow: narrow) })
         {
             _model = State(initialValue: warm.model)
             _cache = State(initialValue: warm.cache)
             _scrollMemory = State(initialValue: warm.scrollMemory)
         }
-    }
-
-    private var channelName: String {
-        store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel"
     }
 
     var body: some View {
@@ -52,7 +54,7 @@ struct ChannelFeedView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .serverTitled(channelName, store: store)
+        .serverTitled(store.channelName(streamId), store: store)
         .subtitled { unreadSubtitle(store.unreads.unreadCount(inChannel: streamId)) }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ComposeBar(store: store, mode: .channel(streamId: streamId))
@@ -60,33 +62,12 @@ struct ChannelFeedView: View {
         // Store-keyed: re-binds when the store instance is replaced
         // (warm-launch swap, queue rebuild).
         .task(id: ObjectIdentifier(store)) {
-            // A healthy model bound to this store (warm start, or a
-            // reappearing live view) needs no refetch; a cached preview
-            // from init fetches in place, under the messages it shows.
-            if let model, model.isBound(to: store),
-               model.didInitialFetch, model.fetchError == nil
-            {
-                if model.awaitsServer {
-                    await model.fetchInitial(count: 100)
-                }
-                return
-            }
             let narrow = Narrow.channel(streamId: streamId)
-            let list = MessageListModel(store: store, narrow: narrow)
-            if model == nil {
-                model = list
-                await list.fetchInitial(count: 100)
-            } else {
-                // Store swap: keep rendering the old window until the
-                // replacement has content.
-                await list.fetchInitial(count: 100)
-                model = list
-            }
-            if list.fetchError == nil {
-                FeedWarmCache.shared.insert(
-                    model: list, cache: cache, scrollMemory: scrollMemory,
-                    narrow: narrow, store: store)
-            }
+            await FeedWarmCache.shared.bind(
+                current: model, store: store, narrow: narrow, count: 100,
+                warm: (cache, scrollMemory), scene: scene,
+                makeModel: { MessageListModel(store: store, narrow: narrow) },
+                install: { model = $0 })
         }
     }
 }

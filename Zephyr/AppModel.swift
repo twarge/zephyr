@@ -156,6 +156,9 @@ final class AppModel {
     /// True while some window is showing the share picker (stops a second
     /// window from offering the same inbox).
     var sharePickerActive = false
+    /// Share-inbox items a compose bar is still uploading (by directory):
+    /// cleared from the inbox only once their uploads finish.
+    @ObservationIgnored var shareItemsUploading: Set<URL> = []
     /// Set by the Format menu; the key window's compose applies it.
     var pendingFormat: ComposeFormat?
     /// Set by menu commands (Go/Message/View/Help); the key window acts.
@@ -434,9 +437,11 @@ final class AppModel {
         }
     }
 
-    /// Belt-and-suspenders for the debounced message-cache writes: called on
-    /// backgrounding and at quit.
+    /// Belt-and-suspenders for the debounced message-cache and draft
+    /// writes: called on backgrounding and at quit.
     func persistCaches() {
+        // Debounced compose drafts too: the last words typed before quit.
+        DraftStore.shared.flushPendingSaves()
         for store in global.stores.values {
             store.persistMessageCache(synchronously: true)
         }
@@ -478,6 +483,15 @@ final class AppModel {
         } catch {
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    /// A signed-out account (its credentials were rejected) takes a fresh
+    /// API key for the same user — the account itself, its windows and
+    /// settings stay — then reconnects.
+    func reauthenticate(_ accountId: Account.ID, apiKey: String) async throws {
+        try global.reauthenticate(accountId, apiKey: apiKey)
+        _ = try await global.perAccountStore(for: accountId)
+        ensureDraftSync(accountId)
     }
 
     /// Signs out one account; windows showing it fall back on their own.

@@ -18,8 +18,8 @@ struct MessageContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(content.blocks.indices, id: \.self) { index in
-                BlockNodeView(block: content.blocks[index], connection: connection)
+            ForEach(content.blocks.keyedByContent()) { keyed in
+                BlockNodeView(block: keyed.value, connection: connection)
             }
         }
         // Message text is selectable/copyable (propagates to every Text in
@@ -60,8 +60,8 @@ struct BlockNodeView: View {
                     .fill(.quaternary)
                     .frame(width: 3)
                 VStack(alignment: .leading, spacing: 6) {
-                    ForEach(blocks.indices, id: \.self) { index in
-                        BlockNodeView(block: blocks[index], connection: connection)
+                    ForEach(blocks.keyedByContent()) { keyed in
+                        BlockNodeView(block: keyed.value, connection: connection)
                     }
                 }
             }
@@ -280,8 +280,8 @@ private struct ImageGalleryView: View {
             columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 6)],
             alignment: .leading, spacing: 6
         ) {
-            ForEach(images.indices, id: \.self) { index in
-                MessageImageView(node: images[index], connection: connection, compact: true)
+            ForEach(images.keyedByContent()) { keyed in
+                MessageImageView(node: keyed.value, connection: connection, compact: true)
             }
         }
     }
@@ -673,6 +673,35 @@ extension Array {
     }
 }
 
+/// An element identified by its content plus how many equal elements
+/// precede it — stable across an edit that inserts or removes blocks
+/// before it, so per-block view state (a revealed spoiler, a loaded
+/// image) stays with its block instead of shifting by position.
+struct ContentKeyed<Value: Hashable>: Identifiable {
+    struct ID: Hashable {
+        let hash: Int
+        let occurrence: Int
+    }
+
+    let id: ID
+    let value: Value
+    let index: Int
+}
+
+extension Array where Element: Hashable {
+    func keyedByContent() -> [ContentKeyed<Element>] {
+        // Occurrences count per hash, so even colliding hashes stay unique.
+        var seen: [Int: Int] = [:]
+        return enumerated().map { index, element in
+            let hash = element.hashValue
+            let occurrence = seen[hash, default: 0]
+            seen[hash] = occurrence + 1
+            return ContentKeyed(
+                id: .init(hash: hash, occurrence: occurrence), value: element, index: index)
+        }
+    }
+}
+
 private struct ContentListView: View {
     let items: [[BlockNode]]
     let connection: ApiConnection
@@ -680,14 +709,14 @@ private struct ContentListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(items.indices, id: \.self) { index in
+            ForEach(items.keyedByContent()) { item in
                 HStack(alignment: .top, spacing: 6) {
-                    Text(marker(index))
+                    Text(marker(item.index))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 4) {
-                        ForEach(items[index].indices, id: \.self) { blockIndex in
-                            BlockNodeView(block: items[index][blockIndex], connection: connection)
+                        ForEach(item.value.keyedByContent()) { keyed in
+                            BlockNodeView(block: keyed.value, connection: connection)
                         }
                     }
                 }
@@ -724,8 +753,8 @@ private struct SpoilerView: View {
             .foregroundStyle(.secondary)
             if revealed {
                 VStack(alignment: .leading, spacing: 6) {
-                    ForEach(content.indices, id: \.self) { index in
-                        BlockNodeView(block: content[index], connection: connection)
+                    ForEach(content.keyedByContent()) { keyed in
+                        BlockNodeView(block: keyed.value, connection: connection)
                     }
                 }
                 .padding(.leading, 14)

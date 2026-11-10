@@ -68,7 +68,6 @@ nonisolated struct PreparedTopicSummary: Sendable {
     }
 }
 
-@available(macOS 26.0, iOS 26.0, visionOS 26.0, *)
 @Generable
 private struct GeneratedTopicSummary {
     @Guide(description: "IDs of the supplied messages that support the summary", .count(1...4))
@@ -92,9 +91,6 @@ final class TopicSummaryService {
     private var failures: [String: Date] = [:]
 
     var availabilityMessage: String? {
-        guard #available(macOS 26.0, iOS 26.0, visionOS 26.0, *) else {
-            return "On-device summaries require iOS 26 or later. Showing message previews."
-        }
         switch SystemLanguageModel.default.availability {
         case .available: return nil
         case .unavailable(.appleIntelligenceNotEnabled):
@@ -123,8 +119,7 @@ final class TopicSummaryService {
             task = Task { @MainActor in
                 await previous?.value
                 try Task.checkCancellation()
-                guard #available(macOS 26.0, iOS 26.0, visionOS 26.0, *),
-                      SystemLanguageModel.default.availability == .available else {
+                guard SystemLanguageModel.default.availability == .available else {
                     throw SummaryError.unavailable
                 }
                 return try await Self.generate(input)
@@ -157,7 +152,6 @@ final class TopicSummaryService {
         }
     }
 
-    @available(macOS 26.0, iOS 26.0, visionOS 26.0, *)
     private static func generate(_ input: PreparedTopicSummary) async throws -> String {
         let instructions = """
             Summarize the supplied chat messages in two concise sentences, at most 55 words.

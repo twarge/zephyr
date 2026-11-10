@@ -7,11 +7,10 @@ enum CornerAdaptationAxis: Sendable {
 }
 
 extension View {
-    /// Overlays `content` at `alignment`, inset by `padding` and, on iOS 26
-    /// and macOS 26 and later, moved along `axis` far enough to clear the
-    /// container's rounded corner there — the display's corner on iPhone,
-    /// the window's on Mac and iPad — and system UI in that corner, such as
-    /// window controls. Before those releases it is inset by `padding` only.
+    /// Overlays `content` at `alignment`, inset by `padding` and moved
+    /// along `axis` far enough to clear the container's rounded corner
+    /// there — the display's corner on iPhone, the window's on Mac and
+    /// iPad — and system UI in that corner, such as window controls.
     func cornerAdaptiveOverlay<Content: View>(
         alignment: Alignment,
         padding: CGFloat = 16,
@@ -24,16 +23,9 @@ extension View {
     }
 
     /// Fills behind the view with `style` in a rectangle whose corners are
-    /// concentric with the container's on iOS 26 and macOS 26 and later,
-    /// never tighter than `minimumRadius`; before those releases, a rounded
-    /// rectangle of `minimumRadius`.
-    @ViewBuilder
+    /// concentric with the container's, never tighter than `minimumRadius`.
     func concentricBackground<S: ShapeStyle>(_ style: S, minimumRadius: CGFloat) -> some View {
-        if #available(iOS 26, macOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
-            background(style, in: ConcentricRectangle(corners: .concentric(minimum: .fixed(minimumRadius))))
-        } else {
-            background(style, in: RoundedRectangle(cornerRadius: minimumRadius, style: .continuous))
-        }
+        background(style, in: ConcentricRectangle(corners: .concentric(minimum: .fixed(minimumRadius))))
     }
 }
 
@@ -53,7 +45,6 @@ private struct CornerAdaptiveAnchor<Content: View>: View {
 
     private func insets(in proxy: GeometryProxy) -> EdgeInsets {
         var insets = EdgeInsets(top: padding, leading: padding, bottom: padding, trailing: padding)
-        guard #available(iOS 26, macOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return insets }
         let corners = proxy.containerCornerInsets
         let safe = proxy.safeAreaInsets
         let top = alignment.vertical == .top

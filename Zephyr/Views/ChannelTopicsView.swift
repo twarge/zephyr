@@ -19,7 +19,7 @@ struct ChannelTopicsView: View {
     }
 
     private var channelName: String {
-        store.channels[streamId]?.name ?? store.subscriptions[streamId]?.name ?? "channel"
+        store.channelName(streamId)
     }
 
     var body: some View {

@@ -1,12 +1,18 @@
 import AuthenticationServices
 import SwiftUI
 import ZulipAPI
+import ZulipModel
 
 /// Realm discovery + sign-in. External methods (Google, GitHub, SAML, …) use
 /// the mobile web-auth flow via ASWebAuthenticationSession; password realms
 /// use fetch_api_key; a manually copied API key remains as the escape hatch.
 struct LoginView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    /// Signing an existing, signed-out account back in: the server and
+    /// user are fixed, and the new key replaces the rejected one rather
+    /// than adding a second account.
+    var reauthenticating: Account?
 
     private enum Step {
         case realm
@@ -35,8 +41,15 @@ struct LoginView: View {
             Image(systemName: "bubble.left.and.bubble.right.fill")
                 .font(.system(size: 40))
                 .foregroundStyle(.tint)
-            Text("Zephyr for Zulip")
+            Text(reauthenticating == nil ? "Zephyr for Zulip" : "Sign In Again")
                 .font(.title2.weight(.semibold))
+            if let reauthenticating {
+                Text("Your session for \(reauthenticating.email) ended. Sign in to reconnect.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 340)
+            }
 
             switch step {
             case .realm:
@@ -55,6 +68,13 @@ struct LoginView: View {
         }
         .padding(40)
         .frame(minWidth: 460, minHeight: 380)
+        .onAppear {
+            // Straight to this server's sign-in options.
+            guard let reauthenticating, case .realm = step else { return }
+            realmText = reauthenticating.realmURL.absoluteString
+            email = reauthenticating.email
+            discoverRealm()
+        }
     }
 
     private var realmForm: some View {
@@ -155,10 +175,14 @@ struct LoginView: View {
             }
 
             HStack {
-                Button("Back") {
-                    step = .realm
-                    showAdvanced = false
-                    errorText = nil
+                if reauthenticating != nil {
+                    Button("Cancel") { dismiss() }
+                } else {
+                    Button("Back") {
+                        step = .realm
+                        showAdvanced = false
+                        errorText = nil
+                    }
                 }
                 if showsForm {
                     Button("Sign In") { signIn(settings, realm: realm) }
@@ -247,10 +271,31 @@ struct LoginView: View {
             }
             let probe = ApiConnection(realmURL: realm, email: authEmail, apiKey: key)
             let me = try await probe.getOwnUser()
-            await model.addAccount(
+            try await finish(
                 realm: realm, email: authEmail, apiKey: key,
                 userId: me.userId, realmName: settings.realmName)
         }
+    }
+
+    /// A new account, or — reauthenticating — the same user's fresh key.
+    private func finish(
+        realm: URL, email: String, apiKey: String, userId: Int, realmName: String?
+    ) async throws {
+        guard let account = reauthenticating else {
+            await model.addAccount(
+                realm: realm, email: email, apiKey: apiKey,
+                userId: userId, realmName: realmName)
+            return
+        }
+        guard userId == account.userId,
+              realm.host()?.lowercased() == account.realmURL.host()?.lowercased()
+        else {
+            throw ApiError(
+                httpStatus: 0, code: "DIFFERENT_USER",
+                message: "That's a different account. Sign in as \(account.email).")
+        }
+        try await model.reauthenticate(account.id, apiKey: apiKey)
+        dismiss()
     }
 
     /// Zulip's mobile web-auth flow (SSO and web password logins): browser
@@ -287,7 +332,7 @@ struct LoginView: View {
             }
             let key = try WebAuth.decryptAPIKey(
                 otpEncryptedAPIKey: payload.otpEncryptedAPIKey, otp: otp)
-            await model.addAccount(
+            try await finish(
                 realm: realm, email: payload.email, apiKey: key,
                 userId: payload.userId, realmName: settings.realmName)
     }

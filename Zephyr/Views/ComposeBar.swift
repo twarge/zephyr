@@ -28,8 +28,17 @@ final class DraftStore {
     /// Sync hook (set by AppModel): local edits notify the account's engine.
     @ObservationIgnored var onLocalChange: ((UUID, SendDestination, String) -> Void)?
 
+    /// A channel feed's compose state. Local only: until the topic is
+    /// known there is no destination to key a server draft by.
+    struct ChannelDraft: Codable, Equatable {
+        var topic: String
+        var text: String
+    }
+    @ObservationIgnored private var channelDrafts: [UUID: [Int: ChannelDraft]]
+
     private static let key = "composeDrafts.v2"
     private static let legacyKey = "composeDrafts"
+    private static let channelKey = "channelComposeDrafts.v1"
 
     init() {
         if let data = UserDefaults.standard.data(forKey: Self.key),
@@ -38,6 +47,59 @@ final class DraftStore {
             byAccount = saved
         } else {
             byAccount = [:]
+        }
+        channelDrafts = UserDefaults.standard.data(forKey: Self.channelKey)
+            .flatMap { try? JSONDecoder().decode([UUID: [Int: ChannelDraft]].self, from: $0) }
+            ?? [:]
+    }
+
+    func channelDraft(streamId: Int, account: UUID) -> ChannelDraft? {
+        channelDrafts[account]?[streamId]
+    }
+
+    /// Nil (or empty text) removes the channel's draft.
+    func setChannelDraft(_ draft: ChannelDraft?, streamId: Int, account: UUID) {
+        let draft = draft.flatMap { $0.text.isEmpty ? nil : $0 }
+        guard channelDrafts[account]?[streamId] != draft else { return }
+        channelDrafts[account, default: [:]][streamId] = draft
+        if let data = try? JSONEncoder().encode(channelDrafts) {
+            UserDefaults.standard.set(data, forKey: Self.channelKey)
+        }
+    }
+
+    // MARK: Debounced saves
+
+    /// Compose bars' debounced writes, by owner: each holds the save it
+    /// would make, so quitting or backgrounding can flush them all.
+    @ObservationIgnored private var pendingSaves: [UUID: (task: Task<Void, Never>, save: () -> Void)] = [:]
+
+    /// Replaces the owner's pending save; it runs after a typing pause.
+    func scheduleSave(owner: UUID, after delay: Duration = .milliseconds(400), _ save: @escaping () -> Void) {
+        pendingSaves[owner]?.task.cancel()
+        let task = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            self?.flushSave(owner: owner)
+        }
+        pendingSaves[owner] = (task, save)
+    }
+
+    /// Runs the owner's pending save now, if any.
+    func flushSave(owner: UUID) {
+        guard let pending = pendingSaves.removeValue(forKey: owner) else { return }
+        pending.task.cancel()
+        pending.save()
+    }
+
+    /// Drops the owner's pending save (its text was just sent).
+    func cancelSave(owner: UUID) {
+        pendingSaves.removeValue(forKey: owner)?.task.cancel()
+    }
+
+    /// Quit and backgrounding: nothing typed in the last moment is lost.
+    func flushPendingSaves() {
+        for owner in Array(pendingSaves.keys) {
+            flushSave(owner: owner)
         }
     }
 
@@ -184,7 +246,6 @@ struct ComposeBar: View {
     let mode: Mode
 
     @State private var text = ""
-    @State private var draftSaveTask: Task<Void, Never>?
     @State private var topicFieldFocused = false
     @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var showFileImporter = false
@@ -204,6 +265,9 @@ struct ComposeBar: View {
     }
     @State private var topicText = ""
     @State private var topicPrefill = ""
+    /// A reply chose the topic: it stays put as new messages arrive,
+    /// until the draft sends or the field is cleared.
+    @State private var topicPinnedByReply = false
     /// Why the topic field just took focus (a send with no topic); cleared
     /// as the user types one or leaves.
     @State private var topicNotice: String?
@@ -229,6 +293,8 @@ struct ComposeBar: View {
         var progress: Double = 0
     }
     @State private var uploads: [UploadItem] = []
+    /// Attachments that failed to upload, for the alert.
+    @State private var uploadFailures: [String] = []
     /// Channels whose topics this bar asked the cache to refresh.
     @State private var linkTopicsLoading: Set<Int> = []
     @State private var loadingAllLinkTopics = false
@@ -358,7 +424,11 @@ struct ComposeBar: View {
                             focusRequest: topicFocusRequest,
                             onTabOut: { _ in messageFocused = true })
                             .frame(maxWidth: 260)
-                            .onChange(of: topicText) { topicNotice = nil }
+                            .onChange(of: topicText) {
+                                topicNotice = nil
+                                if topicText.isEmpty { topicPinnedByReply = false }
+                                if !text.isEmpty { scheduleDraftSave() }
+                            }
                     }
                     if expanded {
                         expandedEditor
@@ -398,24 +468,44 @@ struct ComposeBar: View {
             }
         }
         .onAppear {
-            if case .fixed(let destination, _) = mode {
+            switch mode {
+            case .fixed(let destination, _):
                 text = DraftStore.shared.draft(for: destination, account: store.accountId)
+            case .channel(let streamId):
+                if let saved = DraftStore.shared.channelDraft(
+                    streamId: streamId, account: store.accountId) {
+                    text = saved.text
+                    // Taken as the user's choice: not a prefill to follow.
+                    topicText = saved.topic
+                    topicPrefill = ""
+                }
             }
             // The keyboard router's r / c shortcuts focus this compose box;
-            // media selection blurs it so Space can Quick Look.
+            // media selection blurs it so Space can Quick Look; the Format
+            // menu (⌘B/⌘I/⌘K) wraps the selection or appends. Replying to a
+            // message in the channel feed steers the topic field to that
+            // message's topic.
             let focus = $messageFocused
-            keys.focusCompose = { focus.wrappedValue = true }
-            keys.blurCompose = { focus.wrappedValue = false }
+            var setTopic: ((String) -> Void)?
+            if case .channel = mode {
+                setTopic = { topic in
+                    topicText = topic
+                    topicPrefill = topic
+                    topicPinnedByReply = true
+                }
+            }
+            keys.registerCompose(
+                owner: uploadOwnerId,
+                focus: { focus.wrappedValue = true },
+                blur: { focus.wrappedValue = false },
+                applyFormat: { format in applyFormat(format) },
+                setTopic: setTopic)
             // Files dropped anywhere in the conversation upload into here.
             keys.registerUpload(owner: uploadOwnerId) { urls in
                 for url in urls {
                     upload(fileURL: url, securityScoped: false)
                 }
                 focus.wrappedValue = true
-            }
-            // Format menu (⌘B/⌘I/⌘K) wraps the selection or appends.
-            keys.applyFormat = { format in
-                applyFormat(format)
             }
             // ⌘] / ⌘[ in a list item indent it rather than navigate.
             keys.registerListIndent(owner: uploadOwnerId) { increase in
@@ -425,15 +515,6 @@ struct ComposeBar: View {
             keys.registerComposeInsertion(owner: uploadOwnerId) { snippet in
                 appendToDraft(snippet)
             }
-            // Replying to a message in the channel feed steers the topic
-            // field to that message's topic (set as prefill, so the
-            // bottom-of-feed follow behavior resumes afterward).
-            if case .channel = mode {
-                keys.setComposeTopic = { topic in
-                    topicText = topic
-                    topicPrefill = topic
-                }
-            }
             consumeShareSeed()
             syncTopicPrefill()
         }
@@ -441,14 +522,21 @@ struct ComposeBar: View {
             syncTopicPrefill()
         }
         .onDisappear {
-            flushDraftSave()
+            DraftStore.shared.flushSave(owner: uploadOwnerId)
             keys.composeInputFocused = false
+            keys.unregisterCompose(owner: uploadOwnerId)
             keys.unregisterUpload(owner: uploadOwnerId)
             keys.unregisterComposeInsertion(owner: uploadOwnerId)
             keys.unregisterListIndent(owner: uploadOwnerId)
-            if case .channel = mode {
-                keys.setComposeTopic = nil
-            }
+        }
+        .alert(
+            "Couldn’t Attach",
+            isPresented: Binding(
+                get: { !uploadFailures.isEmpty }, set: { if !$0 { uploadFailures = [] } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("\(uploadFailures.joined(separator: ", ")) failed to upload.")
         }
         .onChange(of: messageFocused) { _, focused in
             if !focused {
@@ -461,9 +549,7 @@ struct ComposeBar: View {
             uploadPickedPhotos()
         }
         .onChange(of: text) {
-            if case .fixed(let destination, _) = mode {
-                scheduleDraftSave(for: destination)
-            }
+            scheduleDraftSave()
             if let destination {
                 if text.trimmingCharacters(in: .whitespaces).isEmpty {
                     store.typingStopped(in: destination)
@@ -1195,16 +1281,21 @@ struct ComposeBar: View {
     // MARK: Uploads
 
     /// Uploads a file and appends its `[filename](url)` reference to the
-    /// draft.
-    private func upload(fileURL: URL, securityScoped: Bool) {
+    /// draft. Streamed from disk (the connection assembles the body off
+    /// the main thread), so a large video never sits in memory; a
+    /// security-scoped URL stays open until the upload ends. `finished`
+    /// runs either way, once the upload is over.
+    private func upload(
+        fileURL: URL, securityScoped: Bool, finished: (@MainActor () -> Void)? = nil
+    ) {
         let filename = fileURL.lastPathComponent
-        let scoped = securityScoped ? fileURL.startAccessingSecurityScopedResource() : false
-        guard let data = try? Data(contentsOf: fileURL) else {
-            if scoped { fileURL.stopAccessingSecurityScopedResource() }
-            return
+        let mimeType = Self.mimeType(for: filename)
+        startUpload(filename: filename, mimeType: mimeType, finished: finished) { connection, progress in
+            let scoped = securityScoped && fileURL.startAccessingSecurityScopedResource()
+            defer { if scoped { fileURL.stopAccessingSecurityScopedResource() } }
+            return try await connection.uploadFile(
+                fileURL: fileURL, filename: filename, mimeType: mimeType, progress: progress)
         }
-        if scoped { fileURL.stopAccessingSecurityScopedResource() }
-        upload(data: data, filename: filename)
     }
 
     /// Library picks arrive as data (no file URL, no original name); each
@@ -1215,7 +1306,10 @@ struct ComposeBar: View {
         for pick in items {
             Task {
                 guard let data = try? await pick.loadTransferable(type: Data.self)
-                else { return }
+                else {
+                    uploadFailures.append("A photo")
+                    return
+                }
                 let ext = pick.supportedContentTypes.first?
                     .preferredFilenameExtension ?? "jpeg"
                 let stamp = UUID().uuidString.prefix(8)
@@ -1225,26 +1319,48 @@ struct ComposeBar: View {
     }
 
     private func upload(data: Data, filename: String) {
+        let mimeType = Self.mimeType(for: filename)
+        startUpload(filename: filename, mimeType: mimeType, finished: nil) { connection, progress in
+            try await connection.uploadFile(
+                data, filename: filename, mimeType: mimeType, progress: progress)
+        }
+    }
+
+    private static func mimeType(for filename: String) -> String {
+        let fileExtension = (filename as NSString).pathExtension.lowercased()
+        return UTType(filenameExtension: fileExtension)?.preferredMIMEType
+            ?? "application/octet-stream"
+    }
+
+    /// One upload chip: progress while `perform` runs, then the link in
+    /// the draft — or the file named in the failure alert.
+    private func startUpload(
+        filename: String, mimeType: String, finished: (@MainActor () -> Void)?,
+        perform: @escaping (ApiConnection, @escaping @Sendable (Double) -> Void) async throws -> String
+    ) {
         let item = UploadItem(filename: filename)
         uploads.append(item)
         let itemId = item.id
         let connection = store.connection
-        let fileExtension = (filename as NSString).pathExtension.lowercased()
-        let mimeType = UTType(filenameExtension: fileExtension)?.preferredMIMEType
-            ?? "application/octet-stream"
         let updateProgress: @MainActor (Double) -> Void = { fraction in
             if let index = uploads.firstIndex(where: { $0.id == itemId }) {
                 uploads[index].progress = fraction
             }
         }
         Task {
-            defer { uploads.removeAll { $0.id == itemId } }
-            guard let path = try? await connection.uploadFile(
-                data, filename: filename, mimeType: mimeType,
-                progress: { fraction in
+            defer {
+                uploads.removeAll { $0.id == itemId }
+                finished?()
+            }
+            let path: String
+            do {
+                path = try await perform(connection) { fraction in
                     Task { @MainActor in updateProgress(fraction) }
-                })
-            else { return }
+                }
+            } catch {
+                if !(error is CancellationError) { uploadFailures.append(filename) }
+                return
+            }
             // Any spaces the server kept in the path would break the
             // markdown link (and the server's inline preview of it).
             let linkPath = path.replacingOccurrences(of: " ", with: "%20")
@@ -1286,28 +1402,39 @@ struct ComposeBar: View {
         }
     }
 
-    /// Share-extension items the user routed here: uploads start (the
-    /// file data is read up front, so the inbox clears immediately) and
-    /// shared text lands in the draft.
+    /// Share-extension items the user routed here: uploads start and
+    /// shared text lands in the draft. Each item leaves the inbox once
+    /// its uploads are over (its files are what they stream from).
     private func consumeShareSeed() {
         guard let items = model.pendingComposeSeed, !items.isEmpty else { return }
         model.pendingComposeSeed = nil
+        let appModel = model
         for item in items {
-            for file in item.files {
-                upload(fileURL: file, securityScoped: false)
-            }
             if let shared = item.text, !shared.isEmpty {
                 text += (text.isEmpty ? "" : "\n") + shared
             }
-            ShareInbox.clear(item)
+            guard !item.files.isEmpty else {
+                ShareInbox.clear(item)
+                continue
+            }
+            appModel.shareItemsUploading.insert(item.directory)
+            let remaining = Countdown(item.files.count)
+            for file in item.files {
+                upload(fileURL: file, securityScoped: false) {
+                    guard remaining.tick() else { return }
+                    ShareInbox.clear(item)
+                    appModel.shareItemsUploading.remove(item.directory)
+                }
+            }
         }
         messageFocused = true
     }
 
     /// Channel mode: the topic field follows the conversation shown at
-    /// the bottom of the feed, until the user types their own.
+    /// the bottom of the feed — only while the draft is empty and the
+    /// topic is neither the user's own nor a reply's.
     private func syncTopicPrefill() {
-        guard case .channel = mode else { return }
+        guard case .channel = mode, text.isEmpty, !topicPinnedByReply else { return }
         guard let last = keys.activeFeed?.messages.last else { return }
         if topicText.isEmpty || topicText == topicPrefill {
             topicText = last.subject
@@ -1323,24 +1450,22 @@ struct ComposeBar: View {
 
     /// Draft writes coalesce to one per typing pause: the sidebar's Drafts
     /// section observes the DraftStore, so per-keystroke writes re-rendered
-    /// the whole sidebar with every character.
-    private func scheduleDraftSave(for destination: SendDestination) {
-        draftSaveTask?.cancel()
+    /// the whole sidebar with every character. The pending write lives in
+    /// the DraftStore, which flushes it on leaving, backgrounding, or quit.
+    private func scheduleDraftSave() {
         let text = text
-        draftSaveTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled else { return }
-            DraftStore.shared.setDraft(text, for: destination, account: store.accountId)
-        }
-    }
-
-    /// Writes any pending draft immediately (leaving the conversation).
-    private func flushDraftSave() {
-        guard draftSaveTask != nil else { return }
-        draftSaveTask?.cancel()
-        draftSaveTask = nil
-        if case .fixed(let destination, _) = mode {
-            DraftStore.shared.setDraft(text, for: destination, account: store.accountId)
+        let account = store.accountId
+        let drafts = DraftStore.shared
+        switch mode {
+        case .fixed(let destination, _):
+            drafts.scheduleSave(owner: uploadOwnerId) {
+                drafts.setDraft(text, for: destination, account: account)
+            }
+        case .channel(let streamId):
+            let draft = DraftStore.ChannelDraft(topic: topicText, text: text)
+            drafts.scheduleSave(owner: uploadOwnerId) {
+                drafts.setChannelDraft(draft, streamId: streamId, account: account)
+            }
         }
     }
 
@@ -1369,10 +1494,16 @@ struct ComposeBar: View {
         store.typingStopped(in: destination)
         // A pending debounced save of the pre-send text must not outlive
         // the clear.
-        draftSaveTask?.cancel()
-        draftSaveTask = nil
+        DraftStore.shared.cancelSave(owner: uploadOwnerId)
         text = ""
-        DraftStore.shared.setDraft("", for: destination, account: store.accountId)
+        switch mode {
+        case .fixed:
+            DraftStore.shared.setDraft("", for: destination, account: store.accountId)
+        case .channel(let streamId):
+            DraftStore.shared.setChannelDraft(nil, streamId: streamId, account: store.accountId)
+            // The next message's topic follows the feed again.
+            topicPinnedByReply = false
+        }
         // Keep composing: submit otherwise resigns focus (dropping the
         // keyboard on iOS) after every message.
         messageFocused = true
@@ -1393,33 +1524,23 @@ extension ComposeListIndent {
 }
 
 extension View {
-    /// The floating-bar glass treatment for compose chrome; material
-    /// fallback pre-26.
+    /// The floating-bar glass treatment for compose chrome.
     @ViewBuilder
     func composeGlass(in shape: some Shape) -> some View {
         #if os(visionOS)
         // No glassEffect on visionOS — material is the native look there.
         background(.regularMaterial, in: shape)
         #else
-        if #available(iOS 26.0, macOS 26.0, *) {
-            glassEffect(.regular, in: shape)
-        } else {
-            background(.regularMaterial, in: shape)
-        }
+        glassEffect(.regular, in: shape)
         #endif
     }
 
     /// `composeGlass` in a rectangle whose corners are concentric with the
-    /// window's or display's on 26 and later — the pill sitting in an
-    /// iPhone's bottom corner follows its curve as it grows — never
-    /// tighter than `minimumRadius`.
-    @ViewBuilder
+    /// window's or display's — the pill sitting in an iPhone's bottom
+    /// corner follows its curve as it grows — never tighter than
+    /// `minimumRadius`.
     func concentricComposeGlass(minimumRadius: CGFloat) -> some View {
-        if #available(iOS 26, macOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
-            composeGlass(in: ConcentricRectangle(corners: .concentric(minimum: .fixed(minimumRadius))))
-        } else {
-            composeGlass(in: RoundedRectangle(cornerRadius: minimumRadius))
-        }
+        composeGlass(in: ConcentricRectangle(corners: .concentric(minimum: .fixed(minimumRadius))))
     }
 
     /// The HIG's 44pt minimum tap target on iOS; unchanged under a
@@ -1433,6 +1554,18 @@ extension View {
         frame(minWidth: 44, minHeight: 44)
             .contentShape(.rect)
         #endif
+    }
+}
+
+/// Counts a share item's uploads down to the last one.
+@MainActor
+private final class Countdown {
+    private var remaining: Int
+    init(_ count: Int) { remaining = count }
+    /// True on the last tick.
+    func tick() -> Bool {
+        remaining -= 1
+        return remaining == 0
     }
 }
 
