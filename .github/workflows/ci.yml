@@ -13,10 +13,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# The xcode-27 image defaults to Xcode 27.0. Build with 27.1, the Xcode the
-# app is developed on, so CI compiles against the same SDKs.
+# The xcode-27 image defaults to Xcode 27.1. Build with 27.2 (installed on
+# the image), the Xcode the app is developed on, so CI compiles against the
+# same SDKs.
 env:
-  DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+  DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
 
 jobs:
   test:
@@ -27,6 +28,22 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
       - run: swift test --package-path Packages/ZulipKit
+
+  # The generated project is committed; fail when it no longer matches
+  # project.yml (someone edited one without regenerating).
+  project-drift:
+    name: Xcode project matches project.yml
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Regenerate
+        run: xcodegen generate
+      - name: Check for drift
+        run: |
+          git diff --exit-code Zephyr.xcodeproj ||
+            { echo "::error::Zephyr.xcodeproj is out of date — run 'xcodegen generate' and commit"; exit 1; }
 
   build:
     name: Build (${{ matrix.name }})
@@ -39,6 +56,12 @@ jobs:
             destination: generic/platform=macOS
           - name: iOS Simulator
             destination: generic/platform=iOS Simulator
+          - name: visionOS Simulator
+            destination: generic/platform=visionOS Simulator
+          # The tvOS monitor is its own app and scheme (Makefile `tv`).
+          - name: tvOS Simulator
+            scheme: ZephyrTV
+            destination: generic/platform=tvOS Simulator
     steps:
       - uses: actions/checkout@v7
 
@@ -49,7 +72,7 @@ jobs:
         run: |
           xcodebuild build \
             -project Zephyr.xcodeproj \
-            -scheme Zephyr \
+            -scheme '${{ matrix.scheme || 'Zephyr' }}' \
             -configuration Release \
             -destination '${{ matrix.destination }}' \
             CODE_SIGNING_ALLOWED=NO

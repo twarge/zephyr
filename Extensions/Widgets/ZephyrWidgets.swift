@@ -32,8 +32,17 @@ struct UnreadsProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<UnreadsEntry>) -> Void) {
-        let entry = UnreadsEntry(date: .now, summary: UnreadSummary.load())
-        completion(Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(1800))))
+        let summary = UnreadSummary.load()
+        var entries = [UnreadsEntry(date: .now, summary: summary)]
+        // A second entry at the moment the digest goes stale, so the
+        // widget dims on time even if no reload lands then.
+        if let summary {
+            let staleAt = summary.updated.addingTimeInterval(UnreadsWidgetView.staleAfter)
+            if staleAt > .now {
+                entries.append(UnreadsEntry(date: staleAt, summary: summary))
+            }
+        }
+        completion(Timeline(entries: entries, policy: .after(.now.addingTimeInterval(1800))))
     }
 }
 
@@ -41,13 +50,31 @@ struct UnreadsWidgetView: View {
     var entry: UnreadsEntry
     @Environment(\.widgetFamily) private var family
 
+    /// The app rewrites the digest on every unread change while it runs;
+    /// a digest this old means the app hasn't synced (killed, signed out,
+    /// offline), so the counts can't be trusted at a glance.
+    nonisolated static let staleAfter: TimeInterval = 3 * 3600
+
     var body: some View {
         if let summary = entry.summary {
-            switch family {
-            case .systemSmall:
-                small(summary)
-            default:
-                medium(summary)
+            let stale = entry.date.timeIntervalSince(summary.updated) >= Self.staleAfter
+            VStack(alignment: .leading, spacing: 2) {
+                Group {
+                    switch family {
+                    case .systemSmall:
+                        small(summary)
+                    default:
+                        medium(summary)
+                    }
+                }
+                .opacity(stale ? 0.5 : 1)
+                if stale {
+                    Text("Updated \(Text(summary.updated, style: .relative)) ago")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
             }
         } else {
             VStack(spacing: 6) {
@@ -253,6 +280,16 @@ struct ZephyrWidgetBundle: WidgetBundle {
 } timeline: {
     UnreadsEntry(date: .now, summary: UnreadSummary(
         totalUnread: 0, mentions: 0, lines: [], servers: [], updated: .now))
+}
+
+#Preview("Stale", as: .systemMedium) {
+    UnreadsWidget()
+} timeline: {
+    UnreadsEntry(date: .now, summary: UnreadSummary(
+        totalUnread: 12, mentions: 2,
+        lines: [.init(title: "#general › releases", count: 7)],
+        servers: [.init(name: "DC Quantum", unread: 12, mentions: 2)],
+        updated: .now.addingTimeInterval(-5 * 3600)))
 }
 
 #Preview("Small", as: .systemSmall) {

@@ -1,7 +1,8 @@
 # Zephyr — for Zulip
 
 **Zephyr** is a truly native Apple-platform client for [Zulip](https://zulip.com) —
-macOS first, with iOS/iPadOS builds from the same target: a calm two-pane window in the
+macOS first, with iOS/iPadOS and visionOS builds from the same target and a
+read-only tvOS channel monitor: a calm two-pane window in the
 spirit of Apple Messages, with the web app's sidebar concepts (channels, folders,
 topics, views) rendered natively. The name honors Zulip's ancestry in MIT's
 Zephyr messaging system — and a zephyr is a soft, fast breeze, which is the feel the app
@@ -29,11 +30,12 @@ unread with a NEW marker and jump-to-latest; message links (/near/) land on
 and highlight their target. Sign-in supports SSO (Google/GitHub/SAML) via
 the mobile web-auth flow, plus password and manual API key. Topics can be
 muted/followed, polls and to-do lists are interactive, GIFs animate, and a
-Format menu (⌘B/⌘I/⌘K) wraps compose selections in markdown. The Xcode target is now multiplatform — the same
-scheme builds and runs on iOS 18+/iPadOS (Simulator-verified); AppKit-specific
+Format menu (⌘B/⌘I/⌘K) wraps compose selections in markdown. The Xcode target is multiplatform — the same
+scheme builds and runs on macOS 26+, iOS/iPadOS 26+ and visionOS 26+; AppKit-specific
 behavior (Quick Look, popover search, Settings scene, dock badge) is gated behind
-a small `Platform` shim. Remaining before public beta: Developer ID
-signing/notarization (needs the account holder's credentials).
+a small `Platform` shim. A separate `ZephyrTV` scheme builds the tvOS 18+ monitor.
+Share and widget extensions ship on macOS and iOS. Builds go to App Store Connect
+(TestFlight) for iOS and macOS through `.github/workflows/appstore.yml`.
 
 ## Building
 
@@ -41,6 +43,7 @@ Open `Zephyr.xcodeproj` and run the `Zephyr` scheme, or from the command line:
 
 ```bash
 xcodebuild -project Zephyr.xcodeproj -scheme Zephyr build   # the app
+make                                                        # tests + every platform build
 swift test --package-path Packages/ZulipKit                 # package tests
 swift run --package-path Packages/ZulipKit zulip-harness    # headless harness
 ```
@@ -77,7 +80,7 @@ history limits.
 
 ## Ground rules
 
-- Platform: macOS 26+, Swift 6.x, SwiftUI-first (AppKit interop only where measured needs demand it).
+- Platforms: macOS 26+, iOS/iPadOS 26+, visionOS 26+ (tvOS 18+ for the monitor app), Swift 6.x, SwiftUI-first (AppKit interop only where measured needs demand it).
 - Servers: Zulip Server 9.0+ (API feature level 277+), matching zulip-flutter's floor.
 - License: [Apache-2.0](LICENSE) — matching the entire Zulip ecosystem (server, flutter,
   mobile, desktop are all Apache-2.0), so adapting or porting their code is license-clean

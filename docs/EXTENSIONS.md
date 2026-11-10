@@ -21,9 +21,13 @@ Deliberately thin — it never talks to Zulip:
 
 1. The app writes an unread digest (totals, mentions, top conversations
    across all servers) into the group container whenever the badge count
-   changes, then reloads the widget timeline (`WidgetSummaryWriter`).
+   changes, then reloads the widget timeline (`UnreadMirror`). Each row
+   carries an account + conversation key so same-titled conversations on
+   different servers stay distinct.
 2. The widget (`Extensions/Widgets`) renders small/medium views from
-   that digest; the timeline schedule is only a fallback.
+   that digest; the timeline schedule is only a fallback. A digest more
+   than a few hours old (app not running to refresh it) dims and shows
+   how long ago it was updated.
 
 ## Provisioning notes
 

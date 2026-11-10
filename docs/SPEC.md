@@ -40,17 +40,20 @@ Non-goals (initially)
 - Offline-first. Like zulip-flutter today, v1 refetches state on launch; a local message
   cache is a later milestone.
 - Servers older than Zulip 9.0 (feature level 277).
-- iOS/iPadOS. The model packages are kept platform-independent so a port stays possible,
-  but no UI work targets it.
+- (Originally) iOS/iPadOS. The model packages were kept platform-independent so a
+  port stayed possible; the app target has since become multiplatform (§3).
 - Reimplementing Zulip's markdown. We render the server's HTML; we never parse markdown
   ourselves.
 
 ## 3. Platform requirements
 
-- macOS 26 or later (developed on macOS 27 / Xcode 27; deployment target 26 keeps one
-  prior major release covered while allowing the current design language and SwiftUI APIs).
+- macOS 26, iOS/iPadOS 26 and visionOS 26 or later from one multiplatform target, plus a
+  tvOS 18+ read-only monitor app (developed on macOS 27 / Xcode 27; deployment target 26
+  keeps one prior major release covered while allowing the current design language and
+  SwiftUI APIs).
 - Swift 6.x with strict concurrency. SwiftUI app lifecycle.
-- Distribution: Developer ID + notarization first; Mac App Store later if desired.
+- Distribution: App Store Connect (TestFlight / App Store) for iOS and macOS via CI;
+  visionOS upload not yet set up.
   App Sandbox enabled from day one (network client, user-selected file access).
 
 ## 4. Information architecture

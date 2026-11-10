@@ -1,17 +1,18 @@
 # Builds everything Zephyr is: the ZulipKit packages and their tests, and
-# the Mac and iOS apps.
+# the Mac, iOS, visionOS and tvOS apps.
 #
-#   make            everything below
+#   make            test + every platform build (mac ios tv vision)
 #   make test       ZulipKit package tests (model, API, content, math)
 #   make mac        debug app        (make mac-release for optimised)
 #   make ios        simulator build  (make ios-device for a signed device build)
 #   make tv         tvOS monitor app (simulator)
 #   make vision     visionOS build (simulator)
 #   make run        build and launch the Mac app
+#   make perf       run the Mac app in the foreground with perf logging
 #   make generate   regenerate Zephyr.xcodeproj from project.yml (xcodegen)
 #   make clean
 
-.PHONY: all test mac mac-release ios ios-device tv vision run generate clean preclean
+.PHONY: all test mac mac-release ios ios-device tv vision run perf generate clean preclean
 
 all: test mac ios tv vision
 

@@ -6,7 +6,12 @@ nonisolated struct UnreadSummary: Codable, Equatable {
     struct Line: Codable, Equatable, Identifiable {
         var title: String
         var count: Int
-        var id: String { title }
+        /// Account + conversation, so two servers' "#general › releases"
+        /// (or two DMs with same-named people) stay distinct widget rows.
+        /// Optional so files from older apps still decode; those fall back
+        /// to the title.
+        var key: String? = nil
+        var id: String { key ?? title }
     }
 
     /// One server's slice of the digest; the widget shows one row per

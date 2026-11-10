@@ -10,7 +10,7 @@ The section has no refresh control. Live events keep the rows themselves current
 
 `TopicActivityStore` maintains account-scoped activity independently of unread flags, and `TopicActivityIndex` applies red → blue → green precedence. It uses confirmed server messages/reactions, retains pending mentions across relaunch, handles moves/deletes, and prevents stale fetches or model output from restoring removed content. Updates rebuild only affected topics. Edited mentions whose reaction timing cannot be established say “Check response to edited mention.”
 
-`TopicSummaryService` uses Apple's on-device model with a fresh, structured session per generation. It queues one generation at a time across windows, shares duplicate requests, cancels abandoned work, limits input, and caches up to 100 summaries per account using source and version fingerprints. Single messages and unavailable/failed generations use labelled previews. iOS 18–25 retain the Summary list without model generation.
+`TopicSummaryService` uses Apple's on-device model with a fresh, structured session per generation. It queues one generation at a time across windows, shares duplicate requests, cancels abandoned work, limits input, and caches up to 100 summaries per account using source and version fingerprints. Single messages and unavailable/failed generations use labelled previews. Devices without Apple Intelligence (or with the model unavailable) keep the Summary list with message previews.
 
 Discovery is intentionally bounded: up to 1,000 recent messages, up to 1,000 mentions within the initial 30-day lookback, 50 recent messages per visible topic, a separate latest-self-reply query, and at most 60 older mention-target checks per pass. Per-topic checks run four at a time rather than one after another, and cover the rows actually on screen — a sidebar filter can surface a row from past the initial 30. Summary initially displays 30 topics with more available. Partial history is labelled; it is not a guarantee of complete historical coverage. A later message in the same topic counts as participation, not proof that it semantically answers a question. Broadcast/group mentions do not require an individual response.
 
@@ -78,7 +78,7 @@ Reactions contain a user ID but no reaction timestamp. They can establish that a
 | `Packages/ZulipKit/Sources/ZulipModel/MessageDatabase.swift` | Per-account SQLite messages and indexed topic queries | Add bounded activity reads, coverage bookkeeping, and a versioned summary cache |
 | `Packages/ZulipKit/Sources/ZulipContent/ContentParser.swift` and `ContentNodes.swift` | Typed mentions and plain-text extraction | Prepare bounded text off the main actor; preserve speaker/message boundaries and useful code/attachment labels |
 
-Before this change, the app had no Foundation Models integration. The project targets macOS 26 and iOS 18, so iOS retains a non-model path on older systems. The implementation uses the macOS/iOS 26 API surface supported by the installed Xcode 27 beta SDK.
+Before this change, the app had no Foundation Models integration. The project targets macOS 26 and iOS 26, so the Foundation Models API is always present; the non-model path is only for devices where the model is unavailable. The implementation uses the macOS/iOS 26 API surface supported by the Xcode 27 SDK.
 
 Two existing behaviors need particular care:
 

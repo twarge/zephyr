@@ -80,6 +80,17 @@ final class UnreadMirror {
         }
     }
 
+    /// Stable widget-row identity: unique across accounts and
+    /// conversations, unlike the display title.
+    private static func lineKey(_ key: ConversationKey, account: Account.ID) -> String {
+        switch key {
+        case .dm(let participants):
+            "\(account.uuidString)/dm/\(participants)"
+        case .topic(let streamId, let topic):
+            "\(account.uuidString)/topic/\(streamId)/\(topic)"
+        }
+    }
+
     /// Writes the widget's unread digest into the App Group container and
     /// pokes the timeline; a no-op when the App Group isn't provisioned.
     private func writeWidgetSummary(_ global: GlobalStore) {
@@ -101,7 +112,8 @@ final class UnreadMirror {
             for (key, ids) in store.unreads.unreadIds
             where !ids.isEmpty && store.isUnreadVisible(key) {
                 lines.append(UnreadSummary.Line(
-                    title: key.displayTitle(in: store), count: ids.count))
+                    title: key.displayTitle(in: store), count: ids.count,
+                    key: Self.lineKey(key, account: store.accountId)))
             }
         }
         let summary = UnreadSummary(
