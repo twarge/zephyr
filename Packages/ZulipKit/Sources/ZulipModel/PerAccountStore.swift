@@ -38,6 +38,15 @@ public final class PerAccountStore {
     /// change still queued for replay.
     public internal(set) var serverEnterSends: Bool?
 
+    /// Delete permissions as of the snapshot (not kept live by events; the
+    /// server has the final say).
+    @ObservationIgnored let isAdmin: Bool
+    /// Every group the user belongs to, through subgroups too.
+    @ObservationIgnored let selfGroupIds: Set<Int>
+    @ObservationIgnored let canDeleteAnyMessageGroup: GroupSettingValue?
+    @ObservationIgnored let canDeleteOwnMessageGroup: GroupSettingValue?
+    @ObservationIgnored let messageDeleteLimitSeconds: Int?
+
     public internal(set) var realmName: String?
     /// The realm's square icon (absolute, or relative to the realm URL).
     public internal(set) var realmIconUrl: String?
@@ -217,6 +226,12 @@ public final class PerAccountStore {
         zulipFeatureLevel = snapshot.zulipFeatureLevel
         eventQueueLongpollTimeoutSeconds = snapshot.eventQueueLongpollTimeoutSeconds ?? 90
         serverEnterSends = snapshot.userSettings?.enterSends
+        isAdmin = snapshot.isAdmin ?? false
+        selfGroupIds = Self.groupIds(
+            containing: account.userId, in: snapshot.realmUserGroups ?? [])
+        canDeleteAnyMessageGroup = snapshot.realmCanDeleteAnyMessageGroup
+        canDeleteOwnMessageGroup = snapshot.realmCanDeleteOwnMessageGroup
+        messageDeleteLimitSeconds = snapshot.realmMessageContentDeleteLimitSeconds
         realmName = snapshot.realmName
         realmIconUrl = snapshot.realmIconUrl
         starredMessageIds = Set(snapshot.starredMessages ?? [])
