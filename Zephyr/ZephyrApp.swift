@@ -19,6 +19,9 @@ struct ZephyrApp: App {
         AppModel.prefetchLaunch()
         // One tip per week at most, app-wide: discovery without fatigue.
         try? Tips.configure([.displayFrequency(.weekly)])
+        // Preferences made on another device arrive before the first view
+        // reads them.
+        SettingsSync.shared.start()
         PerfLog.startWatchdogIfEnabled()
         PerfLog.mark("app init")
     }

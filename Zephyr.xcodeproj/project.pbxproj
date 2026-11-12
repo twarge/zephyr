@@ -104,6 +104,7 @@
 		AF6DDD06AC6862D3BFFF3679 /* ActionFailureBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F5A3CB6B68412ECE38BF67 /* ActionFailureBanner.swift */; };
 		B1054F65A0FA0D40D60D9523 /* FeedWarmCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B107C9FA821BCB2E527459E9 /* FeedWarmCache.swift */; };
 		B25F5C4B54A1AD406C201ECB /* ZephyrIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14B376B2915109D9F3810E20 /* ZephyrIntents.swift */; };
+		B5DBF438BB18F68A4C288BA1 /* SettingsSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EEDBBC501F4DB05BCAED367 /* SettingsSync.swift */; };
 		B75B56CFB610BB5B7F772286 /* simple.caf in Resources */ = {isa = PBXBuildFile; fileRef = E6EED98E6E76B25A015B80F0 /* simple.caf */; };
 		B8CB761D6FE61F47C1E0FCBC /* ZephyrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066FAF47CC310A2445AAB0A9 /* ZephyrApp.swift */; };
 		B97056A0F86D718EC7C1A28A /* SummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A0AA221515FD4C19AD8224 /* SummaryView.swift */; };
@@ -194,6 +195,7 @@
 		3B2CA9D7CF1C06AA7B0A1D52 /* MainSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainSplitView.swift; sourceTree = "<group>"; };
 		3D409AD6B2CC607462E58207 /* ZephyrWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZephyrWidgets.swift; sourceTree = "<group>"; };
 		3EB76EF56B6EBF97111AFB8C /* flute.caf */ = {isa = PBXFileReference; path = flute.caf; sourceTree = "<group>"; };
+		3EEDBBC501F4DB05BCAED367 /* SettingsSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSync.swift; sourceTree = "<group>"; };
 		3F4611B74F89FA03A6C524C9 /* DraftSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftSync.swift; sourceTree = "<group>"; };
 		3FE462CABA8309A90FD3A747 /* PDFAttachmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFAttachmentView.swift; sourceTree = "<group>"; };
 		4093541134383EBC6243F280 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
@@ -460,6 +462,7 @@
 				C391C25A76B13BD0D05B8706 /* NotificationManager.swift */,
 				37E26CC20F2298B58C015538 /* PerfLog.swift */,
 				4D9C40C777893FC7275F955B /* Platform.swift */,
+				3EEDBBC501F4DB05BCAED367 /* SettingsSync.swift */,
 				383D9B2804463933C35C53C5 /* ShareInboxSignal.swift */,
 				2AB37CBF3789C6E2854F3632 /* Tips.swift */,
 				0FA4E5D37553DA7CA7D98DE9 /* TopicSummaryService.swift */,
@@ -762,6 +765,7 @@
 				5778BC649C0BB255015B12CC /* RemindersView.swift in Sources */,
 				7BFEB47B6DCAC3AD9BCA6C35 /* Search.swift in Sources */,
 				95F2A1AEDE57739D7E02B401 /* ServerMenu.swift in Sources */,
+				B5DBF438BB18F68A4C288BA1 /* SettingsSync.swift in Sources */,
 				0A7AFFF808844CC0EE4BE1EE /* SettingsView.swift in Sources */,
 				7CA83B9202B397D38737BD29 /* ShareInbox.swift in Sources */,
 				5AB200E3F147D07F5BBB0B20 /* ShareInboxSignal.swift in Sources */,
@@ -1015,6 +1019,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				CODE_SIGN_ENTITLEMENTS = Support/ZephyrTV.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1041,6 +1046,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				CODE_SIGN_ENTITLEMENTS = Support/ZephyrTV.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;

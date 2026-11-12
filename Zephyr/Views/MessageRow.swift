@@ -680,13 +680,20 @@ struct MessageRow: View {
                     interaction.showMoveSheet = true
                 }
             }
-            if message.senderId == store.selfUserId {
+            let isOwn = message.senderId == store.selfUserId
+            // Others' messages too, for those the realm or channel lets.
+            let canDelete = store.canDeleteMessage(message)
+            if isOwn || canDelete {
                 Divider()
-                Button("Edit Message", systemImage: "pencil") {
-                    keys.beginInlineEdit(message.id)
+                if isOwn {
+                    Button("Edit Message", systemImage: "pencil") {
+                        keys.beginInlineEdit(message.id)
+                    }
                 }
-                Button("Delete Message", systemImage: "trash", role: .destructive) {
-                    store.deleteMessage(message.id)
+                if canDelete {
+                    Button("Delete Message", systemImage: "trash", role: .destructive) {
+                        store.deleteMessage(message.id)
+                    }
                 }
             }
         

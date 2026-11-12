@@ -34,7 +34,12 @@ Format menu (⌘B/⌘I/⌘K) wraps compose selections in markdown. The Xcode tar
 scheme builds and runs on macOS 26+, iOS/iPadOS 26+ and visionOS 26+; AppKit-specific
 behavior (Quick Look, popover search, Settings scene, dock badge) is gated behind
 a small `Platform` shim. A separate `ZephyrTV` scheme builds the tvOS 18+ monitor.
-Share and widget extensions ship on macOS and iOS. Builds go to App Store Connect
+Share and widget extensions ship on macOS and iOS. Preferences that describe
+the person rather than the device (badge policy, sounds, sidebar order, send
+key) sync between devices through iCloud's key-value store
+(`Zephyr/SettingsSync.swift`); the App IDs `com.twarge.zephyr` and
+`com.twarge.zephyr.tv` need the iCloud capability with key-value storage, and
+the tvOS monitor prefills its server and email from the same store. Builds go to App Store Connect
 (TestFlight) for iOS and macOS through `.github/workflows/appstore.yml`.
 
 ## Building

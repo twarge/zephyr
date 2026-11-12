@@ -48,6 +48,16 @@ public struct InitialSnapshot: Decodable, Sendable {
     public var realmEmoji: [String: RealmEmojiItem]?
     /// The user's personal settings (the `user_settings_object` shape).
     public var userSettings: UserSettings?
+
+    /// Whether the user is an organization administrator.
+    public var isAdmin: Bool?
+    public var realmUserGroups: [UserGroup]?
+    /// Who may delete any message / their own messages (Zulip 10+).
+    public var realmCanDeleteAnyMessageGroup: GroupSettingValue?
+    public var realmCanDeleteOwnMessageGroup: GroupSettingValue?
+    /// How long after sending one's own message stays deletable; null is
+    /// no limit.
+    public var realmMessageContentDeleteLimitSeconds: Int?
 }
 
 /// The `user_settings` register object; only the settings the app reads

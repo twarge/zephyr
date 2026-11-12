@@ -111,6 +111,40 @@ extension PerAccountStore {
         notifyFlagsChanged(setFlagInMemory(flag, isSet, ids: [messageId]))
     }
 
+    /// Whether the server would let the user delete this message (the web
+    /// app's rule): anyone with the realm's or the channel's delete-any
+    /// permission; otherwise the sender, when allowed to delete their own
+    /// and within the realm's time limit.
+    public func canDeleteMessage(_ message: Message, now: Date = .now) -> Bool {
+        func holds(_ setting: GroupSettingValue?) -> Bool? {
+            setting?.contains(userId: selfUserId, groupIds: selfGroupIds)
+        }
+        let channel = message.streamId.flatMap { channels[$0] }
+        // Servers without the group setting let administrators delete.
+        if holds(canDeleteAnyMessageGroup) ?? isAdmin { return true }
+        if holds(channel?.canDeleteAnyMessageGroup) == true { return true }
+        guard message.senderId == selfUserId else { return false }
+        guard holds(canDeleteOwnMessageGroup) ?? true
+            || holds(channel?.canDeleteOwnMessageGroup) == true
+        else { return false }
+        guard let limit = messageDeleteLimitSeconds else { return true }
+        return now.timeIntervalSince1970 - TimeInterval(message.timestamp) <= TimeInterval(limit)
+    }
+
+    static func groupIds(containing userId: Int, in groups: [UserGroup]) -> Set<Int> {
+        var ids = Set(groups.filter { $0.members?.contains(userId) == true }.map(\.id))
+        var grew = true
+        while grew {
+            grew = false
+            for group in groups where !ids.contains(group.id)
+                && !ids.isDisjoint(with: group.directSubgroupIds ?? []) {
+                ids.insert(group.id)
+                grew = true
+            }
+        }
+        return ids
+    }
+
     public func deleteMessage(_ messageId: Int) {
         // Not optimistic: the delete event removes it.
         runAction("Couldn't delete the message") { connection in

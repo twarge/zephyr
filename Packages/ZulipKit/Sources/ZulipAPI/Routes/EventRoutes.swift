@@ -41,6 +41,7 @@ extension ApiConnection {
         "realm", "realm_user", "stream", "subscription", "message",
         "update_message_flags", "recent_private_conversations", "channel_folders",
         "realm_emoji", "user_topic", "drafts", "starred_messages", "user_settings",
+        "realm_user_groups",
     ]
 
     /// POST /register — creates the event queue and returns the initial

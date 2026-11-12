@@ -11,6 +11,10 @@ public struct ZulipStream: Decodable, Sendable, Hashable, Identifiable {
     public var isArchived: Bool?
     /// The channel folder this channel is filed under (Zulip 12+), if any.
     public var folderId: Int?
+    /// Per-channel grants on top of the realm's delete permissions
+    /// (Zulip 11+).
+    public var canDeleteAnyMessageGroup: GroupSettingValue?
+    public var canDeleteOwnMessageGroup: GroupSettingValue?
 
     public var id: Int { streamId }
 }
