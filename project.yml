@@ -152,6 +152,8 @@ targets:
         DEVELOPMENT_TEAM: 257KW9ZJFP
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: Apple Development
+        # The main app's iCloud key-value store, read to prefill sign-in.
+        CODE_SIGN_ENTITLEMENTS: Support/ZephyrTV.entitlements
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         SWIFT_VERSION: "6.0"

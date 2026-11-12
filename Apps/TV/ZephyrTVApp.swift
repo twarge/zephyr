@@ -231,6 +231,10 @@ struct TVRootView: View {
 
 /// Sign-in with the TV keyboard: server, email, API key (Personal
 /// settings → Account & privacy in the web app).
+/// With nothing saved here, the server and email come from the account
+/// that's front in Zephyr on the user's other devices (it publishes them
+/// to iCloud's key-value store; see SettingsSync there). The key is
+/// always typed.
 private struct TVSetupView: View {
     let error: String?
 
@@ -238,6 +242,14 @@ private struct TVSetupView: View {
     @State private var realm = ""
     @State private var email = ""
     @State private var apiKey = ""
+
+    /// Fills only fields still empty: never over what was saved or typed.
+    private func prefillFromCloud() {
+        let cloud = NSUbiquitousKeyValueStore.default
+        cloud.synchronize()
+        if realm.isEmpty { realm = cloud.string(forKey: "activeAccountRealm") ?? "" }
+        if email.isEmpty { email = cloud.string(forKey: "activeAccountEmail") ?? "" }
+    }
 
     var body: some View {
         VStack(spacing: 24) {
@@ -269,6 +281,13 @@ private struct TVSetupView: View {
         .onAppear {
             realm = session.savedRealm
             email = session.savedEmail
+            prefillFromCloud()
+        }
+        // A first launch usually asks before iCloud has delivered.
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSUbiquitousKeyValueStore.didChangeExternallyNotification
+        ).receive(on: RunLoop.main)) { _ in
+            prefillFromCloud()
         }
     }
 }
