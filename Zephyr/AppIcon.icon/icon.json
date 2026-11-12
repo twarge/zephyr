@@ -1,0 +1,67 @@
+{
+  "fill" : {
+    "linear-gradient" : [
+      "extended-srgb:0.16000,0.55000,0.94000,1.00000",
+      "extended-srgb:0.05000,0.16000,0.45000,1.00000"
+    ]
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "linear-gradient" : [
+                  "extended-srgb:0.36000,0.72000,1.00000,1.00000",
+                  "extended-srgb:0.14000,0.50000,0.96000,1.00000"
+                ]
+              }
+            }
+          ],
+          "image-name" : "Bars.svg",
+          "name" : "Bars"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    },
+    {
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "linear-gradient" : [
+                  "extended-srgb:0.16000,0.50000,0.92000,1.00000",
+                  "extended-srgb:0.09000,0.36000,0.80000,1.00000"
+                ]
+              }
+            }
+          ],
+          "image-name" : "Diagonal.svg",
+          "name" : "Diagonal"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : "shared"
+  }
+}

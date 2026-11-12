@@ -90,6 +90,7 @@
 		8F49328DDC70D304E6FE4130 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4093541134383EBC6243F280 /* ShareViewController.swift */; };
 		90244AA61E53F58A6D9AA222 /* OpenQuicklyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149499DA07B92E143F965C6C /* OpenQuicklyView.swift */; };
 		9511713F095ADB5FAF8E1593 /* MessageWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A9D3BF54DFEC837205E851 /* MessageWidgetView.swift */; };
+		9569F50E12630A13AFA25167 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = EE49E7F4743C2CA87DF04A52 /* AppIcon.icon */; };
 		95F2A1AEDE57739D7E02B401 /* ServerMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0DFED6E42976A49655B33E /* ServerMenu.swift */; };
 		9890C37B9865F39B29EDF88D /* DraftSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4611B74F89FA03A6C524C9 /* DraftSync.swift */; };
 		9C2971F9C1F755CB722B43E8 /* MainSplitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B2CA9D7CF1C06AA7B0A1D52 /* MainSplitView.swift */; };
@@ -263,6 +264,7 @@
 		EA7D20039E56D8827E440B26 /* dry-bongos.caf */ = {isa = PBXFileReference; path = "dry-bongos.caf"; sourceTree = "<group>"; };
 		EB17EEBDB19FF3009FCAE881 /* double-tap.caf */ = {isa = PBXFileReference; path = "double-tap.caf"; sourceTree = "<group>"; };
 		EC11E5BCCDABAA47341BC0CA /* MessageActionSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageActionSheets.swift; sourceTree = "<group>"; };
+		EE49E7F4743C2CA87DF04A52 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		EECAC04CBF82BDB6A77ECFBC /* MessageRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRow.swift; sourceTree = "<group>"; };
 		EEE9158338E0B99634AC353C /* zulip.caf */ = {isa = PBXFileReference; path = zulip.caf; sourceTree = "<group>"; };
 		F00DE0B89D6F63C668A362A9 /* dutdut.caf */ = {isa = PBXFileReference; path = dutdut.caf; sourceTree = "<group>"; };
@@ -443,6 +445,7 @@
 		92C0E649E05F5CFF221ED566 /* Zephyr */ = {
 			isa = PBXGroup;
 			children = (
+				EE49E7F4743C2CA87DF04A52 /* AppIcon.icon */,
 				7106DB9D273F41FC9FE36ABF /* AppModel.swift */,
 				232E47A83B732D68F7D53F8A /* AppStateStore.swift */,
 				823C14D4494BFA81F9DE3F8E /* Assets.xcassets */,
@@ -645,6 +648,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9569F50E12630A13AFA25167 /* AppIcon.icon in Resources */,
 				1A4EA966BF8059788CD35F91 /* Assets.xcassets in Resources */,
 				0AE73DBABDCAAB1B4462D8C7 /* ascend.caf in Resources */,
 				D70C892436AB4BEAAF91A8C0 /* beep-boop.caf in Resources */,

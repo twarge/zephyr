@@ -37,6 +37,7 @@ zulip-macos/
 │                        # Zephyr/ are picked up automatically; shared Zephyr scheme)
 ├── Zephyr/              # the macOS app target (SwiftUI) — thin: UI + platform glue
 │   ├── ZephyrApp.swift / ContentView.swift   (M1: sidebar, transcript, compose)
+│   ├── AppIcon.icon                          (Icon Composer; Design/AppIconGenerator.swift)
 │   ├── Assets.xcassets
 │   └── Zephyr.entitlements                   (sandbox + network client)
 ├── Packages/ZulipKit/   # one SwiftPM package, several targets

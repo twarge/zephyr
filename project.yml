@@ -4,6 +4,11 @@
 name: Zephyr
 options:
   createIntermediateGroups: true
+  # XcodeGen types the Icon Composer bundle (Zephyr/AppIcon.icon)
+  # `wrapper.icon`; Xcode itself writes `folder.iconcomposer.icon`.
+  postGenCommand: >-
+    sed -i '' 's/lastKnownFileType = wrapper\.icon;/lastKnownFileType = folder.iconcomposer.icon;/'
+    Zephyr.xcodeproj/project.pbxproj
 
 packages:
   ZulipKit:
