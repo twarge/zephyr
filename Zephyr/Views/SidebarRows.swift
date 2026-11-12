@@ -299,6 +299,20 @@ private var stateIconFont: Font {
     #endif
 }
 
+/// The far-trailing column shared by a channel's disclosure chevron and
+/// its topics' followed icon, so the two stack on one centerline (and the
+/// unread counts beside them line up too).
+private enum TrailingColumn {
+    #if os(macOS)
+    static let width: CGFloat = 26
+    /// Clear of the overlay scroller, which wins clicks while visible.
+    static let inset: CGFloat = 8
+    #else
+    static let width: CGFloat = 44
+    static let inset: CGFloat = 0
+    #endif
+}
+
 /// Web-style channel row: disclosure triangle for inline topics, colored
 /// type glyph (globe/lock/#), name, badge.
 struct ChannelRow: View {
@@ -358,12 +372,12 @@ struct ChannelRow: View {
                         #if os(macOS)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
-                        .frame(width: 26, height: 26)
-                        .padding(.trailing, 8)
+                        .frame(width: TrailingColumn.width, height: 26)
+                        .padding(.trailing, TrailingColumn.inset)
                         #else
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: 44, height: 28)
+                        .frame(width: TrailingColumn.width, height: 28)
                         #endif
                         .contentShape(.rect)
                 }
@@ -486,14 +500,6 @@ struct SidebarTopicRow: View {
             }
             Spacer(minLength: 4)
             // State icons trail, like the channel lock.
-            if visibility == .followed {
-                Image(systemName: "plus.message.fill")
-                    .font(stateIconFont)
-                    .foregroundStyle(.tint)
-                    .help("Followed topic — new messages notify you")
-                    .popoverTip(TopicStateIconsTip())
-                    .dimsWhenWindowInactive()
-            }
             if TopicName.isResolved(topic.name) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(stateIconFont)
@@ -511,6 +517,23 @@ struct SidebarTopicRow: View {
             } else if unreadCount > 0 {
                 CountBadge(count: unreadCount)
             }
+            // The followed icon sits under the channel's chevron; the
+            // column is reserved either way so counts stay aligned. The
+            // leading 2pt makes up this row's tighter HStack spacing.
+            Group {
+                if visibility == .followed {
+                    Image(systemName: "plus.message")
+                        .font(stateIconFont)
+                        .foregroundStyle(.secondary)
+                        .help("Followed topic — new messages notify you")
+                        .popoverTip(TopicStateIconsTip())
+                } else {
+                    Color.clear.frame(height: 1)
+                }
+            }
+            .frame(width: TrailingColumn.width)
+            .padding(.leading, 2)
+            .padding(.trailing, TrailingColumn.inset)
         }
         .sidebarRowPadding()
         .opacity(visibility == .muted ? 0.5 : 1)

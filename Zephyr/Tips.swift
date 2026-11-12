@@ -43,7 +43,7 @@ struct TopicStateIconsTip: Tip {
     var message: Text? {
         Text("The bubble marks a followed topic (its messages notify you); the check marks a resolved one. Right-click any topic to follow, mute, or unfollow.")
     }
-    var image: Image? { Image(systemName: "plus.message.fill") }
+    var image: Image? { Image(systemName: "plus.message") }
 }
 
 /// After a few launches: sidebar entries detach into their own windows.
