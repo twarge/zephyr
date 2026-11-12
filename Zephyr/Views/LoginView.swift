@@ -84,7 +84,7 @@ struct LoginView: View {
                 .frame(width: 320)
                 .textContentType(.URL)
                 .autocorrectionDisabled()
-                #if os(iOS)
+                #if os(iOS) || os(visionOS)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 #endif
@@ -155,7 +155,7 @@ struct LoginView: View {
                     // Keychain/Passwords AutoFill offers saved credentials.
                     .textContentType(.username)
                     .autocorrectionDisabled()
-                    #if os(iOS)
+                    #if os(iOS) || os(visionOS)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     #endif
