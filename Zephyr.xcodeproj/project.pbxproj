@@ -24,6 +24,7 @@
 		1A4EA966BF8059788CD35F91 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 823C14D4494BFA81F9DE3F8E /* Assets.xcassets */; };
 		1A5C0D7A677635D80BAEB8AF /* subtle.caf in Resources */ = {isa = PBXBuildFile; fileRef = 614125F07250A88402C829FC /* subtle.caf */; };
 		1AE3AE11D1DB4D8E6A2989F6 /* metallic-snare.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7D1F088EE7420CC146154DA0 /* metallic-snare.caf */; };
+		1CCB3E598BBFA9F02907C3BC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B2D4EE732946FF4036F09E16 /* Assets.xcassets */; };
 		1D0991D258A815D58E05072B /* brlip.caf in Resources */ = {isa = PBXBuildFile; fileRef = F41B00308415C5B86F6A67A6 /* brlip.caf */; };
 		2073F5351110EED0C754E632 /* bink.caf in Resources */ = {isa = PBXBuildFile; fileRef = 45EB0B12D307818253590CD2 /* bink.caf */; };
 		217DBDEDF8373C7091CABD27 /* ZephyrShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D037A907658BA511667CA882 /* ZephyrShare.appex */; platformFilters = (ios, macos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -239,6 +240,7 @@
 		AD6E84868E4713FC5F20FD6B /* Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Support.swift; sourceTree = "<group>"; };
 		B107C9FA821BCB2E527459E9 /* FeedWarmCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedWarmCache.swift; sourceTree = "<group>"; };
 		B14E58E8A10C3B888496FBF2 /* NewConversationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewConversationSheet.swift; sourceTree = "<group>"; };
+		B2D4EE732946FF4036F09E16 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B3DE1BF62B17524C6708A0DA /* ConversationHeaderRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationHeaderRow.swift; sourceTree = "<group>"; };
 		BC85F6AA56F7EF9105F7742E /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
 		BDACB22A7E4B4F5FE5785459 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -303,6 +305,7 @@
 		0FDB59F09BF257593462A3E5 /* TV */ = {
 			isa = PBXGroup;
 			children = (
+				B2D4EE732946FF4036F09E16 /* Assets.xcassets */,
 				2DD1BDF55A7E32CD00071C8B /* TVMonitorView.swift */,
 				7EC76EB5F5AC4DBFA4F47ED0 /* ZephyrTVApp.swift */,
 			);
@@ -575,6 +578,7 @@
 			buildConfigurationList = 9E3632A3AD938A80BB294B23 /* Build configuration list for PBXNativeTarget "ZephyrTV" */;
 			buildPhases = (
 				CF42B7AD7DD4FF919749C127 /* Sources */,
+				A8C116975F4FE2AF1EEB7C27 /* Resources */,
 				9ACDB6EAE4C7EDCB7B69FAA8 /* Frameworks */,
 			);
 			buildRules = (
@@ -681,6 +685,14 @@
 				EA33709D514C5FECCC52FAE4 /* zaping.caf in Resources */,
 				3D277D50C608D99C1DD944FD /* zing.caf in Resources */,
 				53A125FBCFA71A5E72A0D37B /* zulip.caf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A8C116975F4FE2AF1EEB7C27 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1CCB3E598BBFA9F02907C3BC /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

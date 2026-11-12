@@ -231,6 +231,6 @@ feature, not as a later pass.
    energy/App Store implications; revisit at M3.
 2. **Mac App Store** — sandbox is compatible, but web-auth flow and Sparkle-vs-MAS
    updating differ; decide at M3.
-3. ~~**App icon**~~ — resolved: a bold rounded Z on a blue gradient, a layered Icon
-   Composer icon generated from code (`Design/AppIconGenerator.swift` is the source of
-   truth).
+3. ~~**App icon**~~ — resolved: a bold rounded Z on a blue gradient, generated from code
+   (`Design/AppIconGenerator.swift` is the source of truth): a layered Icon Composer icon
+   on macOS and iOS, layered image stacks on visionOS and tvOS.
