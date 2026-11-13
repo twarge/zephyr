@@ -68,6 +68,17 @@ struct CredentialStoreTests {
         #expect(backend.legacy.isEmpty)
     }
 
+    /// Signing in: dropping the legacy copy after a write must not take
+    /// the new item with it (a query that doesn't name a keychain deletes
+    /// from both).
+    @Test func savedKeyReadsBack() throws {
+        let backend = FakeKeychain()
+        let store = backend.store()
+        try store.setAPIKey("k", realmURL: realm, email: email)
+        #expect(backend.modern == ["k"])
+        #expect(try store.apiKey(realmURL: realm, email: email) == "k")
+    }
+
     @Test func signOutClearsBothKeychains() throws {
         let backend = FakeKeychain()
         backend.seed(legacy: "old-key")
@@ -88,66 +99,94 @@ struct CredentialStoreTests {
     }
 }
 
-/// Two dictionaries standing in for the two macOS keychains, picked by
-/// kSecUseDataProtectionKeychain. Single-account, which is all the tests need.
+/// Two slots standing in for the two macOS keychains, routed the way
+/// SecItem routes a query there: an explicit kSecUseDataProtectionKeychain
+/// picks one keychain, and a query WITHOUT the key reaches both for reads,
+/// updates and deletes (only an add defaults to the file-based one).
+/// Single-account, which is all the tests need.
 private final class FakeKeychain: KeychainBackend, @unchecked Sendable {
+    private enum Slot { case modern, legacy }
+
     private let lock = NSLock()
-    private var items: [Bool: String] = [:]
+    private var items: [Slot: String] = [:]
     var missingEntitlement = false
     var failModernAdd: OSStatus?
     var failLegacyDelete: OSStatus?
 
-    var modern: [String] { lock.withLock { items[true].map { [$0] } ?? [] } }
-    var legacy: [String] { lock.withLock { items[false].map { [$0] } ?? [] } }
+    var modern: [String] { lock.withLock { items[.modern].map { [$0] } ?? [] } }
+    var legacy: [String] { lock.withLock { items[.legacy].map { [$0] } ?? [] } }
 
-    func seed(legacy value: String) { lock.withLock { items[false] = value } }
-    func seed(modern value: String) { lock.withLock { items[true] = value } }
+    func seed(legacy value: String) { lock.withLock { items[.legacy] = value } }
+    func seed(modern value: String) { lock.withLock { items[.modern] = value } }
 
     func store() -> KeychainCredentialStore {
         KeychainCredentialStore(service: "test", backend: self, usesDataProtectionMigration: true)
     }
 
-    private func isModern(_ query: [String: Any]) -> Bool {
-        query[kSecUseDataProtectionKeychain as String] as? Bool == true
+    /// The keychains a read, update or delete reaches, or the entitlement
+    /// error when it asks for the data-protection one alone and can't have
+    /// it (asked for both, that half is skipped — as SecItem does).
+    private func slots(_ query: [String: Any]) -> Result<[Slot], KeychainError> {
+        switch query[kSecUseDataProtectionKeychain as String] as? Bool {
+        case true?:
+            missingEntitlement
+                ? .failure(KeychainError(status: errSecMissingEntitlement)) : .success([.modern])
+        case false?:
+            .success([.legacy])
+        case nil:
+            .success(missingEntitlement ? [.legacy] : [.modern, .legacy])
+        }
     }
 
     func copyData(_ query: [String: Any]) -> (OSStatus, Data?) {
-        let modern = isModern(query)
-        if modern && missingEntitlement { return (errSecMissingEntitlement, nil) }
-        return lock.withLock {
-            items[modern].map { (errSecSuccess, Data($0.utf8)) } ?? (errSecItemNotFound, nil)
+        switch slots(query) {
+        case .failure(let error):
+            return (error.status, nil)
+        case .success(let slots):
+            return lock.withLock {
+                slots.lazy.compactMap { self.items[$0] }.first
+                    .map { (errSecSuccess, Data($0.utf8)) } ?? (errSecItemNotFound, nil)
+            }
         }
     }
 
     func add(_ attributes: [String: Any]) -> OSStatus {
-        let modern = isModern(attributes)
+        let modern = attributes[kSecUseDataProtectionKeychain as String] as? Bool == true
         if modern && missingEntitlement { return errSecMissingEntitlement }
         if modern, let failModernAdd { return failModernAdd }
+        let slot: Slot = modern ? .modern : .legacy
         let value = String(decoding: attributes[kSecValueData as String] as! Data, as: UTF8.self)
         return lock.withLock {
-            if items[modern] != nil { return errSecDuplicateItem }
-            items[modern] = value
+            if items[slot] != nil { return errSecDuplicateItem }
+            items[slot] = value
             return errSecSuccess
         }
     }
 
     func update(_ query: [String: Any], _ attributes: [String: Any]) -> OSStatus {
-        let modern = isModern(query)
-        if modern && missingEntitlement { return errSecMissingEntitlement }
         let value = String(decoding: attributes[kSecValueData as String] as! Data, as: UTF8.self)
-        return lock.withLock {
-            guard items[modern] != nil else { return errSecItemNotFound }
-            items[modern] = value
-            return errSecSuccess
+        switch slots(query) {
+        case .failure(let error):
+            return error.status
+        case .success(let slots):
+            return lock.withLock {
+                let present = slots.filter { items[$0] != nil }
+                for slot in present { items[slot] = value }
+                return present.isEmpty ? errSecItemNotFound : errSecSuccess
+            }
         }
     }
 
     func delete(_ query: [String: Any]) -> OSStatus {
-        let modern = isModern(query)
-        if modern && missingEntitlement { return errSecMissingEntitlement }
-        if !modern, let failLegacyDelete { return failLegacyDelete }
-        return lock.withLock {
-            items.removeValue(forKey: modern) == nil ? errSecItemNotFound : errSecSuccess
+        switch slots(query) {
+        case .failure(let error):
+            return error.status
+        case .success(let slots):
+            if slots.contains(.legacy), let failLegacyDelete { return failLegacyDelete }
+            return lock.withLock {
+                let removed = slots.filter { items.removeValue(forKey: $0) != nil }
+                return removed.isEmpty ? errSecItemNotFound : errSecSuccess
+            }
         }
     }
 }
