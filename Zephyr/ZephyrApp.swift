@@ -39,6 +39,14 @@ struct ZephyrApp: App {
                 #endif
         }
         .commands { accountCommands }
+        #if os(macOS)
+        // A window that opens on the sign-in form is made at the form's
+        // size — SwiftUI's stock 900×450 is too short for the credentials
+        // step. One that opens on a server keeps the system's default.
+        .defaultWindowPlacement { _, _ in
+            WindowPlacement(size: model.phase.needsAccount ? LoginView.windowSize : nil)
+        }
+        #endif
         // Double-clicked sidebar entries open a fresh main window with the
         // sidebar collapsed (macOS and iPadOS both support multiple scenes).
         WindowGroup(for: DetachedWindow.self) { $window in
@@ -335,11 +343,46 @@ extension ZephyrApp {
     }
 }
 
+#if os(macOS)
+private extension NSWindow {
+    /// Grows the window to at least `size`, about its top center and kept
+    /// on its screen. A window already that large is left alone.
+    func grow(toAtLeast size: CGSize) {
+        var target = frame
+        target.size.width = max(target.width, size.width)
+        target.size.height = max(target.height, size.height)
+        if let visible = screen?.visibleFrame {
+            target.size.width = min(target.width, visible.width)
+            target.size.height = min(target.height, visible.height)
+        }
+        guard target.size != frame.size else { return }
+        target.origin.x = frame.midX - target.width / 2
+        target.origin.y = frame.maxY - target.height
+        if let visible = screen?.visibleFrame {
+            target.origin.x = min(max(target.minX, visible.minX), visible.maxX - target.width)
+            target.origin.y = min(max(target.minY, visible.minY), visible.maxY - target.height)
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            animator().setFrame(target, display: true)
+        }
+    }
+}
+#endif
+
 /// View-menu text sizing: steps map onto Dynamic Type sizes (0 is the
 /// system default).
 struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
+    #if os(macOS)
+    /// The window while it shows the sign-in form: signing in grows it
+    /// into a main window.
+    @State private var signInWindow: NSWindow?
+    /// What a sign-in window grows to — as wide as a new main window, as
+    /// tall as a detached conversation's.
+    private static let signedInWindowSize = CGSize(width: 900, height: 640)
+    #endif
 
     var body: some View {
         let _ = PerfLog.mark("RootView body: \(model.phase)")
@@ -351,7 +394,11 @@ struct RootView: View {
                     .frame(minWidth: 400, minHeight: 300)
             case .needsAccount:
                 #if os(macOS)
+                // The form holds its own size; the window's spare room
+                // goes around it.
                 LoginView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(WindowReader { signInWindow = $0 })
                 #else
                 // Scrollable so the keyboard can't hide the lower fields
                 // or the error text under it on iPhone.
@@ -404,6 +451,13 @@ struct RootView: View {
                     if let window { PerfLog.markWhenVisible(window, "first window visible") }
                 }
             }
+        }
+        .onChange(of: model.phase.needsAccount) { _, needsAccount in
+            // Signed in: the sidebar and a conversation don't fit the
+            // form's window. Never shrinks one that's already larger.
+            guard !needsAccount else { return }
+            signInWindow?.grow(toAtLeast: Self.signedInWindowSize)
+            signInWindow = nil
         }
         #endif
         .task { await model.start() }
