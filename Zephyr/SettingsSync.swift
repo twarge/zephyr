@@ -19,6 +19,7 @@ final class SettingsSync {
         "badgePolicy",
         "dmSortOrder",
         "channelsAboveDMs",
+        "topicsFollowSelection",
         "combinedShowsMuted",
         "recentSearchLimit",
         "serverNameInTitles",

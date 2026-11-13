@@ -79,7 +79,11 @@ Non-goals (initially)
   servers) — colored type glyph (`#`/lock/globe), name, gray count badge; pinned first,
   muted dimmed and last. Each channel row carries a disclosure triangle expanding an
   indented list of its recent topics inline (fetched on expand, unread badges, capped
-  with an "All topics…" overflow row).
+  with an "All topics…" overflow row). By default the list follows the selection, as
+  on Zulip web: the selected channel shows its topics and every other closes (a moment
+  later, so a double-click isn't thrown by rows moving); a triangle opened by hand stays
+  until the selection next moves. Settings → "Only the selected channel shows its
+  topics" turns that off, leaving each channel as its triangle was last set.
 - **Detail**: the selected channel's feed (topic headers interleaved) or a DM/topic
   transcript, compose bar at the bottom. A channel's topic list is one click away from
   the feed toolbar; a topic transcript links back to its channel via the toolbar chip.
