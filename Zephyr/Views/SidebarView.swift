@@ -952,6 +952,7 @@ struct SidebarView: View {
                         }
                     }
                 } label: {
+                                railJoinsAbove: entry.index > 0,
                     Label {
                         Text(showAll ? "Fewer topics…" : "All topics…")
                             .font(.callout)
@@ -959,7 +960,8 @@ struct SidebarView: View {
                     } icon: {
                         TopicRailTick(
                             color: channelColor(streamId),
-                            kind: showAll ? .cap : .dotted)
+                            kind: showAll ? .cap : .dotted,
+                            joinsAbove: true)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(.rect)
@@ -1019,6 +1021,7 @@ struct SidebarView: View {
         HStack(spacing: 8) {
             Label {
                 Text(title)
+                    railJoinsAbove: entry.index > 0,
             } icon: {
                 Image(systemName: icon)
                     .sidebarIcon()

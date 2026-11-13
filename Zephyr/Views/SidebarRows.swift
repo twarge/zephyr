@@ -102,8 +102,8 @@ struct DraftRow: View {
                         .lineLimit(1)
                 }
             } icon: {
-                Image(systemName: "pencil.line")
-                    .sidebarIcon(.gray)
+                Image(systemName: "ellipsis.message")
+                    .sidebarIcon()
             }
             Spacer(minLength: 0)
         }
@@ -303,13 +303,14 @@ private var stateIconFont: Font {
 /// its topics' followed icon, so the two stack on one centerline (and the
 /// unread counts beside them line up too).
 private enum TrailingColumn {
+    /// macOS: just the followed icon's width, flush with the row's
+    /// trailing edge — where the Views' counts end. The list's own inset
+    /// there already keeps the chevron clear of the overlay scroller,
+    /// which wins clicks while visible.
     #if os(macOS)
-    static let width: CGFloat = 26
-    /// Clear of the overlay scroller, which wins clicks while visible.
-    static let inset: CGFloat = 8
+    static let width: CGFloat = 18
     #else
     static let width: CGFloat = 44
-    static let inset: CGFloat = 0
     #endif
 }
 
@@ -364,8 +365,7 @@ struct ChannelRow: View {
                 Button(action: onToggle) {
                     Image(systemName: "chevron.right")
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        // macOS: compact, nudged in from the overlay
-                        // scroller (which wins clicks while visible).
+                        // macOS: compact, at the row's trailing edge.
                         // iOS: the system sidebar chevron's size and shade,
                         // in a wide tap target kept row-height-neutral —
                         // a 44pt-tall frame inflated every channel row.
@@ -373,7 +373,6 @@ struct ChannelRow: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
                         .frame(width: TrailingColumn.width, height: 26)
-                        .padding(.trailing, TrailingColumn.inset)
                         #else
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -403,38 +402,97 @@ enum TopicRailKind: Equatable {
 struct TopicRailTick: View {
     let color: Color
     let kind: TopicRailKind
+    /// Whether the rail arrives from the row above — every row but a
+    /// channel's first.
+    var joinsAbove = false
+
+    /// How far a bar draws past its tick toward a neighboring row, so the
+    /// rail runs unbroken down the list. Deliberately more than the list
+    /// pads a row by: a macOS row clips its own drawing, so the bar ends
+    /// exactly at the row's edge, where the next row's begins — nothing
+    /// overlaps, whatever the row height (and a dimmed or muted row's
+    /// translucent bar never doubles up). iOS rows don't promise that
+    /// clip, so there the ticks stay as they were.
+    #if os(macOS)
+    private static let reach: CGFloat = 12
+    #else
+    private static let reach: CGFloat = 0
+    #endif
+    /// The dotted tick's dots above its own four, covering the same reach.
+    private static let leadInDots = Int(reach / 6)
 
     var body: some View {
         Group {
             switch kind {
             case .through:
-                Capsule()
-                    .fill(color)
-                    .frame(width: 2, height: 24)
+                bar(height: 24, above: joinsAbove, below: true)
             case .cap:
-                // └ — the foot overflows the 2pt frame to the right so the
-                // vertical bar stays exactly on the rail line above it.
-                ZStack(alignment: .topLeading) {
-                    Capsule()
-                        .fill(color)
-                        .frame(width: 2, height: 14)
-                    Capsule()
-                        .fill(color)
-                        .frame(width: 8, height: 2)
-                        .offset(y: 12)
-                }
-                .frame(width: 2, height: 24, alignment: .topLeading)
+                // ╰ — the foot overflows the 2pt frame to the right so the
+                // stem stays exactly on the rail line above it.
+                RailCap(rise: joinsAbove ? Self.reach : 0)
+                    .stroke(
+                        color,
+                        style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    .frame(width: 8, height: 14)
+                    .frame(width: 2, height: 24, alignment: .topLeading)
             case .dotted:
-                VStack(spacing: 3) {
-                    ForEach(0..<4, id: \.self) { _ in
-                        Capsule()
-                            .fill(color)
-                            .frame(width: 2, height: 3)
+                // Four dots on a 6pt beat. Where the rail arrives from
+                // above, the beat carries on up past the tick: the row
+                // clips it at its edge, and what is left of a dot there
+                // reads as the rail's own rounded end — so the gap before
+                // the first dot is the same as between the rest.
+                Color.clear
+                    .frame(width: 2, height: 21)
+                    .overlay(alignment: .bottom) {
+                        VStack(spacing: 3) {
+                            ForEach(0..<(4 + (joinsAbove ? Self.leadInDots : 0)), id: \.self) { _ in
+                                Capsule()
+                                    .fill(color)
+                                    .frame(width: 2, height: 3)
+                            }
+                        }
+                        .fixedSize()
                     }
-                }
             }
         }
         .dimsWhenWindowInactive()
+    }
+
+    /// A rail segment: laid out `height` tall (the row's height is the
+    /// tick's, unchanged), drawn on toward the rows it connects to.
+    private func bar(height: CGFloat, above: Bool, below: Bool) -> some View {
+        Color.clear
+            .frame(width: 2, height: height)
+            .overlay {
+                Capsule()
+                    .fill(color)
+                    .padding(.top, above ? -Self.reach : 0)
+                    .padding(.bottom, below ? -Self.reach : 0)
+            }
+    }
+}
+
+/// The rail's end: its stem turning, on a curve, toward the last topic.
+/// Stroked 2pt wide, the line fills the same 8×14 box the square └ did.
+/// Nonisolated: SwiftUI asks a shape for its path off the main actor.
+nonisolated private struct RailCap: Shape {
+    /// How far above the box the stem starts, where the rail arrives from
+    /// the row above.
+    var rise: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let radius: CGFloat = 5
+        let stem = rect.minX + 1
+        let foot = rect.maxY - 1
+        var path = Path()
+        // Standing alone, the round end cap sits inside the box's top.
+        path.move(to: CGPoint(x: stem, y: rise > 0 ? rect.minY - rise : rect.minY + 1))
+        path.addLine(to: CGPoint(x: stem, y: foot - radius))
+        path.addArc(
+            tangent1End: CGPoint(x: stem, y: foot),
+            tangent2End: CGPoint(x: stem + radius, y: foot), radius: radius)
+        path.addLine(to: CGPoint(x: rect.maxX - 1, y: foot))
+        return path
     }
 }
 
@@ -445,6 +503,9 @@ struct SidebarTopicRow: View {
     let topic: ChannelTopic
     /// The thread-rail tick beside this row.
     var rail: TopicRailKind?
+    /// Whether the rail continues from the topic above (all but the
+    /// channel's first).
+    var railJoinsAbove = false
     /// Called after a rename is submitted, so the sidebar can refresh its
     /// topic cache once the server has applied the move.
     var onRenamed: (() -> Void)?
@@ -493,7 +554,7 @@ struct SidebarTopicRow: View {
                     .lineLimit(1)
             } icon: {
                 if let rail {
-                    TopicRailTick(color: channelColor, kind: rail)
+                    TopicRailTick(color: channelColor, kind: rail, joinsAbove: railJoinsAbove)
                 } else {
                     Color.clear.frame(width: 2)
                 }
@@ -501,11 +562,10 @@ struct SidebarTopicRow: View {
             Spacer(minLength: 4)
             // State icons trail, like the channel lock.
             if TopicName.isResolved(topic.name) {
-                Image(systemName: "checkmark.circle.fill")
+                Image(systemName: "checkmark.circle")
                     .font(stateIconFont)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(.secondary)
                     .help("Resolved topic")
-                    .dimsWhenWindowInactive()
             }
             if hasMention {
                 Text("@")
@@ -533,7 +593,6 @@ struct SidebarTopicRow: View {
             }
             .frame(width: TrailingColumn.width)
             .padding(.leading, 2)
-            .padding(.trailing, TrailingColumn.inset)
         }
         .sidebarRowPadding()
         .opacity(visibility == .muted ? 0.5 : 1)

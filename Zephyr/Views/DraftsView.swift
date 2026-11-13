@@ -45,7 +45,7 @@ struct DraftsView: View {
         Group {
             if rows.isEmpty {
                 ContentUnavailableView(
-                    "No Drafts", systemImage: "pencil.line",
+                    "No Drafts", systemImage: "ellipsis.message",
                     description: Text(
                         "Start typing in any conversation and navigate away — the draft waits here."))
             } else {
@@ -55,7 +55,7 @@ struct DraftsView: View {
                             selection = .conversation(row.key)
                         } label: {
                             VStack(alignment: .leading, spacing: 3) {
-                                Label(title(for: row.key), systemImage: "pencil.line")
+                                Label(title(for: row.key), systemImage: "ellipsis.message")
                                     .font(.callout.weight(.medium))
                                     .lineLimit(1)
                                 Text(row.text)
