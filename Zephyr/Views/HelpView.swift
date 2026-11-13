@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// Where the general preferences are, as the manual names it: a tab of
+/// Settings on iOS; the Mac's Settings is one page.
+#if os(macOS)
+private let generalSettings = "Settings"
+#else
+private let generalSettings = "Settings → General"
+#endif
+
 /// The app manual: Help → Zephyr Help (⌘?) on macOS; the Help tab of
 /// Settings on iOS (which has no system Help menu).
 struct HelpView: View {
@@ -31,7 +39,7 @@ struct HelpView: View {
                     "Hover a message for the react and star controls; right-click for Reply Quoting Message, Copy Message Reference, Move, Edit, and Delete — and, anywhere but the message's own topic, Go to Message in Topic (or in New Window).",
                     "Select an image and press Space for Quick Look; the arrow keys step through every image in the view.",
                     "Drag files anywhere into a conversation, or paste an image (⌘V), to upload — Send waits until uploads finish.",
-                    "In the message field, Return sends. Turn off Return sends messages in Settings → General and a connected keyboard's Return makes a new line instead, with ⌘Return to send (the on-screen keyboard's Send key always sends). With one server it's your Zulip account's Enter sends setting, kept in sync; with several, it starts from the first one's.",
+                    "In the message field, Return sends. Turn off Return sends messages in \(generalSettings) and a connected keyboard's Return makes a new line instead, with ⌘Return to send (the on-screen keyboard's Send key always sends). With one server it's your Zulip account's Enter sends setting, kept in sync; with several, it starts from the first one's.",
                     "The chevron beside the message field opens long-form compose: a resizable editor with a rendered preview (the eye); there, Return makes a new line and ⇧Return sends.",
                     "The topic field suggests the channel's existing topics as you type; free text starts a new topic.",
                     "Drafts save per conversation when you navigate away, and sync with the server.",
@@ -39,8 +47,8 @@ struct HelpView: View {
 
                 helpSection("Offline and History", bullets: [
                     "Messages you've seen are kept in a local archive: scroll back and search even while offline; sends queue and deliver on reconnect.",
-                    "Settings → General controls how long the archive keeps history (starred messages are always kept). The server's history is never affected.",
-                    "Attachments you open stay on this device too, for as long as history is kept and up to the size set in Settings → General; past it, the least recently used go first. On a Mac they open in Preview locked: to edit one, Duplicate it.",
+                    "\(generalSettings) controls how long the archive keeps history (starred messages are always kept). The server's history is never affected.",
+                    "Attachments you open stay on this device too, for as long as history is kept and up to the size set in \(generalSettings); past it, the least recently used go first. On a Mac they open in Preview locked: to edit one, Duplicate it.",
                 ])
             }
             .padding(24)
@@ -105,7 +113,7 @@ struct HelpView: View {
     /// Window tabs (and the hover arrow's ⌘-click) are Mac-only.
     #if os(macOS)
     private static let commandClickBullets = [
-        "⌘-click a message's Go to Message arrow to open its conversation in a new tab (or a new window — Settings → General).",
+        "⌘-click a message's Go to Message arrow to open its conversation in a new tab (or a new window — \(generalSettings)).",
     ]
     #else
     private static let commandClickBullets: [String] = []

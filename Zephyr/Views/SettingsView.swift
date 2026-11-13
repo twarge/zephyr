@@ -51,18 +51,40 @@ enum DmSortOrder: String, CaseIterable, Identifiable {
 }
 
 struct SettingsView: View {
+    #if os(macOS)
+    /// The page's full height: the window is never taller than this.
+    @State private var contentHeight = CGFloat.infinity
+    private static let minHeight: CGFloat = 320
+    #endif
+
     var body: some View {
         #if os(macOS)
-        TabView {
-            Tab("General", systemImage: "gearshape") {
+        // One page — the servers, then every other preference — in a
+        // scroll view, so the window can be whatever height suits the
+        // screen and the captions wrap in full rather than truncating.
+        let maxHeight = max(contentHeight, Self.minHeight)
+        ScrollView {
+            VStack(spacing: 0) {
+                AccountsSettings()
+                Divider()
+                    .padding(.horizontal, 20)
                 GeneralSettings()
             }
-            Tab("Accounts", systemImage: "person.crop.circle") {
-                AccountsSettings()
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { height in
+                contentHeight = height
             }
         }
-        .frame(width: 460)
-        .padding(.bottom, 8)
+        // Wide enough for the form's two columns: at 460 the longest
+        // label and the longest toggle were cut off at the window's edges.
+        .frame(width: 520)
+        .frame(
+            minHeight: Self.minHeight, idealHeight: min(680, maxHeight), maxHeight: maxHeight)
+        // SwiftUI makes a Settings window fixed-size whatever its content
+        // allows. The style bit is all that's missing: the limits above
+        // then confine resizing to the height.
+        .background(WindowReader { $0?.styleMask.insert(.resizable) })
         #else
         // A plain dismissable sheet — no fixed frame (that broke the
         // sheet geometry); each tab gets its own navigation stack and a
@@ -164,6 +186,10 @@ private struct GeneralSettings: View {
             Label(issue.explanation, systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(.orange)
+                #if os(macOS)
+                .frame(width: Self.captionWidth, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                #endif
             #if os(macOS)
             Button("Open System Settings…") {
                 Platform.openNotificationSettings()
@@ -241,6 +267,19 @@ private struct GeneralSettings: View {
     }
 
     #if os(macOS)
+    /// A caption under a control, wrapped at the controls' column width.
+    /// Left to size itself, a long one stretches that column — and the
+    /// form with it — past the window's edges.
+    private func caption(_ text: Text) -> some View {
+        text
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(width: Self.captionWidth, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private static let captionWidth: CGFloat = 290
+
     private var macForm: some View {
         Form {
             Picker("App icon badge counts:", selection: $badgePolicy) {
@@ -252,9 +291,7 @@ private struct GeneralSettings: View {
             Toggle("Show notifications for messages", isOn: $notificationsEnabled)
             notificationIssueRows
             Toggle("Show in menu bar", isOn: $showMenuBarExtra)
-            Text("Direct messages and mentions notify while Zephyr is running. (Zulip has no push service for desktop clients.)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            caption(Text("Direct messages and mentions notify while Zephyr is running. (Zulip has no push service for desktop clients.)"))
             Divider()
                 .padding(.vertical, 4)
             Picker("Sound for DMs and mentions:", selection: $personalSound) {
@@ -264,9 +301,7 @@ private struct GeneralSettings: View {
                 soundOptions
             }
             Toggle("Sound when your message is sent", isOn: $sendSound)
-            soundsCaption
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            caption(soundsCaption)
             Divider()
                 .padding(.vertical, 4)
             Toggle("Channels above direct messages", isOn: $channelsAboveDMs)
@@ -280,19 +315,22 @@ private struct GeneralSettings: View {
             }
             // LabeledContent splits the row like the pickers: caption in
             // the label column, value + arrows inline with the controls.
+            // The count is its own text — as the stepper's label it was
+            // laid out in the label column, pushing the caption out of
+            // line with the rows around it.
             LabeledContent("Recent searches kept:") {
-                Stepper("\(recentSearchLimit)", value: $recentSearchLimit, in: 0...20)
-                    .monospacedDigit()
+                HStack(spacing: 6) {
+                    Text("\(recentSearchLimit)")
+                        .monospacedDigit()
+                    Stepper("Recent searches kept", value: $recentSearchLimit, in: 0...20)
+                        .labelsHidden()
+                }
             }
-            Text("0 hides the Recent Searches section.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            caption(Text("0 hides the Recent Searches section."))
             Divider()
                 .padding(.vertical, 4)
             Toggle("Return sends messages", isOn: returnSendsBinding)
-            returnSendsCaption
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            caption(returnSendsCaption)
             Divider()
                 .padding(.vertical, 4)
             Picker("⌘-click opens:", selection: $commandClickOpensTab) {
@@ -300,23 +338,17 @@ private struct GeneralSettings: View {
                 Text("New window").tag(false)
             }
             .pickerStyle(.radioGroup)
-            Text("Applies to a message's Go to Message arrow.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            caption(Text("Applies to a message's Go to Message arrow."))
             Divider()
                 .padding(.vertical, 4)
             Picker("Keep message history for:", selection: $messageRetentionYears) {
                 retentionOptions
             }
-            Text("Older messages are pruned from the offline archive on this device; starred messages are always kept. History on the server is unaffected.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Picker("Keep opened attachments up to:", selection: $mediaCacheLimitMB) {
+            caption(Text("Older messages are pruned from the offline archive on this device; starred messages are always kept. History on the server is unaffected."))
+            Picker("Attachments cache:", selection: $mediaCacheLimitMB) {
                 cacheLimitOptions
             }
-            cacheLimitCaption
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            caption(cacheLimitCaption)
         }
         .padding(20)
         .onChange(of: messageRetentionYears) { applyRetention() }
@@ -381,7 +413,7 @@ private struct GeneralSettings: View {
                 Text("Older messages are pruned from the offline archive on this device; starred messages are always kept. History on the server is unaffected.")
             }
             Section {
-                Picker("Keep opened attachments up to", selection: $mediaCacheLimitMB) {
+                Picker("Attachments cache", selection: $mediaCacheLimitMB) {
                     cacheLimitOptions
                 }
             } footer: {
@@ -400,6 +432,11 @@ private struct AccountsSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            #if os(macOS)
+            // The Mac's Settings is one page; this heads its first part.
+            Text("Accounts")
+                .font(.headline)
+            #endif
             List {
                 ForEach(
                     Array(model.global.accounts.enumerated()), id: \.element.id
@@ -453,7 +490,14 @@ private struct AccountsSettings: View {
                     model.global.moveAccounts(fromOffsets: fromOffsets, toOffset: toOffset)
                 }
             }
+            #if os(macOS)
+            // Inside the page's scroll view the list needs a height of
+            // its own: its rows (44pt each, 10pt above and below), up to
+            // six before it scrolls by itself.
+            .frame(height: CGFloat(min(max(model.global.accounts.count, 1), 6)) * 44 + 20)
+            #else
             .frame(minHeight: 160)
+            #endif
             Text("Drag to reorder — ⌘1…⌘9 show a server in the front window. Every window can show a different server.")
                 .font(.caption)
                 .foregroundStyle(.secondary)

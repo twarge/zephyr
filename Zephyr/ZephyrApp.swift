@@ -76,6 +76,8 @@ struct ZephyrApp: App {
             SettingsView()
                 .environment(model)
         }
+        // Its page scrolls; this is the height it opens at.
+        .defaultSize(width: 520, height: 680)
         Window("Zephyr Help", id: "help") {
             HelpView()
         }
