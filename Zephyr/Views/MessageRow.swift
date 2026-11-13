@@ -791,11 +791,23 @@ struct MessageRow: View {
 /// (`inlineEditText`), read only here — typing re-renders the editor,
 /// not the row or its neighbors — and survives the lazy feed recycling
 /// the row mid-edit.
+///
+/// Return follows the message field: it saves where it sends there, and
+/// where it starts a new line there it does here too, with ⌘Return to
+/// save. ⇧Return (or ⌃/⌥Return) is always a new line.
 private struct InlineMessageEditor: View {
     let store: PerAccountStore
     let messageId: Int
 
     @Environment(KeyboardRouter.self) private var keys
+    @Environment(AppModel.self) private var model: AppModel?
+    @AppStorage(ComposeBar.returnSendsKey) private var returnSendsPreference = true
+    @FocusState private var fieldFocused: Bool
+
+    /// The message field's Return-sends setting (ComposeBar.returnSends).
+    private var returnSaves: Bool {
+        model?.returnSendsServer?.serverEnterSends ?? returnSendsPreference
+    }
 
     var body: some View {
         @Bindable var keys = keys
@@ -807,21 +819,71 @@ private struct InlineMessageEditor: View {
                 .background(
                     .quaternary.opacity(0.4),
                     in: RoundedRectangle(cornerRadius: 8))
+                .focused($fieldFocused)
+                .onChange(of: fieldFocused) { _, focused in
+                    keys.inlineEditFocused = focused
+                }
+                // The lazy feed can recycle the row while it has focus.
+                .onDisappear { keys.inlineEditFocused = false }
+                // The general form: the keyed one only fires for an
+                // unmodified Return (see ComposeBar's compact field).
+                .onKeyPress(phases: .down, action: returnPress)
             HStack {
                 Button("Cancel") { keys.endInlineEdit() }
                     .keyboardShortcut(.cancelAction)
-                Button("Save") {
-                    let content = keys.inlineEditText.trimmingCharacters(
-                        in: .whitespacesAndNewlines)
-                    if !content.isEmpty {
-                        store.editMessage(messageId, content: content)
-                    }
-                    keys.endInlineEdit()
-                }
-                .keyboardShortcut(.defaultAction)
+                Button("Save", action: save)
+                    // ⌘Return is the field's own (returnPress), not a
+                    // window-wide shortcut that would compete with Send.
+                    .keyboardShortcut(returnSaves ? .defaultAction : nil)
+                    .help(returnSaves
+                        ? "Save (Return; ⇧Return for a new line)"
+                        : "Save (⌘Return; Return for a new line)")
             }
             .controlSize(.small)
         }
+    }
+
+    private func save() {
+        let content = keys.inlineEditText.trimmingCharacters(
+            in: .whitespacesAndNewlines)
+        if !content.isEmpty {
+            store.editMessage(messageId, content: content)
+        }
+        keys.endInlineEdit()
+    }
+
+    /// Return and keypad Enter in the field. Left to itself the field
+    /// submits on Return and ⇧Return alike, and nothing but ⌥Return makes
+    /// a new line.
+    private func returnPress(_ press: KeyPress) -> KeyPress.Result {
+        guard press.key == .return || press.key == "\u{3}" else { return .ignored }
+        if press.modifiers.contains(.command) {
+            save()
+            return .handled
+        }
+        #if os(macOS)
+        let editor = NSApp.keyWindow?.firstResponder as? NSTextView
+        // An input method's Return commits its marked text.
+        if editor?.hasMarkedText() == true { return .ignored }
+        #endif
+        let modified = !press.modifiers.isDisjoint(with: [.shift, .control, .option])
+        guard modified || !returnSaves else {
+            save()
+            return .handled
+        }
+        #if os(macOS)
+        if let editor {
+            // What ⌥Return does natively: at the caret, over any
+            // selection.
+            editor.insertNewlineIgnoringFieldEditor(nil)
+        } else {
+            keys.inlineEditText += "\n"
+        }
+        return .handled
+        #else
+        // A vertical field inserts the newline itself here.
+        return .ignored
+        #endif
     }
 }
 
