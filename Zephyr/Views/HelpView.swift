@@ -41,6 +41,7 @@ struct HelpView: View {
                     "Drag files anywhere into a conversation, or paste an image (⌘V), to upload — Send waits until uploads finish.",
                     "In the message field, Return sends. Turn off Return sends messages in \(generalSettings) and a connected keyboard's Return makes a new line instead, with ⌘Return to send (the on-screen keyboard's Send key always sends). With one server it's your Zulip account's Enter sends setting, kept in sync; with several, it starts from the first one's.",
                     "The chevron beside the message field opens long-form compose: a resizable editor with a rendered preview (the eye); there, Return makes a new line and ⇧Return sends.",
+                    "Editing a message uses the message field's keys: Return saves and ⇧Return makes a new line — or, with Return sends messages off, Return makes a new line and ⌘Return saves. The on-screen keyboard's Return always makes a new line.",
                     "The topic field suggests the channel's existing topics as you type; free text starts a new topic.",
                     "Drafts save per conversation when you navigate away, and sync with the server.",
                 ])

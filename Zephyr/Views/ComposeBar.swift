@@ -795,7 +795,10 @@ struct ComposeBar: View {
         }
         .buttonStyle(.plain)
         .disabled(!canSend)
-        .keyboardShortcut(.return, modifiers: .command)
+        // While a message is being edited inline, ⌘Return saves the edit.
+        .keyboardShortcut(
+            keys.inlineEditFocused
+                ? nil : KeyboardShortcut(.return, modifiers: .command))
         .help(expanded
             ? "Send (⇧Return; Return for a new line)"
             : returnSends

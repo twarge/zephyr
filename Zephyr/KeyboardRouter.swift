@@ -201,6 +201,9 @@ final class KeyboardRouter {
     private(set) var editingMessageId: Int?
     var inlineEditText = ""
     var editingMessage: Bool { editingMessageId != nil }
+    /// The editor's field has the keyboard: ⌘Return saves the edit there,
+    /// so the long-form Send button's ⌘Return stands down.
+    var inlineEditFocused = false
 
     /// Opens the inline editor on one of the user's messages, seeded with
     /// its raw markdown.
@@ -217,6 +220,7 @@ final class KeyboardRouter {
     func endInlineEdit() {
         editingMessageId = nil
         inlineEditText = ""
+        inlineEditFocused = false
     }
 
     /// Posts a Message-menu action to the selected message's row,
