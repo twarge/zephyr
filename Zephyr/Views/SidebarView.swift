@@ -26,6 +26,22 @@ struct SidebarView: View {
 
     @State private var collapsedSections: Set<String>
     @State private var expandedChannels: Set<Int>
+    /// Settings → "Only the selected channel shows its topics": the
+    /// selection's channel opens its topics and every other closes, as on
+    /// Zulip's web app, so the sidebar never grows by a list per channel
+    /// visited.
+    @AppStorage("topicsFollowSelection") private var topicsFollowSelection = true
+    /// The channels showing topics in that mode: the selected one, and any
+    /// opened by hand since the selection last moved. Never saved — the
+    /// user's own disclosures (`expandedChannels`) wait untouched for the
+    /// mode to be switched off.
+    @State private var followedChannels: Set<Int>
+    /// The pending close of channels the selection has left.
+    @State private var foldTask: Task<Void, Never>?
+    /// When the list came up: selection changes right at a window's
+    /// opening (its restored destination lands after the first layout)
+    /// apply without animation.
+    @State private var appearedAt = Date.distantFuture
     @AppStorage("dmSortOrder") private var dmSortOrder = DmSortOrder.lastMessage.rawValue
     @AppStorage("channelsAboveDMs") private var channelsAboveDMs = true
     @AppStorage("combinedShowsMuted") private var combinedShowsMuted = false
@@ -61,6 +77,9 @@ struct SidebarView: View {
             initialValue: AppStateStore.collapsedSections(for: store.accountId))
         _expandedChannels = State(
             initialValue: AppStateStore.expandedChannels(for: store.accountId))
+        // The opening selection's channel is open in the first frame.
+        _followedChannels = State(
+            initialValue: Set([Self.channel(of: selection.wrappedValue)].compactMap { $0 }))
     }
 
     /// Row click handling: double-click opens the entry standalone in a
@@ -352,16 +371,22 @@ struct SidebarView: View {
                         revealOnFilterEnd = true
                         updateFilterPickedChannel()
                     }
+                    followSelection()
                 }
+                // Switched on in Settings: it takes hold at once.
+                .onChange(of: topicsFollowSelection) { followSelection() }
+                .onAppear { appearedAt = .now }
                 .onChange(of: isFiltering) { _, filtering in
                     // Still the selection's channel as the filter ends: the
                     // unfiltered list keeps it expanded rather than folding
                     // away the topics just shown.
                     if !filtering, let streamId = filterPickedChannel,
                        streamId == selectedStreamId {
-                        expandedChannels.insert(streamId)
+                        openChannels.insert(streamId)
                     }
                     filterPickedChannel = nil
+                    // Selections made while filtering weren't followed.
+                    if !filtering { followSelection() }
                     if filtering {
                         revealOnFilterEnd = false
                     } else if revealOnFilterEnd {
@@ -716,14 +741,74 @@ struct SidebarView: View {
     }
 
     /// The channel the selection lives in, if any.
-    private var selectedStreamId: Int? {
-        switch selection {
+    private var selectedStreamId: Int? { Self.channel(of: selection) }
+
+    /// The channel a destination lives in: the channel itself, its topic
+    /// list, or one of its topics.
+    private static func channel(of destination: Destination?) -> Int? {
+        switch destination {
         case .channel(let streamId), .channelTopics(let streamId):
             streamId
         case .conversation(.topic(let streamId, _)):
             streamId
         default:
             nil
+        }
+    }
+
+    /// The channels showing their topics: the user's own disclosures, or —
+    /// following the selection — the selected channel and any opened by
+    /// hand since.
+    private var openChannels: Set<Int> {
+        get { topicsFollowSelection ? followedChannels : expandedChannels }
+        nonmutating set {
+            if topicsFollowSelection {
+                followedChannels = newValue
+            } else {
+                expandedChannels = newValue
+            }
+        }
+    }
+
+    /// How long a channel the selection has left keeps its topics: past a
+    /// double-click. Rows folding away above the pointer between the two
+    /// clicks would put a different row under the second.
+    private static var foldDelay: Duration {
+        #if os(macOS)
+        .seconds(min(NSEvent.doubleClickInterval, 0.5))
+        #else
+        .milliseconds(350)
+        #endif
+    }
+
+    /// Following the selection: its channel opens its topics at once, and
+    /// whatever else is open closes a beat later. The filtered list keeps
+    /// its own rules (see `filterPickedChannel`).
+    private func followSelection() {
+        guard topicsFollowSelection, !isFiltering else { return }
+        foldTask?.cancel()
+        foldTask = nil
+        let keep: Set<Int> = selectedStreamId.map { [$0] } ?? []
+        let settled = Date.now.timeIntervalSince(appearedAt) > 0.5
+        if !keep.isSubset(of: followedChannels) {
+            withAnimation(settled ? .snappy : nil) { followedChannels.formUnion(keep) }
+            // Topics move fast on active channels: fresh on every open.
+            keep.forEach { search.refreshTopics($0) }
+        }
+        let stale = followedChannels.subtracting(keep)
+        guard !stale.isEmpty else { return }
+        guard settled else {
+            followedChannels.subtract(stale)
+            return
+        }
+        foldTask = Task {
+            try? await Task.sleep(for: Self.foldDelay)
+            guard !Task.isCancelled else { return }
+            withAnimation(.snappy) {
+                followedChannels.subtract(stale)
+                // Back to the short list the next time they open.
+                expandedAllTopics.subtract(stale)
+            }
         }
     }
 
@@ -747,7 +832,7 @@ struct SidebarView: View {
             scrollSoon(proxy, to: streamId)
         case .conversation(.topic(let streamId, let topic)):
             collapsedSections.remove(sectionId(forChannel: streamId))
-            expandedChannels.insert(streamId)
+            openChannels.insert(streamId)
             guard let topics = search.channelTopics[streamId],
                   let index = topics.firstIndex(where: { TopicName.matches($0.name, topic) })
             else {
@@ -795,7 +880,7 @@ struct SidebarView: View {
                     let streamId = subscription.streamId
                     ChannelRow(
                         store: store, subscription: subscription,
-                        isExpanded: expandedChannels.contains(streamId),
+                        isExpanded: openChannels.contains(streamId),
                         onToggle: isFiltering ? nil : { toggleChannel(streamId) })
                         .tag(Destination.channel(streamId: streamId))
                         .modifier(rowClicks(.channel(streamId: streamId)))
@@ -867,13 +952,14 @@ struct SidebarView: View {
                                 store: store, streamId: streamId, topic: entry.topic,
                                 rail: entry.index < matches.count - 1 ? .through
                                     : topicMatches.count > matches.count ? .dotted : .cap,
+                                railJoinsAbove: entry.index > 0,
                                 onRenamed: { refreshTopicsSoon(streamId) })
                                 .tag(Destination.conversation(
                                     .topic(streamId: streamId, topic: entry.topic.name)))
                                 .modifier(rowClicks(.conversation(
                                     .topic(streamId: streamId, topic: entry.topic.name))))
                         }
-                    } else if expandedChannels.contains(streamId) {
+                    } else if openChannels.contains(streamId) {
                         topicRows(for: streamId)
                     }
                 }
@@ -934,6 +1020,7 @@ struct SidebarView: View {
                 SidebarTopicRow(
                     store: store, streamId: streamId, topic: entry.topic,
                     rail: entry.index == shown.count - 1 && !hasMore ? .cap : .through,
+                    railJoinsAbove: entry.index > 0,
                     onRenamed: { refreshTopicsSoon(streamId) })
                     .tag(Destination.conversation(
                         .topic(streamId: streamId, topic: entry.topic.name)))
@@ -959,7 +1046,8 @@ struct SidebarView: View {
                     } icon: {
                         TopicRailTick(
                             color: channelColor(streamId),
-                            kind: showAll ? .cap : .dotted)
+                            kind: showAll ? .cap : .dotted,
+                            joinsAbove: true)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(.rect)
@@ -1001,14 +1089,14 @@ struct SidebarView: View {
 
     private func toggleChannel(_ streamId: Int) {
         withAnimation(.snappy) {
-            if expandedChannels.contains(streamId) {
-                expandedChannels.remove(streamId)
+            if openChannels.contains(streamId) {
+                openChannels.remove(streamId)
             } else {
-                expandedChannels.insert(streamId)
+                openChannels.insert(streamId)
             }
         }
         // Refresh on every expand — topics move fast on active channels.
-        if expandedChannels.contains(streamId) {
+        if openChannels.contains(streamId) {
             search.refreshTopics(streamId)
         }
     }

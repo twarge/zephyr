@@ -107,6 +107,10 @@ final class AppModel {
         /// them on event-queue rebuild.
         case ready(Account.ID)
         case failed(String)
+
+        var needsAccount: Bool {
+            if case .needsAccount = self { true } else { false }
+        }
     }
 
     private(set) var phase: Phase = .launching
@@ -243,6 +247,10 @@ final class AppModel {
                 phase = .ready(launch.id)
                 PerfLog.mark("init: cached store installed")
             }
+        } else {
+            // No server to open: the first frame is the sign-in form, so
+            // the window is made at its size rather than resized on screen.
+            phase = .needsAccount
         }
         Task { await self.start() }
     }

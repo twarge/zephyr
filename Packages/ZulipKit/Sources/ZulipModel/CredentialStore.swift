@@ -84,8 +84,13 @@ public struct KeychainCredentialStore: CredentialStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: accountName(realmURL, email),
         ]
-        if usesDataProtectionMigration && keychain == .modern {
-            query[kSecUseDataProtectionKeychain as String] = true
+        if usesDataProtectionMigration {
+            // Always named, false included: a query that leaves the key
+            // out reaches BOTH keychains for reads, updates and deletes
+            // (only an add defaults to the file-based one). Left out,
+            // "drop the legacy copy" deleted the data-protection item
+            // just written — no key survived a sign-in or a migration.
+            query[kSecUseDataProtectionKeychain as String] = keychain == .modern
         }
         return query
     }

@@ -36,6 +36,13 @@ struct LoginView: View {
     @State private var webAuthSession = WebAuthSession()
     @State private var showAdvanced = false
 
+    #if os(macOS)
+    /// A window opened to sign in: room for the credentials step of a
+    /// server with a handful of SSO methods and a password, so entering
+    /// the server's address doesn't resize it.
+    static let windowSize = CGSize(width: 460, height: 600)
+    #endif
+
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "bubble.left.and.bubble.right.fill")
@@ -68,6 +75,14 @@ struct LoginView: View {
         }
         .padding(40)
         .frame(minWidth: 460, minHeight: 380)
+        #if os(macOS)
+        // As tall as the step on show, no shorter: a minimum-only frame
+        // tells the window it can shrink to 380 whatever is inside, and
+        // the credentials step (SSO buttons and the fields) is taller —
+        // it clipped at both ends. Now the window grows to hold it.
+        // Vertical only, so the error text still wraps at its width.
+        .fixedSize(horizontal: false, vertical: true)
+        #endif
         .onAppear {
             // Straight to this server's sign-in options.
             guard let reauthenticating, case .realm = step else { return }
