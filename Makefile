@@ -9,10 +9,9 @@
 #   make vision     visionOS build (simulator)
 #   make run        build and launch the Mac app
 #   make perf       run the Mac app in the foreground with perf logging
-#   make generate   regenerate Zephyr.xcodeproj from project.yml (xcodegen)
 #   make clean
 
-.PHONY: all test mac mac-release ios ios-device tv vision run perf generate clean preclean
+.PHONY: all test mac mac-release ios ios-device tv vision run perf clean preclean
 
 all: test mac ios tv vision
 
@@ -78,11 +77,6 @@ perf: mac
 	  -destination 'platform=macOS' -showBuildSettings build 2>/dev/null \
 	  | awk -F' = ' '/ BUILT_PRODUCTS_DIR/{print $$2; exit}')/Zephyr.app/Contents/MacOS/Zephyr" -perfLog YES
 
-# The generated project is committed (CI needs no extra step); regenerate
-# after editing project.yml.
-generate:
-	xcodegen generate
-
 clean:
 	xcodebuild -project Zephyr.xcodeproj -scheme Zephyr -quiet clean || true
-	rm -rf Packages/ZulipKit/.build .derived-cli
+	rm -rf Packages/ZulipKit/.build

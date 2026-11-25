@@ -29,22 +29,6 @@ jobs:
         run: xcodebuild -version
       - run: swift test --package-path Packages/ZulipKit
 
-  # The generated project is committed; fail when it no longer matches
-  # project.yml (someone edited one without regenerating).
-  project-drift:
-    name: Xcode project matches project.yml
-    runs-on: xcode-27
-    steps:
-      - uses: actions/checkout@v7
-      - name: Install XcodeGen
-        run: brew install xcodegen
-      - name: Regenerate
-        run: xcodegen generate
-      - name: Check for drift
-        run: |
-          git diff --exit-code Zephyr.xcodeproj ||
-            { echo "::error::Zephyr.xcodeproj is out of date — run 'xcodegen generate' and commit"; exit 1; }
-
   build:
     name: Build (${{ matrix.name }})
     runs-on: xcode-27

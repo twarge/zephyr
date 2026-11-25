@@ -1,7 +1,7 @@
 # Extension targets
 
-Both app extensions are declared in project.yml (regenerate with
-`xcodegen generate`) and share the `group.com.twarge.zephyr` App Group.
+Both app extensions are targets in Zephyr.xcodeproj and share the
+`group.com.twarge.zephyr` App Group.
 
 ## Share extension (ZephyrShare)
 
